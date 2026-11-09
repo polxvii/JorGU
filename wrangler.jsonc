@@ -1,0 +1,10 @@
+// Cloudflare Worker config for JorGu.
+// M0: static assets only (capability probe). M1 switches assets to ./dist and adds a Worker entry for /api/*.
+{
+  "name": "jorgu",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "404-page"
+  }
+}

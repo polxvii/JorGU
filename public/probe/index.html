@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="theme-color" content="#0b1016">
+  <title>JorGu · Capability probe</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #0b1016; color: #e8eef4; font: 16px/1.45 system-ui, -apple-system, sans-serif; }
+    body { padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    h2 { font-size: 18px; margin: 20px 0 8px; }
+    p.hint { color: #9fb0c0; margin: 0 0 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 6px 8px; border-bottom: 1px solid #1e2a36; vertical-align: top; word-break: break-word; }
+    td:first-child { width: 34%; color: #9fb0c0; }
+    .ok::before   { content: "✓ "; color: #3ecf8e; }
+    .warn::before { content: "! "; color: #f2c94c; }
+    .fail::before { content: "✗ "; color: #ff6b6b; }
+    .info::before { content: "· "; color: #9fb0c0; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+    button, a.btn { min-height: 48px; min-width: 48px; padding: 10px 16px; border: 0; border-radius: 10px; background: #1f3a5a; color: #fff; font: inherit; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; }
+    button.primary { background: #2f80ed; }
+    #yt-wrap { width: 356px; height: 200px; background: #000; margin: 8px 0; }
+    textarea { width: 100%; height: 160px; background: #111a24; color: #cfe; border: 1px solid #1e2a36; border-radius: 8px; font: 12px/1.4 ui-monospace, monospace; }
+    #log { max-height: 220px; overflow: auto; font: 12px/1.4 ui-monospace, monospace; background: #111a24; padding: 8px; border-radius: 8px; white-space: pre-wrap; }
+    #safe-area-probe { position: fixed; inset: 0; pointer-events: none; visibility: hidden;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  </style>
+</head>
+<body>
+  <div id="safe-area-probe"></div>
+  <h1>JorGu · Capability probe (M0)</h1>
+  <p class="hint">Open this page in the CarTV browser (and in Safari for comparison). Tap each test button, then "Copy report" and paste it to Claude.</p>
+
+  <h2>Results</h2>
+  <table><tbody id="rows"></tbody></table>
+
+  <h2>Tests that need a tap</h2>
+  <div class="buttons">
+    <button class="primary" id="btn-geo">Start GPS</button>
+    <button id="btn-speak-th">Speak Thai</button>
+    <button id="btn-speak-en">Speak English</button>
+    <button id="btn-listen">Voice input (th-TH)</button>
+    <button id="btn-wakelock">Wake lock</button>
+    <button id="btn-fullscreen">Full screen</button>
+  </div>
+
+  <h2>YouTube player (356×200)</h2>
+  <div class="buttons">
+    <button class="primary" id="btn-yt-load">Load player</button>
+    <button id="btn-yt-play">Play</button>
+    <button id="btn-yt-pause">Pause</button>
+  </div>
+  <div id="yt-wrap"><div id="yt-player"></div></div>
+
+  <h2>Open Google Maps (navigation hand-off)</h2>
+  <p class="hint">Tap one at a time. If Google Maps opens, come back here: the result is recorded automatically.</p>
+  <div class="buttons">
+    <a class="btn" id="lnk-maps-https" href="https://www.google.com/maps/dir/?api=1&amp;destination=Siam%20Paragon%20Bangkok&amp;travelmode=driving&amp;dir_action=navigate">Maps URL (same tab)</a>
+    <a class="btn" id="lnk-maps-https-blank" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&amp;destination=Siam%20Paragon%20Bangkok&amp;travelmode=driving&amp;dir_action=navigate">Maps URL (new tab)</a>
+    <a class="btn" id="lnk-maps-scheme" href="comgooglemaps://?daddr=Siam+Paragon+Bangkok&amp;directionsmode=driving">comgooglemaps:// scheme</a>
+  </div>
+
+  <h2>Report</h2>
+  <div class="buttons">
+    <button class="primary" id="btn-copy">Copy report</button>
+    <button id="btn-sw-unregister">Remove test service worker</button>
+  </div>
+  <textarea id="report" readonly></textarea>
+
+  <h2>Event log</h2>
+  <div id="log"></div>
+
+  <script src="/probe/probe.js"></script>
+</body>
+</html>

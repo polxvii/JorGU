@@ -10,5 +10,12 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // Non-secret config. Secrets (GOOGLE_CLIENT_SECRET, SESSION_SECRET) are set in the Cloudflare dashboard
+  // (Worker → Settings → Variables and Secrets, type "Secret") and locally in .dev.vars — never committed.
+  "vars": {
+    "APP_ORIGIN": "https://jorgu.pv-proj.workers.dev",
+    "OAUTH_REDIRECT_URI": "https://jorgu.pv-proj.workers.dev/api/auth/callback",
+    "GOOGLE_CLIENT_ID": "255620256166-h60mkqd0ld13a3dbc22cg9cjs0ip4rdi.apps.googleusercontent.com"
+  }
 }

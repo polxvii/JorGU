@@ -9,3 +9,7 @@ test-results/
 playwright-report/
 dev-dist/
 .shots.tmp.mjs
+
+# Credentials downloaded from Google Cloud — never commit
+client_secret*.json
+*credentials*.json

@@ -44,6 +44,6 @@ Why `npm run deps`: npm deletes a `node_modules` junction when it runs in the pr
 
 ## Deploy
 
-Push to GitHub `main` (github.com/polxvii/JorGU) → Cloudflare Workers Builds deploys to https://jorgu.pv-proj.workers.dev. Other branches get preview URLs. Push only after the user approves a milestone. Never run `wrangler deploy` by hand unless asked.
+Push to GitHub `main` (github.com/polxvii/JorGU) → Cloudflare Workers Builds deploys to https://jorgu.pv-proj.workers.dev. Single user, no preview branches (user decision 2026-11-09): work on `main`; once a milestone builds and local tests pass, push `main` so the user can test on the live URL, then report and wait. Never run `wrangler deploy` by hand unless asked.
 
 Secrets: `npx wrangler secret put` (production), `.dev.vars` (local). `VITE_*` values: `.env.local` locally, Workers Builds build variables in production. All git-ignored. See spec §8.1, §18, §18a.

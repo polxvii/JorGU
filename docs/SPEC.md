@@ -699,6 +699,7 @@ Primary column: **CarPlay browser app (CarTV / AP TV) on iPhone 16 Pro Max**. Ad
 2. Optional own domain: Workers Custom Domains require the domain's nameservers to be on Cloudflare (buy via Cloudflare Registrar, or move an existing domain's nameservers to Cloudflare). Add it in the Worker's Settings → Domains & Routes.
 3. GitHub account + private repo `jorgu`; install GitHub CLI and run `gh auth login` on the dev machine
 4. Cloudflare dashboard → Workers & Pages → Create → Import a repository → pick `jorgu` (Worker name must equal `name` in `wrangler.jsonc`). Production branch `main`.
+5. Worker → Settings → Build → **Build command: `npm run build`** (Workers Builds ignores the custom-build setting in `wrangler.jsonc`). Deploy command stays `npx wrangler deploy`.
 
 ## 19. Open questions (user decides)
 

@@ -29,14 +29,18 @@ All UI strings in `src/i18n/en.ts` (default) and `src/i18n/th.ts`; none hard-cod
 ## Commands
 
 ```bash
-npm install
-npm run dev          # Vite + Cloudflare plugin: frontend and Worker /api together (http://localhost:5173)
-npm run build        # typecheck + production build (+ service worker)
-npm run preview      # serve the production build locally (Worker runtime)
-npm run test         # Vitest unit tests
-npm run test:e2e     # Playwright E2E (builds + previews first)
+npm run deps         # install deps OUTSIDE OneDrive (C:\dev\jorgu-deps) + node_modules junction. Never run plain `npm install` here.
+npm run deps -- -D some-pkg   # add a package
+npm run dev          # Vite dev server (http://localhost:5173). /api arrives in M3 (Cloudflare Vite plugin then).
+npm run build        # typecheck + production build (+ service worker) into dist/
+npm run preview      # serve dist/ on http://localhost:4173
+npm run test         # Vitest unit tests (tests/unit)
+npm run test:e2e     # Playwright E2E (tests/e2e; builds + previews first)
 npm run lint
+npm run icons        # regenerate PWA icons from public/icon.svg
 ```
+
+Why `npm run deps`: npm deletes a `node_modules` junction when it runs in the project, and OneDrive would otherwise sync ~18k dependency files.
 
 ## Deploy
 

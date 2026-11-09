@@ -1,0 +1,120 @@
+// Settings shape (spec §13). Persisted in localStorage.
+// Extension vs §13: web AppRefs carry a stable instance `id` so swapping two web panes never reloads them (M1 plan Q3).
+
+export type AppKind = 'dashboard' | 'map' | 'youtube' | 'web';
+export type WebInstanceId = 'w1' | 'w2';
+
+export type AppRef =
+  | { kind: 'dashboard' }
+  | { kind: 'map' }
+  | { kind: 'youtube' }
+  | { kind: 'web'; id: WebInstanceId; url: string };
+
+/** What the App Picker / voice can request. Web instances get their id assigned by the store. */
+export type AppPick =
+  | { kind: 'dashboard' }
+  | { kind: 'map' }
+  | { kind: 'youtube' }
+  | { kind: 'web'; url?: string };
+
+export type PaneIndex = 0 | 1;
+export type DriverSide = 'right' | 'left';
+export type LayoutMode = 'single' | 'split';
+export type ThemeId = 'carbon' | 'racing' | 'neon' | 'emerald' | 'amber' | 'stealth';
+export type Language = 'en' | 'th';
+export type MiniPlayerSize = '356x200' | '480x270';
+
+export type WebViewMode =
+  | { mode: 'auto'; zoom: 0.75 | 1 | 1.25 | 1.5 }
+  | { mode: 'mobile' }
+  | { mode: 'desktop' };
+
+export interface Bookmark {
+  id: string;
+  title: string;
+  url: string;
+  pinned: boolean;
+  viewMode?: WebViewMode;
+}
+
+export interface SavedPlace {
+  id: string;
+  label: string;
+  query: string;
+  lat?: number;
+  lng?: number;
+  list?: string;
+  source?: 'manual' | 'takeout';
+}
+
+export interface LayoutSettings {
+  mode: LayoutMode;
+  /** Share of the usable width given to pane 0, 0.30–0.70. */
+  splitRatio: number;
+  panes: [AppRef, AppRef];
+  focusedPane: PaneIndex;
+  fullscreenPane: PaneIndex | null;
+  /** Pane 1 is always on the driver side; 'left' mirrors the whole layout. */
+  driverSide: DriverSide;
+}
+
+export interface Settings {
+  language: Language;
+  themeId: ThemeId;
+  nightMode: { auto: boolean; start: string; end: string };
+  layout: LayoutSettings;
+  map: {
+    mode: 'js' | 'embed';
+    follow: boolean;
+    traffic: boolean;
+    savedPlaces: SavedPlace[];
+    recentDestinations: string[];
+  };
+  web: {
+    bookmarks: Bookmark[];
+    recent: string[];
+    viewModes: Record<string, WebViewMode>;
+    desktopWidth: 1024 | 1280 | 1440;
+  };
+  youtube: { miniPlayerSize: MiniPlayerSize };
+  alerts: {
+    overspeedEnabled: boolean;
+    limitKmh: number;
+    cooldownSec: number;
+    ttsEnabled: boolean;
+    ttsVoiceURI?: string;
+  };
+  library: { feedChannelLimit: number };
+  voice: { enabled: boolean };
+  clock: { buddhistYear: boolean };
+  playbackLoginCheck?: { testedAt: string; sawAds: boolean; browser: string };
+}
+
+export function defaultSettings(): Settings {
+  return {
+    language: 'en',
+    themeId: 'carbon',
+    nightMode: { auto: true, start: '18:30', end: '06:00' },
+    layout: {
+      mode: 'split',
+      splitRatio: 0.5,
+      panes: [{ kind: 'youtube' }, { kind: 'map' }],
+      focusedPane: 1,
+      fullscreenPane: null,
+      driverSide: 'right',
+    },
+    map: { mode: 'js', follow: true, traffic: false, savedPlaces: [], recentDestinations: [] },
+    web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280 },
+    youtube: { miniPlayerSize: '356x200' },
+    alerts: { overspeedEnabled: true, limitKmh: 90, cooldownSec: 30, ttsEnabled: true },
+    library: { feedChannelLimit: 50 },
+    voice: { enabled: true },
+    clock: { buddhistYear: false },
+  };
+}
+
+export type SurfaceId = 'dashboard' | 'map' | 'youtube' | `web:${WebInstanceId}`;
+
+export function surfaceIdOf(app: AppRef): SurfaceId {
+  return app.kind === 'web' ? `web:${app.id}` : app.kind;
+}

@@ -21,6 +21,20 @@ function depsRealPath(): string[] {
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
 
+/** CSP for `/*` from public/_headers, so `vite preview` (and the E2E tests) enforce the production policy. */
+function productionCsp(): string | undefined {
+  const lines = readFileSync('public/_headers', 'utf8').split('\n').map((l) => l.trimEnd());
+  let inRoot = false;
+  for (const line of lines) {
+    if (!line.startsWith(' ')) inRoot = line.trim() === '/*';
+    else if (inRoot && line.trim().toLowerCase().startsWith('content-security-policy:')) {
+      return line.slice(line.indexOf(':') + 1).trim();
+    }
+  }
+  return undefined;
+}
+const CSP = productionCsp();
+
 export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   plugins: [
@@ -64,6 +78,11 @@ export default defineConfig({
     headers: SECURITY_HEADERS,
     fs: { allow: [searchForWorkspaceRoot(process.cwd()), ...depsRealPath()] },
   },
-  preview: { headers: SECURITY_HEADERS },
-  build: { target: 'es2022', sourcemap: true },
+  preview: { headers: CSP ? { ...SECURITY_HEADERS, 'Content-Security-Policy': CSP } : SECURITY_HEADERS },
+  build: {
+    target: 'es2022',
+    sourcemap: true,
+    // Never inline fonts as data: URLs — CSP allows fonts from 'self' only.
+    assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined),
+  },
 });

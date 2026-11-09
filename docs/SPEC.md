@@ -10,6 +10,7 @@
 - Checked against current docs: Google Maps Platform Terms (last modified 2026-08-26) §3.2.3(d) forbid building "real-time navigation functionality substantially similar to" the Google Maps app, and the terms have no personal-use exemption. Navigation SDK has no web version. `google.com/maps` sends `X-Frame-Options: SAMEORIGIN` (tested 2026-11-09), so it can't be embedded.
 - Rejected: OSM-based in-app turn-by-turn; Waze Live Map embed (Waze guidelines forbid pairing with non-Waze maps); screen mirroring (not possible from a web page); unofficial Google tile URLs.
 - §12.1, §14, §17, §19 updated for the target device.
+- **Milestones:** M3 (OAuth + library) merged into M2. New §8.8 privacy policy, required by the YouTube Developer Policies.
 - **Hosting:** Cloudflare Worker with static assets instead of Vercel, auto-deployed from GitHub `main` by Workers Builds (§4, §5, §8.1, §18, new §18a).
 - Spec file moved to `docs/SPEC.md`.
 
@@ -370,7 +371,17 @@ Tokens never reach the client, never go in localStorage, never get logged.
 
 - `feed`: limit channels by setting `feedChannelLimit` (default 50) using `subscriptions.list order=relevance`; merge and sort by `publishedAt` desc; drop private/deleted items
 - `search`: client counts today's searches (Pacific day) and shows "About N searches left today"; on `quotaExceeded` show "Today's search limit is used up · Search your library or paste a link instead"
-- Client caching must comply with the YouTube API Services Developer Policies on data storage [Verify; shorten TTLs if required]
+- Client caching complies with the YouTube API Services Developer Policies §III.E.4 (checked 2026-11-09): Authorized Data must be deleted or refreshed within 30 calendar days; Non-Authorized Data (search results, video details) may be stored temporarily for at most 30 days. All TTLs above are ≤ 24 h; the IndexedDB cache also drops any entry older than 30 days.
+- On disconnect (§8.1 step 4) the client deletes all cached account data immediately (policy: revoke right away, delete within 7 days). If Google reports `invalid_grant` (revoked from Google's security page), cached account data is deleted too (policy: within 30 days).
+
+### 8.8 Privacy policy (required before connecting) [Official]
+
+YouTube API Services Developer Policies §III.A.2 (checked 2026-11-09) require, for apps using Authorized Data:
+- A privacy policy the user agrees to before using the account features, prominently displayed and always accessible (Settings → Privacy, and on the Connect screen)
+- It links to the Google Privacy Policy (https://policies.google.com/privacy) and states that the app uses YouTube API Services (https://www.youtube.com/t/terms)
+- It explains that access can be revoked in the app (Disconnect) and at Google's security settings page: https://security.google.com/settings/security/permissions
+- It explains what is stored (encrypted session cookie on the server side; account data cached on the device ≤ 24 h) and how to contact the owner
+- Served as a static page `/privacy` (en + th). "Connect YouTube account" shows "By connecting you agree to the Privacy Policy" with a link; consent is recorded locally with a timestamp.
 
 ### 8.3 Paste a link (no quota)
 
@@ -650,8 +661,8 @@ Settings has "Reset settings" and "Clear cached data".
 | # | Scope | Done when |
 |---|---|---|
 | M1 | Shell: pane system, Dock, single/split, swap (button + drag), per-pane full screen with floating controls, App Picker, themes, i18n en (default)/th, PWA — apps as placeholders | Swap and resize work; ⛶ enters full screen in one tap and ✕ / Back / Esc exit it; ⇄ switches the full-screen app; assignment persists across reload; driver side mirrors; works with no service worker; PWA installs in Chrome |
-| M2 | YouTube player, paste link, queue, errors, media keys, mini player, §3.9 compliance | All link forms play; auto-advance works; **swapping panes, toggling layout, or entering/exiting full screen does not interrupt playback**; mini player appears when YouTube plays off-pane; an automated check confirms no element overlaps the player rectangle at any time; Referer is sent; parser tests pass |
-| M3 | OAuth + feed, subscriptions, playlists, liked, search + quota counter | Connect/disconnect works; no tokens visible in DevTools; REAUTH banner works; library search runs before `search.list` |
+| M2 | YouTube player, paste link, queue, errors, media keys, mini player, §3.9 compliance **+ (merged from M3, 2026-11-09)** OAuth, privacy policy (§8.8), feed, subscriptions, playlists, liked, search + quota counter | All link forms play; auto-advance works; **swapping panes, toggling layout, or entering/exiting full screen does not interrupt playback**; mini player appears when YouTube plays off-pane; an automated check confirms no element overlaps the player rectangle at any time; Referer is sent; parser tests pass; connect/disconnect works; no tokens visible in DevTools; REAUTH banner works; library search runs before `search.list`; disconnect revokes the token and deletes cached account data |
+| M3 | *Merged into M2 (user decision 2026-11-09).* | — |
 | M4 | Google Maps mode A + navigation handoff + route overview (§7.4) + mode B fallback | One map instance across swaps; follow/recenter/traffic work; Navigate opens Google Maps with destination and draws the route overview (no turn instructions); mode B renders with no billing SKU used |
 | M5 | Web app + frame-check + SSRF guard + Auto/Mobile/Desktop view | Allowed sites render; blocked sites show the card + new-tab button; a responsive test site switches layout between Mobile and Desktop without reload and stays tappable; view mode persists per origin; SSRF tests (localhost, 169.254.169.254, private IPs, redirect to private IP) are rejected |
 | M6 | Dashboard HUD, overspeed alert + TTS, wake lock | With simulated location in DevTools, speed and alerts behave per §10 |

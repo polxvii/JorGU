@@ -341,7 +341,7 @@ Shown in the Map pane (mode A only) after "Navigate":
 
 ### 8.1 OAuth (layer A)
 
-**Env vars:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OAUTH_REDIRECT_URI` (`https://jorgu.<subdomain>.workers.dev/api/auth/callback`), `SESSION_SECRET` (32 random bytes, base64), `APP_ORIGIN`. Secrets are set with `npx wrangler secret put` (production) and `.dev.vars` (local, git-ignored); non-secret values go in `wrangler.jsonc` `vars`. [Verify Google accepts a `workers.dev` redirect URI]
+**Env vars:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OAUTH_REDIRECT_URI` (`https://jorgu.pv-proj.workers.dev/api/auth/callback`), `SESSION_SECRET` (32 random bytes, base64), `APP_ORIGIN`. Secrets are set with `npx wrangler secret put` (production) and `.dev.vars` (local, git-ignored); non-secret values go in `wrangler.jsonc` `vars`. [Verify Google accepts a `workers.dev` redirect URI]
 
 **Scopes:** `openid email profile https://www.googleapis.com/auth/youtube.readonly` (read-only)
 
@@ -702,7 +702,7 @@ Primary column: **CarPlay browser app (CarTV / AP TV) on iPhone 16 Pro Max**. Ad
 
 ## 19. Open questions (user decides)
 
-1. ~~Main device?~~ **Decided 2026-11-09:** iPhone 16 Pro Max via a CarPlay browser app (§3.10). Host app: **CarTV**. Still open: the car's CarPlay screen resolution (M0 probe measures it). Hosting name: free `jorgu.<subdomain>.workers.dev` (no own domain for now).
+1. ~~Main device?~~ **Decided 2026-11-09:** iPhone 16 Pro Max via a CarPlay browser app (§3.10). Host app: **CarTV**. Still open: the car's CarPlay screen resolution (M0 probe measures it). Hosting: `https://jorgu.pv-proj.workers.dev` (free `workers.dev` name, no own domain for now).
 2. Reconnect YouTube every 7 days (Testing), or try publishing unverified?
 3. If on Premium Lite and mostly playing music: ads on music remain (§3.2)
 4. Enable billing for Maps JavaScript API (10,000 free loads/month), or use the free Embed mode only? The route overview (§7.4) needs mode A, so billing is needed for it.

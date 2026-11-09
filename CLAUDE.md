@@ -40,6 +40,6 @@ npm run lint
 
 ## Deploy
 
-Push to GitHub `main` → Cloudflare Workers Builds deploys. Other branches get preview URLs. Push only after the user approves a milestone. Never run `wrangler deploy` by hand unless asked.
+Push to GitHub `main` (github.com/polxvii/JorGU) → Cloudflare Workers Builds deploys to https://jorgu.pv-proj.workers.dev. Other branches get preview URLs. Push only after the user approves a milestone. Never run `wrangler deploy` by hand unless asked.
 
 Secrets: `npx wrangler secret put` (production), `.dev.vars` (local). `VITE_*` values: `.env.local` locally, Workers Builds build variables in production. All git-ignored. See spec §8.1, §18, §18a.

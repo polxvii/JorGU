@@ -1,5 +1,5 @@
 // Library data (spec §8.2) through the IndexedDB cache. Client TTLs per the §8.2 table; all ≤ 24 h.
-import type { PlaylistItem, VideoItem } from '../../../../shared/ytTypes';
+import type { CategoryItem, PlaylistItem, VideoItem } from '../../../../shared/ytTypes';
 import { useQueue } from '../queueStore';
 import { useAccount } from './accountStore';
 import { api } from './api';
@@ -8,7 +8,16 @@ import { type LibraryEntry, normalize } from './libraryIndex';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
-export const TTL = { feed: 30 * MIN, playlists: HOUR, playlistItems: HOUR, liked: HOUR, popular: HOUR, search: 24 * HOUR, video: 6 * HOUR };
+export const TTL = {
+  feed: 30 * MIN,
+  playlists: HOUR,
+  playlistItems: HOUR,
+  liked: HOUR,
+  popular: HOUR,
+  categories: 24 * HOUR,
+  search: 24 * HOUR,
+  video: 6 * HOUR,
+};
 
 const list =
   <T>(path: string) =>
@@ -25,8 +34,12 @@ export const loadPlaylistItems = (id: string, force = false): Promise<Cached<Vid
 
 export const loadLiked = (force = false): Promise<Cached<VideoItem[]>> => cached('liked', TTL.liked, list<VideoItem>('/api/yt/liked'), { force });
 
-export const loadPopular = (music: boolean, force = false): Promise<Cached<VideoItem[]>> =>
-  cached(music ? 'popular:music' : 'popular', TTL.popular, list<VideoItem>(`/api/yt/popular${music ? '?music=1' : ''}`), { force });
+/** Popular in Thailand; `category` '' = all categories. */
+export const loadPopular = (category: string, force = false): Promise<Cached<VideoItem[]>> =>
+  cached(`popular:${category || 'all'}`, TTL.popular, list<VideoItem>(`/api/yt/popular${category ? `?category=${category}` : ''}`), { force });
+
+export const loadCategories = (lang: string, force = false): Promise<Cached<CategoryItem[]>> =>
+  cached(`categories:${lang}`, TTL.categories, list<CategoryItem>(`/api/yt/categories?lang=${lang}`), { force });
 
 export const loadSearch = (q: string, lang: string): Promise<Cached<VideoItem[]>> =>
   cached(`search:${lang}:${normalize(q)}`, TTL.search, list<VideoItem>(`/api/yt/search?q=${encodeURIComponent(q)}&lang=${lang}`));

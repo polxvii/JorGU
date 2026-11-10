@@ -1,14 +1,15 @@
-// YouTube library sheet: paste a link, new from subscriptions, playlists, search, music, trending (§8.2–8.4, §8.9).
+// YouTube library sheet: paste a link, new from subscriptions, playlists, search, trending by category (§8.2–8.4, §8.9).
 // Liked videos have no tab (user decision 2026-11-10) but stay in the library search.
 // youtube.com itself can't be embedded (X-Frame-Options), so "YouTube" opens the real site in a new tab.
 import { useCallback } from 'react';
+import { useSettings } from '../../../features/settings/settingsStore';
 import { type LibraryTab, useUi } from '../../../features/settings/uiStore';
 import { type MessageKey, useT } from '../../../i18n';
 import { Icon } from '../../../shell/Icon';
 import { Sheet } from '../../../shell/Sheet';
 import type { Rect } from '../../../shell/geometry';
 import { useAccount } from '../account/accountStore';
-import { loadFeed, loadPopular } from '../account/library';
+import { loadCategories, loadFeed, loadPopular } from '../account/library';
 import { playVideo } from '../playActions';
 import { ConnectCard } from './ConnectCard';
 import { PastePanel } from './PastePanel';
@@ -17,7 +18,7 @@ import { SearchPanel } from './SearchPanel';
 import { useLoad } from './useLoad';
 import { LoadFrame, VideoList } from './VideoList';
 import type { Cached } from '../account/cache';
-import type { VideoItem } from '../../../../shared/ytTypes';
+import type { CategoryItem, VideoItem } from '../../../../shared/ytTypes';
 
 export const YOUTUBE_SITE = 'https://www.youtube.com/';
 
@@ -26,12 +27,15 @@ const TABS: { id: LibraryTab; label: MessageKey }[] = [
   { id: 'feed', label: 'library.tab.feed' },
   { id: 'playlists', label: 'library.tab.playlists' },
   { id: 'search', label: 'library.tab.search' },
-  { id: 'music', label: 'library.tab.music' },
   { id: 'trending', label: 'library.tab.trending' },
 ];
 
-const loadTrending = (force: boolean) => loadPopular(false, force);
-const loadMusic = (force: boolean) => loadPopular(true, force);
+/** Music first: the owner listens more than watches. Other categories keep YouTube's order. */
+const PINNED = ['10'];
+const ordered = (list: CategoryItem[]) => [
+  ...PINNED.flatMap((id) => list.filter((c) => c.id === id)),
+  ...list.filter((c) => !PINNED.includes(c.id)),
+];
 
 function VideoPanel({ load, testId, empty }: { load: (force: boolean) => Promise<Cached<VideoItem[]>>; testId: string; empty: MessageKey }) {
   const close = useUi((s) => s.closeSheet);
@@ -52,6 +56,40 @@ function VideoPanel({ load, testId, empty }: { load: (force: boolean) => Promise
   );
 }
 
+/** Popular in Thailand with category chips; titles come from YouTube in the UI language (videoCategories.list). */
+function TrendingPanel() {
+  const t = useT();
+  const lang = useSettings((s) => s.language);
+  const category = useUi((s) => s.chartCategory);
+  const setCategory = useUi((s) => s.setChartCategory);
+  const loadCats = useCallback((force: boolean) => loadCategories(lang, force), [lang]);
+  const cats = useLoad(loadCats);
+  const loadChart = useCallback((force: boolean) => loadPopular(category, force), [category]);
+  const chips = [{ id: '', title: t('library.allCategories') }, ...ordered(cats.data ?? [])];
+  return (
+    <div className="flex flex-col gap-2">
+      <div role="radiogroup" aria-label={t('library.tab.trending')} data-testid="chart-categories" className="-mx-3 flex gap-1 overflow-x-auto px-3">
+        {chips.map((c) => (
+          <button
+            key={c.id || 'all'}
+            type="button"
+            role="radio"
+            aria-checked={c.id === category}
+            data-value={c.id}
+            onClick={() => setCategory(c.id)}
+            className={`min-h-11 shrink-0 rounded-full px-4 text-[14px] font-semibold ${
+              c.id === category ? 'bg-text text-bg' : 'bg-bg text-text'
+            }`}
+          >
+            {c.title}
+          </button>
+        ))}
+      </div>
+      <VideoPanel key={category || 'all'} load={loadChart} testId="lib-trending" empty="library.chartEmpty" />
+    </div>
+  );
+}
+
 function Panel({ tab }: { tab: LibraryTab }) {
   switch (tab) {
     case 'paste':
@@ -62,10 +100,8 @@ function Panel({ tab }: { tab: LibraryTab }) {
       return <PlaylistsPanel />;
     case 'search':
       return <SearchPanel />;
-    case 'music':
-      return <VideoPanel key="music" load={loadMusic} testId="lib-music" empty="library.empty" />;
     case 'trending':
-      return <VideoPanel key="trending" load={loadTrending} testId="lib-trending" empty="library.empty" />;
+      return <TrendingPanel />;
   }
 }
 

@@ -15,6 +15,12 @@ export interface PlaylistItem {
   thumb: string;
 }
 
+/** A YouTube video category (videoCategories.list), title in the UI language. */
+export interface CategoryItem {
+  id: string;
+  title: string;
+}
+
 export interface ChannelItem {
   channelId: string;
   title: string;

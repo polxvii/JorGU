@@ -203,6 +203,43 @@ describe('Data API proxy', () => {
     expect((await res.json()) as unknown).toEqual({ items: [{ videoId: 'M7lc1UVf-VE', title: "Tom & Jerry's", channel: 'A', thumb: '', publishedAt: undefined }].map((v) => JSON.parse(JSON.stringify(v))) });
   });
 
+  it('chart by category: passes videoCategoryId; a category without a chart is an empty list', async () => {
+    google = (url) => {
+      expect(url.pathname).toBe('/youtube/v3/videos');
+      expect(url.searchParams.get('chart')).toBe('mostPopular');
+      expect(url.searchParams.get('regionCode')).toBe('TH');
+      if (url.searchParams.get('videoCategoryId') === '29') {
+        return Response.json({ error: { errors: [{ reason: 'videoChartNotFound' }] } }, { status: 400 });
+      }
+      expect(url.searchParams.get('videoCategoryId')).toBe('20');
+      return Response.json({ items: [{ id: 'M7lc1UVf-VE', snippet: { title: 'Top game', channelTitle: 'G' } }] });
+    };
+    const cookie = await sessionCookie();
+    const res = await handleApi(req('/api/yt/popular?category=20', { cookie }), env);
+    expect(((await res.json()) as { items: { title: string }[] }).items[0].title).toBe('Top game');
+    const none = await handleApi(req('/api/yt/popular?category=29', { cookie }), env);
+    expect(none.status).toBe(200);
+    expect(await none.json()).toEqual({ items: [] });
+    const bad = await handleApi(req('/api/yt/popular?category=abc', { cookie }), env);
+    expect(bad.status).toBe(400);
+  });
+
+  it('categories: Thai titles via hl, only assignable ones', async () => {
+    google = (url) => {
+      expect(url.pathname).toBe('/youtube/v3/videoCategories');
+      expect(url.searchParams.get('regionCode')).toBe('TH');
+      expect(url.searchParams.get('hl')).toBe('th');
+      return Response.json({
+        items: [
+          { id: '10', snippet: { title: 'เพลง', assignable: true } },
+          { id: '18', snippet: { title: 'Short Movies', assignable: false } },
+        ],
+      });
+    };
+    const res = await handleApi(req('/api/yt/categories?lang=th', { cookie: await sessionCookie() }), env);
+    expect(await res.json()).toEqual({ items: [{ id: '10', title: 'เพลง' }] });
+  });
+
   it('requires a session', async () => {
     const res = await handleApi(req('/api/yt/liked'), env);
     expect(res.status).toBe(401);

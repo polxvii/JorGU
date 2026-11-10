@@ -11,6 +11,7 @@ export type { Env };
 
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const PLAYLIST_ID = /^[A-Za-z0-9_-]{10,64}$/;
+const CATEGORY_ID = /^\d{1,3}$/;
 const SEARCH_GAP_MS = 1000;
 const STATE_MAX_AGE = 600;
 
@@ -119,7 +120,16 @@ const routes: Record<string, { method: 'GET' | 'POST'; handler: Handler }> = {
   },
   '/api/yt/popular': {
     method: 'GET',
-    handler: async (_req, url, ctx) => items(await yt.popular(ctx, url.searchParams.get('music') === '1')),
+    handler: async (_req, url, ctx) => {
+      // `music=1` is the pre-category form (older cached clients).
+      const raw = url.searchParams.get('category') ?? (url.searchParams.get('music') === '1' ? '10' : '');
+      if (raw && !CATEGORY_ID.test(raw)) throw new HttpError(400, 'BAD_ID');
+      return items(await yt.popular(ctx, raw || null));
+    },
+  },
+  '/api/yt/categories': {
+    method: 'GET',
+    handler: async (_req, url, ctx) => items(await yt.categories(ctx, url.searchParams.get('lang') ?? 'en')),
   },
   '/api/yt/search': {
     method: 'GET',

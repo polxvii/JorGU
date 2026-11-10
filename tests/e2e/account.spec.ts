@@ -55,8 +55,13 @@ async function mockApi(page: Page, init: Partial<Mock> = {}): Promise<Mock> {
         return json({ items: url.searchParams.get('id') === 'PLroadtrip0001' ? ROAD : NEWS }, 200, 1);
       case '/api/yt/liked':
         return json({ items: LIKED }, 200, 1);
-      case '/api/yt/popular':
-        return json({ items: [v(VIDEO_B, url.searchParams.get('music') ? 'Top music' : 'Top trending')] }, 200, 1);
+      case '/api/yt/popular': {
+        const cat = url.searchParams.get('category');
+        if (cat === '29') return json({ items: [] }, 200, 1);
+        return json({ items: [v(VIDEO_B, cat === '10' ? 'Top music' : cat ? `Top ${cat}` : 'Top trending')] }, 200, 1);
+      }
+      case '/api/yt/categories':
+        return json({ items: [{ id: '24', title: 'Entertainment' }, { id: '10', title: 'Music' }, { id: '29', title: 'Nonprofits' }] }, 200, 1);
       case '/api/yt/search':
         return json({ items: SEARCH }, 200, 100);
       case '/api/yt/videos':
@@ -251,6 +256,26 @@ test('disconnect: POST logout, cached data deleted, Settings shows Connect again
   expect(countCalls(m, 'POST /api/auth/logout')).toBe(1);
   expect(await idbKeys(page)).toEqual([]);
   await expect(section.getByTestId('account-connect')).toBeVisible();
+});
+
+test('Trending: category chips from YouTube (Music first); a category without a chart says so', async ({ page }) => {
+  const m = await mockApi(page);
+  await openApp(page);
+  await page.getByTestId('yt-empty-library').click();
+  await page.getByTestId('lib-tab-trending').click();
+  await expect(page.getByTestId('lib-tab-music')).toHaveCount(0);
+  const chips = page.getByTestId('chart-categories').getByRole('radio');
+  await expect(chips).toHaveText(['All', 'Music', 'Entertainment', 'Nonprofits']);
+  await expect(page.getByTestId('lib-trending')).toContainText('Top trending');
+  await chips.nth(1).click();
+  await expect(page.getByTestId('lib-trending')).toContainText('Top music');
+  expect(m.calls).toContain('GET /api/yt/popular?category=10');
+  await page.getByTestId('chart-categories').locator('[data-value="29"]').click();
+  await expect(page.getByTestId('library-sheet')).toContainText('No chart for this category');
+  // Tap = play now.
+  await page.getByTestId('chart-categories').locator('[data-value="10"]').click();
+  await page.getByTestId('lib-trending').locator('li button').first().click();
+  await expect.poll(async () => (await queue(page)).items.map((i) => i.title)).toEqual(['Top music']);
 });
 
 test('a pasted link gets its title from the account (videos.list)', async ({ page }) => {

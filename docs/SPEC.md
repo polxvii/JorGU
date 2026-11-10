@@ -385,6 +385,8 @@ Tokens never reach the client, never go in localStorage, never get logged.
 | `GET /api/yt/playlist-items?id=` | `playlistItems.list` | 1/page | 1 h |
 | `GET /api/yt/liked` | `videos.list myRating=like` | 1/page | 1 h |
 | `GET /api/yt/search?q=` | `search.list type=video regionCode=TH relevanceLanguage=<ui lang> maxResults=20` | 1 search call | 24 h per query |
+| `GET /api/yt/popular?category=` | `videos.list chart=mostPopular regionCode=TH [videoCategoryId]` | 1 | 1 h |
+| `GET /api/yt/categories?lang=` | `videoCategories.list regionCode=TH hl=<lang>` | 1 | 24 h |
 | `GET /api/yt/videos?ids=` | `videos.list part=snippet,contentDetails` (50 ids/call) | 1 | 6 h |
 
 - `feed`: limit channels by setting `feedChannelLimit` (default 50) using `subscriptions.list order=relevance`; merge and sort by `publishedAt` desc; drop private/deleted items
@@ -435,7 +437,7 @@ No driving mode. Video keeps playing normally while the car moves (user decision
 
 ### 8.9 Library sheet and "Open YouTube" (user decision 2026-11-10)
 
-- The transport row's **Library** button opens a sheet (placed by the layout engine, never over the player) with tabs: **Link** (paste, §8.3) · **New** (feed) · **Playlists** (→ items, Play all) · **Search** (§8.4; liked videos are searched too, but have no tab of their own: user decision 2026-11-10) · **Music** (`chart=mostPopular`, category 10, region TH) · **Trending** (`chart=mostPopular`, region TH)
+- The transport row's **Library** button opens a sheet (placed by the layout engine, never over the player) with tabs: **Link** (paste, §8.3) · **New** (feed) · **Playlists** (→ items, Play all) · **Search** (§8.4; liked videos are searched too, but have no tab of their own: user decision 2026-11-10) · **Trending** (`chart=mostPopular`, region TH, with category chips from `videoCategories.list regionCode=TH hl=<ui lang>` (assignable only, Music first); a category without a chart (`400 videoChartNotFound`) shows an empty list. Replaces the separate Music tab, user decision 2026-11-10)
 - Tap a video = play now (queued items stay after it); **+** = add to the end of the queue; a playlist's Play all / tap = replace the queue with that playlist
 - Not connected: the Link tab works; the other tabs show the Connect card with the privacy-policy link (§8.8)
 - Header button **YouTube** opens https://www.youtube.com/ in a new tab (`rel="noopener"`, never `noreferrer`), for recommendations and anything else the API doesn't offer. youtube.com can't be embedded (`X-Frame-Options: SAMEORIGIN`)

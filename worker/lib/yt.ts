@@ -4,9 +4,9 @@ import type { SessionContext } from './session';
 
 const BASE = 'https://www.googleapis.com/youtube/v3/';
 
-import type { ChannelItem, PlaylistItem, VideoItem } from '../../shared/ytTypes';
+import type { CategoryItem, ChannelItem, PlaylistItem, VideoItem } from '../../shared/ytTypes';
 
-export type { ChannelItem, PlaylistItem, VideoItem };
+export type { CategoryItem, ChannelItem, PlaylistItem, VideoItem };
 
 interface Thumbs {
   default?: { url: string };
@@ -21,6 +21,7 @@ interface Snippet {
   publishedAt?: string;
   thumbnails?: Thumbs;
   resourceId?: { videoId?: string; channelId?: string };
+  assignable?: boolean;
 }
 
 interface ApiItem {
@@ -155,16 +156,32 @@ export async function liked(ctx: SessionContext): Promise<VideoItem[]> {
   return items.map(videoFromVideosList).filter((v): v is VideoItem => !!v);
 }
 
-/** Trending in Thailand (chart=mostPopular); category 10 = Music. 1 quota unit. */
-export async function popular(ctx: SessionContext, music: boolean): Promise<VideoItem[]> {
-  const page = await ytGet(ctx, 'videos', {
-    part: 'snippet',
-    chart: 'mostPopular',
-    regionCode: 'TH',
-    maxResults: 30,
-    ...(music ? { videoCategoryId: '10' } : {}),
-  });
-  return (page.items ?? []).map(videoFromVideosList).filter((v): v is VideoItem => !!v);
+/**
+ * Popular in Thailand (chart=mostPopular), optionally for one video category (10 = Music). 1 quota unit.
+ * A category without a chart in this region (400 videoChartNotFound) is an empty list, not an error.
+ */
+export async function popular(ctx: SessionContext, categoryId: string | null): Promise<VideoItem[]> {
+  try {
+    const page = await ytGet(ctx, 'videos', {
+      part: 'snippet',
+      chart: 'mostPopular',
+      regionCode: 'TH',
+      maxResults: 30,
+      ...(categoryId ? { videoCategoryId: categoryId } : {}),
+    });
+    return (page.items ?? []).map(videoFromVideosList).filter((v): v is VideoItem => !!v);
+  } catch (e) {
+    if (e instanceof HttpError && e.code === 'YT_ERROR' && e.extra.reason === 'videoChartNotFound') return [];
+    throw e;
+  }
+}
+
+/** Video categories creators can use in Thailand, titled in the UI language (videoCategories.list, 1 unit). */
+export async function categories(ctx: SessionContext, lang: string): Promise<CategoryItem[]> {
+  const page = await ytGet(ctx, 'videoCategories', { part: 'snippet', regionCode: 'TH', hl: lang === 'th' ? 'th' : 'en' });
+  return (page.items ?? [])
+    .filter((it) => typeof it.id === 'string' && it.snippet?.assignable && it.snippet.title)
+    .map((it) => ({ id: it.id as string, title: it.snippet!.title! }));
 }
 
 export async function search(ctx: SessionContext, q: string, lang: string): Promise<VideoItem[]> {

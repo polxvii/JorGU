@@ -5,6 +5,8 @@
 
 ### Changes during M5 (2026-11-10)
 
+- **M6 (Dashboard HUD, overspeed alert, TTS, wake lock) and M7 (voice commands) are cut** (user decision 2026-11-10: not used). §10 and §11 stay for reference only; their rows in §16 and §17 are dropped.
+
 - M5 (Web app) built before M4: M4 waited for the Maps billing decision (§19.4), since decided: mode A with the §7.1 cost rule.
 - Live check (2026-11-10): DNS-over-HTTPS works from the Worker; example.com and wikipedia.org `allowed`, github.com `blocked` (CSP), youtube.com `blocked` (X-Frame-Options); localhost, 10.0.0.1, 169.254.169.254 rejected (400). google.com answers the Worker with a 429 bot page, so it comes out `unknown` and the iframe shows Google's refusal; Open in new tab still works.
 - **Web pane header stays on screen** and holds the web controls: site name (opens the **Web menu**), Reload (or **Reload in this view** after a view change), Open in new tab. The site starts below a 56 px band, so no JorGu control covers it. In full screen the site gets the whole screen; the Web menu is on the floating bar (8th button).
@@ -142,6 +144,8 @@ Google states Premium Lite may still show ads on music content, Shorts, and when
 
 ### 3.8 Voice input on iOS
 
+*Not used: voice commands (M7) were cut on 2026-11-10.*
+
 Safari supports `webkitSpeechRecognition` only with Siri enabled, and caniuse notes it is unavailable in web apps added to the Home Screen [Secondary, Verify]. A text-input fallback is mandatory.
 
 ### 3.9 YouTube embedded player rules (binding)
@@ -249,7 +253,6 @@ Rules:
 | Tap ⛶ on a pane (or double-tap its header) | That pane goes full screen (§6.5) |
 | Tap layout button in Dock | Toggle `single` ↔ `split` |
 | Drag divider | Resize; snap points at 40/50/60% |
-| Voice "swap" / "สลับจอ" | Swap |
 
 Pane headers are slim (≤ 40 px) and auto-hide after 4 s of no touch; tap the pane edge to reveal [Proposal]. The ⛶ button is the exception: it stays visible as a translucent 48 px button in the pane's top corner nearest the driver, so full screen is always one tap away.
 
@@ -540,6 +543,8 @@ Details:
 
 ## 10. Dashboard app (HUD) and alerts
 
+> **Cut (user decision 2026-11-10): not built.** Kept for reference only.
+
 ### 10.1 Speed
 
 - `navigator.geolocation.watchPosition({enableHighAccuracy: true, maximumAge: 1000})`
@@ -573,6 +578,8 @@ Screen Wake Lock API (`navigator.wakeLock.request('screen')`), re-requested on e
 ---
 
 ## 11. Voice commands
+
+> **Cut (user decision 2026-11-10): not built.** Kept for reference only.
 
 - `SpeechRecognition || webkitSpeechRecognition`, `lang` = UI language, `interimResults: true`
 - Large mic button in the Dock; if unsupported, hide it and show a text box (OS keyboard dictation still works)
@@ -707,8 +714,8 @@ Settings has "Reset settings" and "Clear cached data".
 | M3 | *Merged into M2 (user decision 2026-11-09).* | — |
 | M4 | Google Maps mode A + navigation handoff + route overview (§7.4) + mode B fallback | One map instance across swaps; follow/recenter/traffic work; Navigate opens Google Maps with destination and draws the route overview (no turn instructions); mode B renders with no billing SKU used |
 | M5 | Web app + frame-check + SSRF guard + Auto/Mobile/Desktop view | Allowed sites render; blocked sites show the card + new-tab button; a responsive test site switches layout between Mobile and Desktop without reload and stays tappable; view mode persists per origin; SSRF tests (localhost, 169.254.169.254, private IPs, redirect to private IP) are rejected |
-| M6 | Dashboard HUD, overspeed alert + TTS, wake lock | With simulated location in DevTools, speed and alerts behave per §10 |
-| M7 | Voice commands (th + en) | Commands in §11 work in Chrome; text fallback works where the API is missing |
+| M6 | *Cut (user decision 2026-11-10): not used.* | — |
+| M7 | *Cut (user decision 2026-11-10): not used.* | — |
 | M8 | Real-device test pass | §17 completed and reported as a table |
 
 ## 17. Real-device test checklist
@@ -725,10 +732,7 @@ Primary column: **CarPlay browser app (CarTV / AP TV) on iPhone 16 Pro Max**. Ad
 | Mini player appears whenever YouTube plays off-pane; nothing ever drawn over the player | | | |
 | Web Desktop view: layout switches + taps land correctly | | | |
 | Steering wheel / Bluetooth next/prev/play | | | |
-| SpeechRecognition in th-TH and en-US | | | |
-| Thai TTS voice available | | | |
 | `coords.speed` non-null while driving | | | |
-| Wake lock keeps screen on | | | |
 | Navigate opens the Google Maps app | | | |
 | Map loads per day stay within the cap (check console) | | | |
 | Web app: 5 user-chosen sites — frame-check result vs actual | | | |

@@ -10,7 +10,7 @@ export type SheetState =
   | { kind: 'library'; tab?: LibraryTab }
   | { kind: 'queue' };
 
-export type LibraryTab = 'paste' | 'feed' | 'playlists' | 'liked' | 'trending' | 'music' | 'search';
+export type LibraryTab = 'paste' | 'feed' | 'playlists' | 'trending' | 'music' | 'search';
 
 export interface Toast {
   id: number;

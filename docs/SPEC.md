@@ -435,7 +435,7 @@ No driving mode. Video keeps playing normally while the car moves (user decision
 
 ### 8.9 Library sheet and "Open YouTube" (user decision 2026-11-10)
 
-- The transport row's **Library** button opens a sheet (placed by the layout engine, never over the player) with tabs: **Link** (paste, §8.3) · **New** (feed) · **Playlists** (→ items, Play all) · **Liked** · **Search** (§8.4) · **Music** (`chart=mostPopular`, category 10, region TH) · **Trending** (`chart=mostPopular`, region TH)
+- The transport row's **Library** button opens a sheet (placed by the layout engine, never over the player) with tabs: **Link** (paste, §8.3) · **New** (feed) · **Playlists** (→ items, Play all) · **Search** (§8.4; liked videos are searched too, but have no tab of their own: user decision 2026-11-10) · **Music** (`chart=mostPopular`, category 10, region TH) · **Trending** (`chart=mostPopular`, region TH)
 - Tap a video = play now (queued items stay after it); **+** = add to the end of the queue; a playlist's Play all / tap = replace the queue with that playlist
 - Not connected: the Link tab works; the other tabs show the Connect card with the privacy-policy link (§8.8)
 - Header button **YouTube** opens https://www.youtube.com/ in a new tab (`rel="noopener"`, never `noreferrer`), for recommendations and anything else the API doesn't offer. youtube.com can't be embedded (`X-Frame-Options: SAMEORIGIN`)

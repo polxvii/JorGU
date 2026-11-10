@@ -1,4 +1,5 @@
-// YouTube library sheet: paste a link, new from subscriptions, playlists, liked, search, music, trending (§8.2–8.4).
+// YouTube library sheet: paste a link, new from subscriptions, playlists, search, music, trending (§8.2–8.4, §8.9).
+// Liked videos have no tab (user decision 2026-11-10) but stay in the library search.
 // youtube.com itself can't be embedded (X-Frame-Options), so "YouTube" opens the real site in a new tab.
 import { useCallback } from 'react';
 import { type LibraryTab, useUi } from '../../../features/settings/uiStore';
@@ -7,7 +8,7 @@ import { Icon } from '../../../shell/Icon';
 import { Sheet } from '../../../shell/Sheet';
 import type { Rect } from '../../../shell/geometry';
 import { useAccount } from '../account/accountStore';
-import { loadFeed, loadLiked, loadPopular } from '../account/library';
+import { loadFeed, loadPopular } from '../account/library';
 import { playVideo } from '../playActions';
 import { ConnectCard } from './ConnectCard';
 import { PastePanel } from './PastePanel';
@@ -24,7 +25,6 @@ const TABS: { id: LibraryTab; label: MessageKey }[] = [
   { id: 'paste', label: 'library.tab.paste' },
   { id: 'feed', label: 'library.tab.feed' },
   { id: 'playlists', label: 'library.tab.playlists' },
-  { id: 'liked', label: 'library.tab.liked' },
   { id: 'search', label: 'library.tab.search' },
   { id: 'music', label: 'library.tab.music' },
   { id: 'trending', label: 'library.tab.trending' },
@@ -60,8 +60,6 @@ function Panel({ tab }: { tab: LibraryTab }) {
       return <VideoPanel key="feed" load={loadFeed} testId="lib-feed" empty="library.feedEmpty" />;
     case 'playlists':
       return <PlaylistsPanel />;
-    case 'liked':
-      return <VideoPanel key="liked" load={loadLiked} testId="lib-liked" empty="library.empty" />;
     case 'search':
       return <SearchPanel />;
     case 'music':

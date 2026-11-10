@@ -136,7 +136,7 @@ test('disconnected: Link tab first; account tabs show Connect with the privacy p
   expect(typeof consent).toBe('number');
 });
 
-test('connected: New, Playlists → Play all, Liked; + adds to queue; lists are cached; nothing token-like is readable', async ({ page }) => {
+test('connected: New, Playlists → Play all; no Liked tab; + adds to queue; lists are cached; nothing token-like is readable', async ({ page }) => {
   const m = await mockApi(page);
   await openApp(page);
   await page.getByTestId('yt-empty-library').click();
@@ -158,15 +158,14 @@ test('connected: New, Playlists → Play all, Liked; + adds to queue; lists are 
   expect(q.index).toBe(0);
 
   await page.getByTestId('yt-library').click();
-  await page.getByTestId('lib-tab-liked').click();
-  await expect(page.getByTestId('lib-liked')).toContainText('Liked thing');
+  await expect(page.getByTestId('lib-tab-liked')).toHaveCount(0);
 
   // Second visit within the TTL comes from IndexedDB, not the network.
   const feedCalls = countCalls(m, 'GET /api/yt/feed');
   await page.getByTestId('lib-tab-feed').click();
   await expect(feed).toContainText('Feed video one');
   expect(countCalls(m, 'GET /api/yt/feed')).toBe(feedCalls);
-  expect(await idbKeys(page)).toEqual(expect.arrayContaining(['feed', 'playlists', 'pl:PLroadtrip0001', 'liked']));
+  expect(await idbKeys(page)).toEqual(expect.arrayContaining(['feed', 'playlists', 'pl:PLroadtrip0001']));
 
   const readable = await readableStorage(page);
   for (const needle of ['ya29.', '1//', 'access_token', 'refresh_token', 'id_token', 'jg_session']) expect(readable).not.toContain(needle);
@@ -184,6 +183,9 @@ test('library-first search: "play X" from a playlist spends no search quota; "Se
   await page.getByTestId('search-input').fill('เปิดเพลงรักฤดูร้อน');
   await page.getByTestId('search-go').click();
   await expect(page.getByTestId('search-library-results')).toContainText('เพลงรักฤดูร้อน');
+  await page.getByTestId('search-input').fill('liked thing');
+  await page.getByTestId('search-go').click();
+  await expect(page.getByTestId('search-library-results')).toContainText('Liked videos');
   expect(countCalls(m, 'GET /api/yt/search')).toBe(0);
 
   const left = page.getByTestId('search-left');

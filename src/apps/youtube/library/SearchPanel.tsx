@@ -92,7 +92,7 @@ export function SearchPanel() {
               testId="search-library-results"
               items={lib}
               onPlay={(i) => play(lib[i])}
-              subtitle={(v) => [v.channel, (v as LibraryEntry).source || t('library.tab.liked')].filter(Boolean).join(' · ')}
+              subtitle={(v) => [v.channel, (v as LibraryEntry).source || t('search.sourceLiked')].filter(Boolean).join(' · ')}
             />
           ) : (
             !indexing && <p data-testid="search-library-empty" className="px-1 text-[14px] text-text-dim">{t('search.noLibrary')}</p>

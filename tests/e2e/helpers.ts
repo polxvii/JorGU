@@ -3,6 +3,12 @@ import { expect, type Page } from '@playwright/test';
 declare global {
   interface Window {
     __jorguFrameLoads?: Record<string, number>;
+    __jorgu?: {
+      setPlaying: (playing: boolean) => void;
+      yt: () => { hasPlayer: boolean; state: number | null; time: number; duration: number; rate: number | null; iframeLoads: number; visibleRatio: number };
+      seekNearEnd: (seconds?: number) => void;
+      queue: () => { items: { videoId: string }[]; index: number };
+    };
   }
 }
 
@@ -14,12 +20,14 @@ export async function openApp(page: Page, settings?: Record<string, unknown>): P
   await page.evaluate(
     ([key, s]) => {
       localStorage.clear();
+      localStorage.setItem('jorgu:e2e', '1');
       if (s) localStorage.setItem(key as string, JSON.stringify({ state: s, version: 1 }));
     },
     [SETTINGS_KEY, settings ?? null] as const,
   );
   await page.reload();
-  await waitForFrames(page, ['youtube']);
+  await expect(page.locator('[data-surface="youtube"]')).toHaveCount(1);
+  await page.waitForFunction(() => !!window.__jorgu);
 }
 
 export async function waitForFrames(page: Page, names: string[]): Promise<void> {
@@ -104,7 +112,7 @@ export async function expectPlayerClear(page: Page): Promise<OverlapReport> {
   return rep;
 }
 
+/** Layout-only tests: mark YouTube as playing without loading a real video (test hook). */
 export async function startSimulatedPlayback(page: Page): Promise<void> {
-  await page.getByTestId('yt-toggle').click();
-  await expect(page.locator('[data-player-rect]')).toHaveAttribute('data-playing', '1');
+  await page.evaluate(() => window.__jorgu!.setPlaying(true));
 }

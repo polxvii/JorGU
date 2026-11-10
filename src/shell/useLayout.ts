@@ -17,6 +17,7 @@ export function useLayout(): LayoutResult {
   const playing = useUi((s) => s.youtube.playing);
   const miniSticky = useUi((s) => s.youtube.miniSticky);
   const sheetOpen = useUi((s) => s.sheet !== null);
+  const toast = useUi((s) => s.toasts.length > 0);
   const bannerCount = useBannerCount();
   return useMemo(
     () =>
@@ -27,7 +28,8 @@ export function useLayout(): LayoutResult {
         youtube: { playing, miniSticky, miniSize },
         bannerCount,
         sheetOpen,
+        toast,
       }),
-    [vp, layout, playing, miniSticky, miniSize, bannerCount, sheetOpen],
+    [vp, layout, playing, miniSticky, miniSize, bannerCount, sheetOpen, toast],
   );
 }

@@ -76,7 +76,7 @@ export interface Settings {
     viewModes: Record<string, WebViewMode>;
     desktopWidth: 1024 | 1280 | 1440;
   };
-  youtube: { miniPlayerSize: MiniPlayerSize };
+  youtube: { miniPlayerSize: MiniPlayerSize; playbackRate: number };
   alerts: {
     overspeedEnabled: boolean;
     limitKmh: number;
@@ -105,7 +105,7 @@ export function defaultSettings(): Settings {
     },
     map: { mode: 'js', follow: true, traffic: false, savedPlaces: [], recentDestinations: [] },
     web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280 },
-    youtube: { miniPlayerSize: '356x200' },
+    youtube: { miniPlayerSize: '356x200', playbackRate: 1 },
     alerts: { overspeedEnabled: true, limitKmh: 90, cooldownSec: 30, ttsEnabled: true },
     library: { feedChannelLimit: 50 },
     voice: { enabled: true },

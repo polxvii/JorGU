@@ -76,6 +76,11 @@ export function useAppEffects(layout: LayoutResult): void {
     return () => window.removeEventListener('blur', onBlur);
   }, []);
 
+  // The player controller needs the YouTube placement for the §3.9 visibility rule.
+  useEffect(() => {
+    if (useUi.getState().youtube.mode !== ytMode) useUi.getState().setYoutube({ mode: ytMode });
+  }, [ytMode]);
+
   // Mini player stays after a pause until dismissed; cleared when YouTube is back in a pane (spec §6.6).
   useEffect(() => {
     const ui = useUi.getState();

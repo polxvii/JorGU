@@ -27,6 +27,7 @@ function chromeRects(r: LayoutResult): [string, Rect][] {
   if (r.edgeStrip) out.push(['edgeStrip', r.edgeStrip]);
   if (r.controlColumn) out.push(['controlColumn', r.controlColumn]);
   if (r.mini) out.push(['miniHandle', r.mini.handle]);
+  if (r.toast) out.push(['toast', r.toast]);
   for (const p of r.panes) {
     out.push([`header${p.index}`, p.header], [`fs${p.index}`, p.fsButton]);
     if (p.revealStrip) out.push([`reveal${p.index}`, p.revealStrip]);
@@ -154,7 +155,8 @@ describe('§3.9 invariants across every combination', () => {
                 for (const playing of [false, true])
                   for (const miniSize of ['356x200', '480x270'] as MiniPlayerSize[])
                     for (const sheetOpen of [false, true])
-                      for (const bannerCount of [0, 1]) {
+                      for (const bannerCount of [0, 1])
+                        for (const toast of [false, true]) {
                         const r = computeLayout({
                           viewport: { width: w, height: h },
                           safeArea,
@@ -162,8 +164,9 @@ describe('§3.9 invariants across every combination', () => {
                           youtube: { playing, miniSticky: false, miniSize },
                           bannerCount,
                           sheetOpen,
+                          toast,
                         });
-                        const ctx = JSON.stringify({ w, h, panes: panes.map((p) => p.kind), driverSide, mode, focusedPane, fullscreenPane, playing, miniSize, sheetOpen, bannerCount });
+                        const ctx = JSON.stringify({ w, h, panes: panes.map((p) => p.kind), driverSide, mode, focusedPane, fullscreenPane, playing, miniSize, sheetOpen, bannerCount, toast });
                         const player = r.youtube.player;
                         if (player) {
                           expect(player.w, ctx).toBeGreaterThanOrEqual(356);
@@ -177,6 +180,6 @@ describe('§3.9 invariants across every combination', () => {
                         }
                         checked++;
                       }
-    expect(checked).toBeGreaterThan(10_000);
+    expect(checked).toBeGreaterThan(20_000);
   });
 });

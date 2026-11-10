@@ -398,6 +398,7 @@ Index titles from cached playlists + liked videos → fuzzy match locally first 
 - Singleton player (§6.1); first play must come from a user tap (autoplay policy); afterwards `loadVideoById` for the queue [Verify]
 - Queue: `{items, index, repeat: 'off'|'all'|'one', shuffle}` in localStorage; `ENDED` → next
 - Errors: 101/150 (embedding disabled by owner) → auto-skip + toast "Skipped: the owner doesn't allow playback outside YouTube" with "Open in YouTube app"; 100 → skip + "Video removed or private"; 153 (missing Referer) → do not retry in a loop, log it and show "Player blocked: app identity missing" — this indicates a `Referrer-Policy` bug (§15)
+- **Playback speed (user request 2026-11-10):** one-tap speed button outside the player cycles 1× → 1.5× → 2× (1.25× dropped at the user's request) (only rates returned by `getAvailablePlaybackRates()`; live streams stay 1×). The chosen rate is remembered (`youtube.playbackRate`) and re-applied to every new video with `setPlaybackRate` [Official IFrame API]. Also in Settings, on the mini-player handle, and in the full-screen controls. If the user changes speed in YouTube's own menu, `onPlaybackRateChange` updates the saved rate.
 - Media keys [Verify]: `navigator.mediaSession.setActionHandler` for `play`, `pause`, `nexttrack`, `previoustrack` + `metadata`; also `keydown` for `MediaPlayPause`, `MediaTrackNext`, `MediaTrackPrevious`. Risk: audio comes from a cross-origin iframe that may own the media session. Test and report.
 
 ### 8.6 "Signed-in playback" checklist (layer B)
@@ -617,7 +618,7 @@ interface Settings {
     viewModes: Record<string, WebViewMode>;   // key = origin, §9.7
     desktopWidth: 1024 | 1280 | 1440;          // default 1280
   };
-  youtube: { miniPlayerSize: '356x200' | '480x270' };
+  youtube: { miniPlayerSize: '356x200' | '480x270'; playbackRate: number }; // playbackRate default 1
   alerts: {
     overspeedEnabled: boolean;
     limitKmh: number;

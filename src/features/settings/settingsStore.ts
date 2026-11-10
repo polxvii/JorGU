@@ -14,6 +14,7 @@ export interface SettingsActions {
   setNightMode: (patch: Partial<Settings['nightMode']>) => void;
   setDriverSide: (side: DriverSide) => void;
   setMiniPlayerSize: (size: MiniPlayerSize) => void;
+  setPlaybackRate: (rate: number) => void;
   assign: (pane: PaneIndex, pick: AppPick) => void;
   swap: () => void;
   toggleLayoutMode: () => void;
@@ -42,7 +43,8 @@ export const useSettings = create<SettingsState>()(
       setTheme: (themeId) => set({ themeId }),
       setNightMode: (patch) => set((s) => ({ nightMode: { ...s.nightMode, ...patch } })),
       setDriverSide: (driverSide) => set((s) => ({ layout: { ...s.layout, driverSide } })),
-      setMiniPlayerSize: (miniPlayerSize) => set({ youtube: { miniPlayerSize } }),
+      setMiniPlayerSize: (miniPlayerSize) => set((s) => ({ youtube: { ...s.youtube, miniPlayerSize } })),
+      setPlaybackRate: (playbackRate) => set((s) => ({ youtube: { ...s.youtube, playbackRate } })),
       assign: (pane, pick) => set((s) => ({ layout: A.assignApp(s.layout, pane, pick) })),
       swap: () => set((s) => ({ layout: A.swapPanes(s.layout) })),
       toggleLayoutMode: () => set((s) => ({ layout: A.toggleLayoutMode(s.layout) })),

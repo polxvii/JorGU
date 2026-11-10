@@ -6,7 +6,8 @@ import { useSettings } from '../features/settings/settingsStore';
 import { useUi } from '../features/settings/uiStore';
 import type { AppRef, PaneIndex, SurfaceId } from '../features/settings/types';
 import { surfaceIdOf } from '../features/settings/types';
-import { DashboardPlaceholder, MapPlaceholder, WebPlaceholder, YouTubePlaceholder } from '../apps/placeholders';
+import { DashboardPlaceholder, MapPlaceholder, WebPlaceholder } from '../apps/placeholders';
+import { YouTubeSurface } from '../apps/youtube/YouTubeSurface';
 import type { LayoutResult } from './computeLayout';
 import type { Rect } from './geometry';
 
@@ -32,7 +33,7 @@ const SurfaceContent = memo(function SurfaceContent({ id, layout }: { id: Surfac
   if (id === 'dashboard') return <DashboardPlaceholder />;
   if (id === 'map') return <MapPlaceholder />;
   if (id === 'youtube') {
-    return <YouTubePlaceholder surface={layout.youtube.surface} player={layout.youtube.player} mode={layout.youtube.mode} />;
+    return <YouTubeSurface surface={layout.youtube.surface} player={layout.youtube.player} mode={layout.youtube.mode} />;
   }
   const web = lastWeb.get(id);
   return web ? <WebPlaceholder app={web} surfaceId={id} /> : null;

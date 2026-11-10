@@ -1,8 +1,21 @@
 // Transient UI state (not persisted).
 import { create } from 'zustand';
+import type { MessageKey } from '../../i18n/en';
 import type { PaneIndex, SurfaceId } from './types';
 
-export type SheetState = null | { kind: 'picker'; pane: PaneIndex } | { kind: 'settings' };
+export type SheetState =
+  | null
+  | { kind: 'picker'; pane: PaneIndex }
+  | { kind: 'settings' }
+  | { kind: 'paste' }
+  | { kind: 'queue' };
+
+export interface Toast {
+  id: number;
+  message: MessageKey;
+  params?: Record<string, string | number>;
+  action?: { label: MessageKey; href: string };
+}
 
 export interface UiState {
   sheet: SheetState;
@@ -13,7 +26,8 @@ export interface UiState {
   floatingNonce: number;
   drag: null | { from: PaneIndex; over: PaneIndex | null };
   /** M1: playback is simulated by the YouTube placeholder; M2 wires the real player. */
-  youtube: { playing: boolean; miniSticky: boolean };
+  youtube: { playing: boolean; miniSticky: boolean; mode: 'pane' | 'mini' | 'fullscreen' | 'hidden' };
+  toasts: Toast[];
   mounted: SurfaceId[];
   online: boolean;
   updateSW: null | (() => void);
@@ -34,7 +48,12 @@ export interface UiState {
   setUpdateSW: (fn: (() => void) | null) => void;
   setNight: (isNight: boolean) => void;
   setNeedsHistoryEntry: (v: boolean) => void;
+  showToast: (t: Omit<Toast, 'id'>) => void;
+  dismissToast: (id: number) => void;
 }
+
+const TOAST_MS = 6000;
+let toastSeq = 0;
 
 export const useUi = create<UiState>()((set) => ({
   sheet: null,
@@ -43,7 +62,8 @@ export const useUi = create<UiState>()((set) => ({
   floatingVisible: false,
   floatingNonce: 0,
   drag: null,
-  youtube: { playing: false, miniSticky: false },
+  youtube: { playing: false, miniSticky: false, mode: 'hidden' },
+  toasts: [],
   mounted: [],
   online: typeof navigator === 'undefined' ? true : navigator.onLine,
   updateSW: null,
@@ -67,4 +87,11 @@ export const useUi = create<UiState>()((set) => ({
   setUpdateSW: (updateSW) => set({ updateSW }),
   setNight: (isNight) => set((s) => (s.isNight === isNight ? s : { isNight })),
   setNeedsHistoryEntry: (needsHistoryEntry) => set({ needsHistoryEntry }),
+  showToast: (t) => {
+    toastSeq += 1;
+    const id = toastSeq;
+    set((s) => ({ toasts: [...s.toasts.slice(-2), { ...t, id }] }));
+    window.setTimeout(() => useUi.getState().dismissToast(id), TOAST_MS);
+  },
+  dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((x) => x.id !== id) })),
 }));

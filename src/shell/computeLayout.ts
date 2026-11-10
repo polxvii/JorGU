@@ -28,7 +28,10 @@ export const L = {
   SHEET_MAX: 400,
   SHEET_MIN: 300,
   REVEAL: 20,
-  FLOAT_BUTTONS: 6,
+  FLOAT_BUTTONS: 7,
+  TOAST_H: 56,
+  TOAST_MAX_W: 460,
+  TOAST_STRIP: 72,
 } as const;
 
 export type YtMode = 'pane' | 'mini' | 'fullscreen' | 'hidden';
@@ -59,6 +62,8 @@ export interface LayoutInput {
   youtube: { playing: boolean; miniSticky: boolean; miniSize: MiniPlayerSize };
   bannerCount: number;
   sheetOpen: boolean;
+  /** A toast is showing (it must be placed clear of the player). */
+  toast?: boolean;
 }
 
 export interface LayoutResult {
@@ -81,6 +86,7 @@ export interface LayoutResult {
   controlColumn: Rect | null;
   mini: { rect: Rect; handle: Rect } | null;
   sheet: Rect | null;
+  toast: Rect | null;
 }
 
 const Z_SURFACE = 1;
@@ -118,6 +124,29 @@ function placeSheet(area: Rect, atRight: boolean, avoid: (Rect & { minW: number 
     sw = Math.min(sw, limit);
   }
   return rectFor(Math.max(0, Math.floor(sw)));
+}
+
+/** First candidate (bottom-centre, top-centre, then extras) that avoids every rectangle in `avoid`. */
+function placeToast(area: Rect, avoid: (Rect | null | undefined)[], extra: Rect[] = []): Rect | null {
+  const w = Math.max(0, Math.min(L.TOAST_MAX_W, area.w - 24));
+  const h = L.TOAST_H;
+  const cx = area.x + Math.floor((area.w - w) / 2);
+  const candidates: Rect[] = [
+    { x: cx, y: bottom(area) - h - 12, w, h },
+    { x: cx, y: area.y + 12, w, h },
+    ...extra,
+  ];
+  const blockers = avoid.filter((a): a is Rect => !!a);
+  return candidates.find((c) => blockers.every((b) => !intersects(c, b))) ?? null;
+}
+
+function paneToastCandidates(r: Rect): Rect[] {
+  const w = Math.max(0, Math.min(L.TOAST_MAX_W, r.w - 24));
+  const x = r.x + Math.floor((r.w - w) / 2);
+  return [
+    { x, y: bottom(r) - L.TOAST_H - 12, w, h: L.TOAST_H },
+    { x, y: r.y + L.HEADER + 8, w, h: L.TOAST_H },
+  ];
 }
 
 function floatBar(content: Rect, driverRight: boolean) {
@@ -174,6 +203,13 @@ export function computeLayout(input: LayoutInput): LayoutResult {
         sheet = placeSheet(area, driverRight, { ...area, minW: YT_MIN_WIDTH });
         area = driverRight ? { ...area, w: area.w - sheet.w } : { ...area, x: area.x + sheet.w, w: area.w - sheet.w };
       }
+      // Toasts can't go over the player, so the player area gives up a strip at the bottom while one shows.
+      let toast: Rect | null = null;
+      if (input.toast) {
+        area = { ...area, h: Math.max(0, area.h - L.TOAST_STRIP) };
+        const w = Math.max(0, Math.min(L.TOAST_MAX_W, area.w - 24));
+        toast = { x: area.x + Math.floor((area.w - w) / 2), y: bottom(area) + 8, w, h: L.TOAST_H };
+      }
       surfaces.youtube = { id: 'youtube', rect: area, visible: true, z: Z_YOUTUBE };
       return {
         ...base,
@@ -191,6 +227,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
         controlColumn: column,
         mini: null,
         sheet,
+        toast,
       };
     }
 
@@ -203,6 +240,10 @@ export function computeLayout(input: LayoutInput): LayoutResult {
       const avoid = mini ? { ...mini.handle, h: mini.handle.h + mini.rect.h, minW: mini.rect.w } : null;
       sheet = placeSheet(content, driverRight, avoid);
     }
+    const bar = sheet ? null : floatBar(content, driverRight);
+    const toast = input.toast
+      ? placeToast(content, [mini?.rect, mini?.handle, sheet, bar?.rect])
+      : null;
     return {
       ...base,
       dock: null,
@@ -216,13 +257,14 @@ export function computeLayout(input: LayoutInput): LayoutResult {
       youtube: mini
         ? { mode: 'mini', surface: mini.rect, player: mini.rect, paneIndex: ytIdx }
         : { mode: 'hidden', surface: content, player: null, paneIndex: ytIdx },
-      floatingBar: sheet ? null : floatBar(content, driverRight),
+      floatingBar: bar,
       edgeStrip: fsApp.kind === 'web'
         ? { x: driverRight ? right(content) - L.EDGE : content.x, y: content.y, w: L.EDGE, h: content.h }
         : null,
       controlColumn: null,
       mini,
       sheet,
+      toast,
     };
   }
 
@@ -327,6 +369,14 @@ export function computeLayout(input: LayoutInput): LayoutResult {
   }
   if (mini) surfaces.youtube = { id: 'youtube', rect: mini.rect, visible: true, z: Z_MINI };
 
+  const toast = input.toast
+    ? placeToast(
+        appArea,
+        [yt.player, mini?.rect, mini?.handle, sheet],
+        panes.filter((p) => p.app.kind !== 'youtube').flatMap((p) => paneToastCandidates(p.rect)),
+      )
+    : null;
+
   return {
     ...base,
     dock,
@@ -343,5 +393,6 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     controlColumn: null,
     mini,
     sheet,
+    toast,
   };
 }

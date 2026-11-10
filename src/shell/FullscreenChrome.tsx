@@ -4,7 +4,8 @@ import { useEffect } from 'react';
 import { useSettings } from '../features/settings/settingsStore';
 import { useUi } from '../features/settings/uiStore';
 import { useT, type MessageKey } from '../i18n';
-import { useYoutubeToggle } from '../apps/placeholders';
+import { SpeedButton } from '../apps/youtube/SpeedButton';
+import { next, previous, togglePlay } from '../apps/youtube/player';
 import { youtubePane } from './layoutActions';
 import type { LayoutResult } from './computeLayout';
 import { L } from './computeLayout';
@@ -38,12 +39,12 @@ function BigButton({ icon, label, onClick, testId, primary }: {
 function useFullscreenActions() {
   const fsPane = useSettings((s) => s.layout.fullscreenPane);
   const openSheet = useUi((s) => s.openSheet);
-  const yt = useYoutubeToggle();
+  const playing = useUi((s) => s.youtube.playing);
   return {
     exit: () => exitFullscreen('button'),
     switchApp: () => switchFullscreen(),
     picker: () => fsPane !== null && openSheet({ kind: 'picker', pane: fsPane }),
-    yt,
+    yt: { playing, toggle: togglePlay },
   };
 }
 
@@ -78,21 +79,38 @@ export function FloatingControls({ layout }: { layout: LayoutResult }) {
       <BigButton testId="fs-exit" icon="close" label="fs.exit" onClick={a.exit} primary />
       <BigButton testId="fs-switch" icon="swap" label="fs.switch" onClick={a.switchApp} />
       <BigButton testId="fs-picker" icon="apps" label="fs.picker" onClick={a.picker} />
-      <BigButton testId="fs-yt-prev" icon="prev" label="yt.prev" onClick={() => {}} />
+      <BigButton testId="fs-yt-prev" icon="prev" label="yt.prev" onClick={previous} />
       <BigButton
         testId="fs-yt-toggle"
         icon={a.yt.playing ? 'pause' : 'play'}
         label={a.yt.playing ? 'yt.pause' : 'yt.play'}
         onClick={a.yt.toggle}
       />
-      <BigButton testId="fs-yt-next" icon="next" label="yt.next" onClick={() => {}} />
+      <BigButton testId="fs-yt-next" icon="next" label="yt.next" onClick={next} />
+      <SpeedButton size="lg" testId="fs-yt-speed" />
     </div>
   );
 }
 
 export function ControlColumn({ rect }: { rect: Rect }) {
   const a = useFullscreenActions();
-  const roomForTransport = rect.h >= 6 * L.FLOAT_BUTTON + 7 * 4;
+  // Highest priority first; keep only what fits (64 px buttons, 4 px gaps).
+  const fits = Math.max(3, Math.floor((rect.h - 4) / (L.FLOAT_BUTTON + 4)));
+  const buttons = [
+    <BigButton key="exit" testId="fs-exit" icon="close" label="fs.exit" onClick={a.exit} primary />,
+    <BigButton key="switch" testId="fs-switch" icon="swap" label="fs.switch" onClick={a.switchApp} />,
+    <BigButton key="picker" testId="fs-picker" icon="apps" label="fs.picker" onClick={a.picker} />,
+    <BigButton
+      key="toggle"
+      testId="fs-yt-toggle"
+      icon={a.yt.playing ? 'pause' : 'play'}
+      label={a.yt.playing ? 'yt.pause' : 'yt.play'}
+      onClick={a.yt.toggle}
+    />,
+    <SpeedButton key="speed" size="lg" testId="fs-yt-speed" />,
+    <BigButton key="next" testId="fs-yt-next" icon="next" label="yt.next" onClick={next} />,
+    <BigButton key="prev" testId="fs-yt-prev" icon="prev" label="yt.prev" onClick={previous} />,
+  ].slice(0, fits);
   return (
     <div
       data-chrome="control-column"
@@ -100,21 +118,7 @@ export function ControlColumn({ rect }: { rect: Rect }) {
       className="absolute z-10 flex flex-col items-center justify-center gap-1 bg-surface"
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
     >
-      <BigButton testId="fs-exit" icon="close" label="fs.exit" onClick={a.exit} primary />
-      <BigButton testId="fs-switch" icon="swap" label="fs.switch" onClick={a.switchApp} />
-      <BigButton testId="fs-picker" icon="apps" label="fs.picker" onClick={a.picker} />
-      {roomForTransport && (
-        <>
-          <BigButton testId="fs-yt-prev" icon="prev" label="yt.prev" onClick={() => {}} />
-          <BigButton
-            testId="fs-yt-toggle"
-            icon={a.yt.playing ? 'pause' : 'play'}
-            label={a.yt.playing ? 'yt.pause' : 'yt.play'}
-            onClick={a.yt.toggle}
-          />
-          <BigButton testId="fs-yt-next" icon="next" label="yt.next" onClick={() => {}} />
-        </>
-      )}
+      {buttons}
     </div>
   );
 }
@@ -166,6 +170,9 @@ export function MiniHandle({ rect }: { rect: Rect }) {
         <Icon name="restore" size={22} />
         {t('mini.restore')}
       </button>
+      <div className="flex items-center rounded-t-xl bg-surface px-1">
+        <SpeedButton testId="mini-speed" />
+      </div>
       {!playing && (
         <button
           type="button"

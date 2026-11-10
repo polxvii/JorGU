@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { box, expectNoReloads, expectPlayerClear, frameLoads, openApp, revealHeaders, waitForFrames } from './helpers';
+import { box, expectNoReloads, expectPlayerClear, frameLoads, openApp, revealHeaders, startSimulatedPlayback, waitForFrames } from './helpers';
 
 test.describe('pane system (§6)', () => {
   test('defaults: split, YouTube left, Map right, Dock right', async ({ page }) => {
@@ -92,8 +92,8 @@ test.describe('pane system (§6)', () => {
 
   test('single layout with YouTube playing off-pane shows the mini player', async ({ page }) => {
     await openApp(page);
-    await page.getByTestId('yt-toggle').click();
-    // Tapping the toggle focused the YouTube pane; focus the Map pane so single layout shows Map.
+    await startSimulatedPlayback(page);
+    // Focus the Map pane so single layout shows Map.
     const map = await box(page, '[data-surface="map"]');
     await page.mouse.click(map.x + map.width / 2, map.y + map.height / 2);
     await page.getByTestId('dock-layout').click();

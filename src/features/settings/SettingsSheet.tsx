@@ -6,6 +6,8 @@ import type { Rect } from '../../shell/geometry';
 import { THEMES, THEME_IDS } from '../../theme/themes';
 import { useSettings } from './settingsStore';
 import type { ThemeId } from './types';
+import { setSpeed } from '../../apps/youtube/player';
+import { SPEED_PRESETS, formatSpeed } from '../../apps/youtube/speed';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -128,6 +130,15 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
             </label>
           </div>
         )}
+      </Section>
+
+      <Section title={`${t('settings.youtube')} · ${t('settings.playbackSpeed')}`}>
+        <Segmented
+          testId="setting-speed"
+          value={String(s.youtube.playbackRate)}
+          onChange={(v) => setSpeed(Number(v))}
+          options={SPEED_PRESETS.map((r) => ({ value: String(r), label: formatSpeed(r) }))}
+        />
       </Section>
 
       <Section title={t('settings.miniPlayer')}>

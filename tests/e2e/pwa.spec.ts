@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { box, expectNoReloads, frameLoads, openApp } from './helpers';
+import { box, expectNoReloads, frameLoads, openApp, revealHeaders, waitForFrames } from './helpers';
 
 test.describe('PWA (§14)', () => {
   test('installable in Chrome: manifest + service worker, no installability errors', async ({ page }) => {
@@ -41,11 +41,16 @@ test.describe('without a service worker (CarPlay in-app browser, §3.10)', () =>
     await expect(page.locator('#jorgu-root')).toHaveAttribute('data-mode', 'fullscreen');
     await page.reload();
     await expect(page.locator('#jorgu-root')).toHaveAttribute('data-mode', 'fullscreen');
-    expect(Object.keys(before).length).toBeGreaterThan(0);
+    await expectNoReloads(page, before);
   });
 
   test('swap keeps iframes alive without a service worker', async ({ page }) => {
     await openApp(page);
+    // Put a Web pane on the right so there is a same-origin iframe to watch.
+    await revealHeaders(page);
+    await page.getByTestId('pane-change-1').click();
+    await page.getByTestId('pick-web').click();
+    await waitForFrames(page, ['web:w1']);
     const before = await frameLoads(page);
     await page.getByTestId('dock-swap').click();
     await page.getByTestId('dock-swap').click();

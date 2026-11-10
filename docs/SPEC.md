@@ -3,6 +3,14 @@
 > Version 0.5 · 2026-11-09
 > UX reference: https://duoscreen.vercel.app/ ("CarPlay Multi-Screen Dashboard")
 
+### Changes during M2b (2026-11-10)
+
+- **YouTube home page:** the user asked for youtube.com's own signed-in home (recommendations) in the pane. Not possible: youtube.com sends `X-Frame-Options: SAMEORIGIN`, the Data API has no home/recommendations feed, and Developer Policies §III.I.1 forbid recreating the YouTube browse experience. User decision: a one-tap **library sheet** (Link · New · Playlists · Liked · Search · Music · Trending) plus an **"Open YouTube" button** that opens https://www.youtube.com/ in a new tab (§8.9).
+- §8.1: PKCE (S256) added to the redirect flow. `/api/auth/me` answers `{connected:false, configured:false}` (200) when the server has no OAuth secrets.
+- §8.2: the Worker returns `X-Quota-Units` (Data API units spent per request); the client sums them per Pacific day for "About N searches left today". Feed channel limit is 40, not 50: Workers Free allows 50 subrequests per request [Verify plan limit].
+- §8.2: after `invalid_grant` (REAUTH) cached lists keep working until reconnection and age out after 30 days; on Disconnect they're deleted at once.
+- §6: when a sheet leaves no free spot for a toast, the toast sits over the bottom of the sheet (never over the player).
+
 ### Changes in 0.5 (user decisions, 2026-11-09)
 
 - **Target device:** iPhone 16 Pro Max, with JorGu opened in the in-app browser of a CarPlay browser app (CarTV / AP TV) and shown on the car's CarPlay screen. Safari and Chrome are secondary. New §3.10.
@@ -346,8 +354,14 @@ Shown in the Map pane (mode A only) after "Navigate":
 
 **Scopes:** `openid email profile https://www.googleapis.com/auth/youtube.readonly` (read-only)
 
+**Added 2026-11-10 — device flow as a fallback [Official]:** Google blocks OAuth in embedded WebViews (`disallowed_useragent`; WKWebView named explicitly). The block is based on the browser's user agent; the user reports that Google sign-in already works inside CarTV, so CarTV may present a Safari-like user agent [Verify with the M0 probe `env.userAgent`]. JorGu therefore offers the redirect flow first and "Use a code instead" as a fallback. Google's *OAuth 2.0 for TV and Limited-Input Devices* flow allows `youtube.readonly`, `openid`, `email`, `profile`, and always returns refresh tokens. JorGu uses it everywhere:
+1. `POST /api/auth/device/start` → `https://oauth2.googleapis.com/device/code` → the client shows the `user_code` and `verification_url` (google.com/device); `device_code` stays server-side in an encrypted, httpOnly 30-min cookie
+2. The user opens google.com/device on any browser (e.g. Safari on the same iPhone), enters the code, and approves
+3. `POST /api/auth/device/poll` (client polls at Google's `interval`) → token endpoint with `grant_type=urn:ietf:params:oauth:grant-type:device_code`; `authorization_pending` → keep waiting, `slow_down` → +5 s, `access_denied` / `expired_token` → stop → on success the session cookie is set exactly as in step 2 below
+4. Needs a second OAuth client of type **TVs and Limited Input devices**: `DEVICE_CLIENT_ID` (var) and `DEVICE_CLIENT_SECRET` (secret). The web client (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`) stays for the redirect flow below.
+
 **Flow (authorization code, refresh token server-side):**
-1. `GET /api/auth/login` → random `state` in a 10-min httpOnly cookie → redirect to Google with `access_type=offline`, `prompt=consent`, `include_granted_scopes=true`
+1. `GET /api/auth/login` → random `state` and PKCE `code_verifier` sealed in a 10-min httpOnly cookie → redirect to Google with `access_type=offline`, `prompt=consent`, `include_granted_scopes=true`, `code_challenge` (S256)
 2. `GET /api/auth/callback` → verify `state` → exchange code → store `{refresh_token, access_token, expires_at, email, name, picture}` encrypted in cookie `jg_session` (httpOnly, Secure, SameSite=Lax, Max-Age 180 days) → redirect to `/`
 3. Each `/api/yt/*` call: decrypt cookie → refresh if < 60 s left → re-set cookie → call the Data API
 4. `POST /api/auth/logout` → revoke at `https://oauth2.googleapis.com/revoke` → clear cookie
@@ -414,6 +428,13 @@ Not detectable in code, so Settings shows a checklist:
 No driving mode. Video keeps playing normally while the car moves (user decision). Do not add any overlay, blur, or cover on the player for any reason (§3.9). Player controls (`controls: 1` default) stay usable; our own ⏮ ⏯ ⏭ live outside the player rectangle.
 
 ---
+
+### 8.9 Library sheet and "Open YouTube" (user decision 2026-11-10)
+
+- The transport row's **Library** button opens a sheet (placed by the layout engine, never over the player) with tabs: **Link** (paste, §8.3) · **New** (feed) · **Playlists** (→ items, Play all) · **Liked** · **Search** (§8.4) · **Music** (`chart=mostPopular`, category 10, region TH) · **Trending** (`chart=mostPopular`, region TH)
+- Tap a video = play now (queued items stay after it); **+** = add to the end of the queue; a playlist's Play all / tap = replace the queue with that playlist
+- Not connected: the Link tab works; the other tabs show the Connect card with the privacy-policy link (§8.8)
+- Header button **YouTube** opens https://www.youtube.com/ in a new tab (`rel="noopener"`, never `noreferrer`), for recommendations and anything else the API doesn't offer. youtube.com can't be embedded (`X-Frame-Options: SAMEORIGIN`)
 
 ## 9. Web app (open other websites)
 

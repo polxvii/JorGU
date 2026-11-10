@@ -12,13 +12,20 @@ const yt = (page: Page) => page.evaluate(() => window.__jorgu!.yt());
 const PLAYING = 1;
 const BUFFERING = 3;
 
-async function pasteAndPlay(page: Page, link: string) {
+async function openPaste(page: Page) {
   const empty = page.getByTestId('yt-empty-paste');
   if (await empty.isVisible()) await empty.click();
-  else await page.getByTestId('yt-paste').click();
+  else await page.getByTestId('yt-library').click();
+  await page.getByTestId('lib-tab-paste').click();
+}
+
+async function pasteAndPlay(page: Page, link: string) {
+  await openPaste(page);
   await page.getByTestId('paste-input').fill(link);
   await page.getByTestId('paste-play').click();
   await expect.poll(async () => (await yt(page)).state, { timeout: 45_000 }).toBe(PLAYING);
+  // The iframe's first `load` event can land after PLAYING; reload checks compare against this baseline.
+  await expect.poll(async () => (await yt(page)).iframeLoads, { timeout: 15_000 }).toBeGreaterThanOrEqual(1);
 }
 
 async function expectStillPlaying(page: Page, before: { time: number; iframeLoads: number }) {
@@ -103,7 +110,7 @@ test('speed button: 1× → 1.5× → 2×, saved, and re-applied after auto-adva
   await expect.poll(async () => (await yt(page)).rate).toBe(2);
 
   // Queue a second video and jump near the end: auto-advance starts it at 2×.
-  await page.getByTestId('yt-paste').click();
+  await openPaste(page);
   await page.getByTestId('paste-input').fill(`https://youtu.be/${VIDEO_B}`);
   await page.getByTestId('paste-queue').click();
   await page.evaluate(() => window.__jorgu!.seekNearEnd(1.5));

@@ -8,6 +8,7 @@ import { useSettings } from './settingsStore';
 import type { ThemeId } from './types';
 import { setSpeed } from '../../apps/youtube/player';
 import { SPEED_PRESETS, formatSpeed } from '../../apps/youtube/speed';
+import { AccountSection } from '../../apps/youtube/library/ConnectCard';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -130,6 +131,10 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
             </label>
           </div>
         )}
+      </Section>
+
+      <Section title={t('settings.account')}>
+        <AccountSection />
       </Section>
 
       <Section title={`${t('settings.youtube')} · ${t('settings.playbackSpeed')}`}>

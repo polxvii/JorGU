@@ -7,27 +7,42 @@ import { Icon } from '../../shell/Icon';
 import type { YtMode } from '../../shell/computeLayout';
 import { L } from '../../shell/computeLayout';
 import type { Rect } from '../../shell/geometry';
+import { useAccount } from './account/accountStore';
+import { openLibrary } from './library/libraryNav';
 import { useQueue } from './queueStore';
 import { SpeedButton } from './SpeedButton';
 import { attachHost, next, playIndex, preparePlayer, previous, togglePlay, usePlayerUi } from './player';
 
 function EmptyPlayer() {
   const t = useT();
-  const openSheet = useUi((s) => s.openSheet);
   const status = usePlayerUi((s) => s.status);
+  const connected = useAccount((s) => s.status === 'connected');
+  const primary = 'flex min-h-12 items-center gap-2 rounded-xl bg-accent px-4 text-[16px] font-semibold text-on-accent';
+  const secondary = 'flex min-h-12 items-center gap-2 rounded-xl bg-surface px-4 text-[16px] font-semibold text-text';
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-4 text-center">
       <Icon name="youtube" size={48} className="text-text-dim" />
-      <div className="text-[15px] text-text-dim">{status === 'error' ? t('yt.loadFailed') : t('yt.emptyHint')}</div>
-      <button
-        type="button"
-        data-testid="yt-empty-paste"
-        onClick={() => openSheet({ kind: 'paste' })}
-        className="flex min-h-12 items-center gap-2 rounded-xl bg-accent px-4 text-[16px] font-semibold text-on-accent"
-      >
-        <Icon name="link" size={22} />
-        {t('yt.pasteLink')}
-      </button>
+      <div className="text-[15px] text-text-dim">
+        {status === 'error' ? t('yt.loadFailed') : connected ? t('yt.emptyHintConnected') : t('yt.emptyHint')}
+      </div>
+      <div className="flex flex-wrap justify-center gap-2">
+        {connected && (
+          <button type="button" data-testid="yt-empty-library" onClick={() => openLibrary('feed')} className={primary}>
+            <Icon name="library" size={22} />
+            {t('yt.library')}
+          </button>
+        )}
+        <button type="button" data-testid="yt-empty-paste" onClick={() => openLibrary('paste')} className={connected ? secondary : primary}>
+          <Icon name="link" size={22} />
+          {t('yt.pasteLink')}
+        </button>
+        {!connected && (
+          <button type="button" data-testid="yt-empty-connect" onClick={() => openLibrary('feed')} className={secondary}>
+            <Icon name="library" size={22} />
+            {t('yt.library')}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -79,8 +94,8 @@ function Controls({ top, height }: { top: number; height: number }) {
         <button type="button" data-testid="yt-queue" aria-label={t('yt.queue')} onClick={() => openSheet({ kind: 'queue' })} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-text">
           <Icon name="queue" />
         </button>
-        <button type="button" data-testid="yt-paste" aria-label={t('yt.pasteLink')} onClick={() => openSheet({ kind: 'paste' })} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-text">
-          <Icon name="link" />
+        <button type="button" data-testid="yt-library" aria-label={t('yt.library')} onClick={() => openLibrary()} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-text">
+          <Icon name="library" />
         </button>
       </div>
     </div>

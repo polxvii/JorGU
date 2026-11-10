@@ -127,7 +127,11 @@ function placeSheet(area: Rect, atRight: boolean, avoid: (Rect & { minW: number 
 }
 
 /** First candidate (bottom-centre, top-centre, then extras) that avoids every rectangle in `avoid`. */
-function placeToast(area: Rect, avoid: (Rect | null | undefined)[], extra: Rect[] = []): Rect | null {
+/**
+ * Free spot for a toast that touches none of `avoid` (player, mini player, sheet…). If there is none and a sheet is
+ * open, the toast goes over the bottom of the sheet: the sheet is our own chrome, never the player (§3.9).
+ */
+function placeToast(area: Rect, avoid: (Rect | null | undefined)[], extra: Rect[] = [], sheet: Rect | null = null): Rect | null {
   const w = Math.max(0, Math.min(L.TOAST_MAX_W, area.w - 24));
   const h = L.TOAST_H;
   const cx = area.x + Math.floor((area.w - w) / 2);
@@ -137,7 +141,11 @@ function placeToast(area: Rect, avoid: (Rect | null | undefined)[], extra: Rect[
     ...extra,
   ];
   const blockers = avoid.filter((a): a is Rect => !!a);
-  return candidates.find((c) => blockers.every((b) => !intersects(c, b))) ?? null;
+  const free = candidates.find((c) => blockers.every((b) => !intersects(c, b)));
+  if (free || !sheet) return free ?? null;
+  const sw = Math.max(0, Math.min(L.TOAST_MAX_W, sheet.w - 24));
+  const inSheet = { x: sheet.x + Math.floor((sheet.w - sw) / 2), y: bottom(sheet) - h - 12, w: sw, h };
+  return blockers.every((b) => b === sheet || !intersects(inSheet, b)) ? inSheet : null;
 }
 
 function paneToastCandidates(r: Rect): Rect[] {
@@ -242,7 +250,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     }
     const bar = sheet ? null : floatBar(content, driverRight);
     const toast = input.toast
-      ? placeToast(content, [mini?.rect, mini?.handle, sheet, bar?.rect])
+      ? placeToast(content, [mini?.rect, mini?.handle, sheet, bar?.rect], [], sheet)
       : null;
     return {
       ...base,
@@ -374,6 +382,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
         appArea,
         [yt.player, mini?.rect, mini?.handle, sheet],
         panes.filter((p) => p.app.kind !== 'youtube').flatMap((p) => paneToastCandidates(p.rect)),
+        sheet,
       )
     : null;
 

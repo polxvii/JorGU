@@ -1,3 +1,4 @@
+import { useAccount } from '../apps/youtube/account/accountStore';
 import { useMemo } from 'react';
 import { useSettings } from '../features/settings/settingsStore';
 import { useUi } from '../features/settings/uiStore';
@@ -7,7 +8,8 @@ import { useViewport } from './useViewport';
 export function useBannerCount(): number {
   const online = useUi((s) => s.online);
   const update = useUi((s) => s.updateSW);
-  return (online ? 0 : 1) + (update ? 1 : 0);
+  const reauth = useAccount((s) => s.expired && s.status !== 'connected');
+  return (online ? 0 : 1) + (update ? 1 : 0) + (reauth ? 1 : 0);
 }
 
 export function useLayout(): LayoutResult {

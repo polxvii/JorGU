@@ -7,7 +7,7 @@ declare global {
       setPlaying: (playing: boolean) => void;
       yt: () => { hasPlayer: boolean; state: number | null; time: number; duration: number; rate: number | null; iframeLoads: number; visibleRatio: number };
       seekNearEnd: (seconds?: number) => void;
-      queue: () => { items: { videoId: string }[]; index: number };
+      queue: () => { items: { videoId: string; title?: string; channel?: string }[]; index: number };
     };
   }
 }
@@ -18,7 +18,11 @@ export const SETTINGS_KEY = 'jorgu:settings';
 export async function openApp(page: Page, settings?: Record<string, unknown>): Promise<void> {
   await page.goto('/');
   await page.evaluate(
-    ([key, s]) => {
+    async ([key, s]) => {
+      await new Promise((done) => {
+        const req = indexedDB.deleteDatabase('jorgu-cache');
+        req.onsuccess = req.onerror = req.onblocked = () => done(null);
+      });
       localStorage.clear();
       localStorage.setItem('jorgu:e2e', '1');
       if (s) localStorage.setItem(key as string, JSON.stringify({ state: s, version: 1 }));

@@ -6,7 +6,14 @@ import { useT } from '../i18n';
 import { Icon } from './Icon';
 import type { Rect } from './geometry';
 
-export function Sheet({ rect, title, children, testId }: { rect: Rect; title: string; children: ReactNode; testId: string }) {
+export function Sheet({ rect, title, children, testId, actions }: {
+  rect: Rect;
+  title: string;
+  children: ReactNode;
+  testId: string;
+  /** Extra header buttons, left of Close. */
+  actions?: ReactNode;
+}) {
   const t = useT();
   const close = useUi((s) => s.closeSheet);
   return (
@@ -20,6 +27,7 @@ export function Sheet({ rect, title, children, testId }: { rect: Rect; title: st
     >
       <header className="flex h-14 shrink-0 items-center gap-2 pl-4 pr-2">
         <h2 className="min-w-0 flex-1 truncate text-[18px] font-semibold">{title}</h2>
+        {actions}
         <button
           type="button"
           data-testid="sheet-close"

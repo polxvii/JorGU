@@ -1,6 +1,6 @@
 import { useUi } from '../features/settings/uiStore';
 import { SettingsSheet } from '../features/settings/SettingsSheet';
-import { PasteLinkSheet } from '../apps/youtube/PasteLinkSheet';
+import { LibrarySheet } from '../apps/youtube/library/LibrarySheet';
 import { QueueSheet } from '../apps/youtube/QueueSheet';
 import { Toasts } from './Toasts';
 import { AppPicker } from './AppPicker';
@@ -25,7 +25,7 @@ export function ChromeLayer({ layout }: { layout: LayoutResult }) {
       {layout.mini && <MiniHandle rect={layout.mini.handle} />}
       {sheet && layout.sheet && sheet.kind === 'picker' && <AppPicker rect={layout.sheet} pane={sheet.pane} layout={layout} />}
       {sheet && layout.sheet && sheet.kind === 'settings' && <SettingsSheet rect={layout.sheet} />}
-      {sheet && layout.sheet && sheet.kind === 'paste' && <PasteLinkSheet rect={layout.sheet} />}
+      {sheet && layout.sheet && sheet.kind === 'library' && <LibrarySheet rect={layout.sheet} />}
       {sheet && layout.sheet && sheet.kind === 'queue' && <QueueSheet rect={layout.sheet} />}
       {layout.toast && <Toasts rect={layout.toast} />}
     </div>

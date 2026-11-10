@@ -1,7 +1,7 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig, searchForWorkspaceRoot } from 'vite';
+import { type Connect, type Plugin, defineConfig, searchForWorkspaceRoot } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // Same headers as public/_headers so dev/preview behave like production (spec §3.9, §15).
@@ -35,9 +35,30 @@ function productionCsp(): string | undefined {
 }
 const CSP = productionCsp();
 
+/**
+ * `vite dev` / `vite preview` have no Worker behind /api. Answer like a Worker without OAuth secrets would
+ * (worker/index.ts), so the app shows "account features work online only" without 404 noise in the console.
+ */
+function noWorkerApi(): Plugin {
+  const handler: Connect.NextHandleFunction = (req, res, next) => {
+    if (!req.url?.startsWith('/api/')) return next();
+    const me = req.url.startsWith('/api/auth/me');
+    res.statusCode = me ? 200 : 503;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(JSON.stringify(me ? { connected: false, configured: false } : { code: 'NOT_CONFIGURED' }));
+  };
+  return {
+    name: 'jorgu-no-worker-api',
+    configureServer: (server) => void server.middlewares.use(handler),
+    configurePreviewServer: (server) => void server.middlewares.use(handler),
+  };
+}
+
 export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   plugins: [
+    noWorkerApi(),
     react(),
     tailwindcss(),
     VitePWA({
@@ -68,7 +89,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         globIgnores: ['probe/**', 'dev/**'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//, /^\/probe\//, /^\/dev\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/probe\//, /^\/dev\//, /^\/privacy/],
         runtimeCaching: [],
         cleanupOutdatedCaches: true,
       },

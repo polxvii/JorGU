@@ -7,8 +7,10 @@ export type SheetState =
   | null
   | { kind: 'picker'; pane: PaneIndex }
   | { kind: 'settings' }
-  | { kind: 'paste' }
+  | { kind: 'library'; tab?: LibraryTab }
   | { kind: 'queue' };
+
+export type LibraryTab = 'paste' | 'feed' | 'playlists' | 'liked' | 'trending' | 'music' | 'search';
 
 export interface Toast {
   id: number;
@@ -19,6 +21,8 @@ export interface Toast {
 
 export interface UiState {
   sheet: SheetState;
+  /** Last library tab (null until first opened). */
+  libraryTab: LibraryTab | null;
   headersVisible: boolean;
   /** Bumped on every touch so auto-hide timers restart. */
   headersNonce: number;
@@ -37,6 +41,7 @@ export interface UiState {
 
   openSheet: (sheet: Exclude<SheetState, null>) => void;
   closeSheet: () => void;
+  setLibraryTab: (tab: LibraryTab) => void;
   showHeaders: () => void;
   hideHeaders: () => void;
   showFloating: () => void;
@@ -57,6 +62,7 @@ let toastSeq = 0;
 
 export const useUi = create<UiState>()((set) => ({
   sheet: null,
+  libraryTab: null,
   headersVisible: true,
   headersNonce: 0,
   floatingVisible: false,
@@ -70,8 +76,10 @@ export const useUi = create<UiState>()((set) => ({
   isNight: false,
   needsHistoryEntry: false,
 
-  openSheet: (sheet) => set({ sheet, floatingVisible: false }),
+  openSheet: (sheet) =>
+    set({ sheet, floatingVisible: false, ...(sheet.kind === 'library' && sheet.tab ? { libraryTab: sheet.tab } : {}) }),
   closeSheet: () => set({ sheet: null }),
+  setLibraryTab: (libraryTab) => set({ libraryTab }),
   showHeaders: () => set((s) => ({ headersVisible: true, headersNonce: s.headersNonce + 1 })),
   hideHeaders: () => set((s) => (s.headersVisible ? { headersVisible: false } : s)),
   showFloating: () => set((s) => ({ floatingVisible: true, floatingNonce: s.floatingNonce + 1 })),

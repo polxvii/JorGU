@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>JorGu · Privacy Policy</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0f1115; color: #e8eaed; font: 17px/1.6 "IBM Plex Sans", "IBM Plex Sans Thai", system-ui, -apple-system, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 20px 64px; }
+  h1 { font-size: 28px; line-height: 1.25; margin: 8px 0 4px; }
+  h2 { font-size: 20px; margin: 28px 0 8px; }
+  p, li { color: #c9ccd1; }
+  a { color: #8ab4f8; }
+  .meta { color: #9aa0a6; font-size: 15px; }
+  nav { display: flex; gap: 12px; flex-wrap: wrap; }
+  nav a { display: inline-block; padding: 10px 16px; border-radius: 12px; background: #1d2027; color: #e8eaed; text-decoration: none; font-weight: 600; }
+  hr { border: 0; border-top: 1px solid #2a2e36; margin: 48px 0; }
+</style>
+</head>
+<body>
+<main>
+<nav><a href="/">← JorGu</a><a href="#en">English</a><a href="#th">ไทย</a></nav>
+
+<section id="en" lang="en">
+<h1>JorGu Privacy Policy</h1>
+<p class="meta">Last updated: 10 November 2026</p>
+
+<p>JorGu is a personal car-dashboard web app run by one person for their own use. This policy explains what JorGu does with your data when you connect a YouTube account.</p>
+
+<h2>YouTube API Services</h2>
+<p>JorGu uses YouTube API Services. By connecting your YouTube account you agree to the <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener">YouTube Terms of Service</a>. Google's handling of your data is described in the <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a>.</p>
+
+<h2>What JorGu accesses</h2>
+<p>Only after you tap "Sign in with Google" and approve, JorGu gets <strong>read-only</strong> access (scope <code>youtube.readonly</code>) plus your basic profile (name, email address, profile picture). JorGu uses it to show your subscriptions' new videos, your playlists, your liked videos, YouTube charts, and search results. JorGu can't upload, like, comment, subscribe, or change anything in your account.</p>
+
+<h2>Where your data is kept</h2>
+<ul>
+  <li><strong>Sign-in tokens:</strong> encrypted (AES-256-GCM) inside a secure, httpOnly cookie on your device that only the JorGu server can read. Page scripts can't read it, it's never stored in the browser's storage, and it's never logged. It lasts up to 180 days or until you disconnect. JorGu has no database.</li>
+  <li><strong>YouTube lists</strong> (video titles, channel names, thumbnail links): cached in your browser (IndexedDB) for at most 24 hours before they're refreshed, and deleted after 30 days at the latest.</li>
+  <li><strong>Play queue, settings, privacy-consent time, search counter:</strong> in your browser's local storage on your device.</li>
+</ul>
+<p>Your data isn't sold or shared with anyone. JorGu has no analytics, ads, or tracking. Data only travels between your device, JorGu's server, and Google.</p>
+
+<h2>Hosting</h2>
+<p>JorGu runs on Cloudflare Workers. Cloudflare keeps short-lived request logs for troubleshooting (for example the address requested, which can include a search term) for a few days. See <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare's privacy policy</a>.</p>
+
+<h2>Video playback</h2>
+<p>Videos play in YouTube's own embedded player. YouTube may use cookies and collect data while you watch, as described in the Google Privacy Policy.</p>
+
+<h2>Removing access and deleting data</h2>
+<ul>
+  <li>In JorGu: <strong>Settings → YouTube account → Disconnect YouTube</strong>. This revokes JorGu's access at Google right away and deletes the cookie and all cached YouTube data on the device.</li>
+  <li>At Google: <a href="https://security.google.com/settings/security/permissions" target="_blank" rel="noopener">Google Account security settings</a>. Cached YouTube data on your device is then deleted within 30 days at the latest.</li>
+</ul>
+
+<h2>Contact</h2>
+<p>Questions or requests: <a href="https://github.com/polxvii/JorGU/issues" target="_blank" rel="noopener">github.com/polxvii/JorGU/issues</a>.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes, the date above changes too.</p>
+</section>
+
+<hr>
+
+<section id="th" lang="th">
+<h1>นโยบายความเป็นส่วนตัวของ JorGu</h1>
+<p class="meta">ปรับปรุงล่าสุด: 10 พฤศจิกายน 2026</p>
+
+<p>JorGu เป็นเว็บแอปหน้าจอรถยนต์ส่วนตัว ดูแลโดยบุคคลเดียวเพื่อใช้งานเอง นโยบายนี้อธิบายว่า JorGu ทำอะไรกับข้อมูลของคุณเมื่อคุณเชื่อมต่อบัญชี YouTube</p>
+
+<h2>YouTube API Services</h2>
+<p>JorGu ใช้ YouTube API Services การเชื่อมต่อบัญชี YouTube ถือว่าคุณยอมรับ<a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener">ข้อกำหนดในการให้บริการของ YouTube</a> ส่วนการจัดการข้อมูลของ Google เป็นไปตาม<a href="https://policies.google.com/privacy" target="_blank" rel="noopener">นโยบายความเป็นส่วนตัวของ Google</a></p>
+
+<h2>ข้อมูลที่ JorGu เข้าถึง</h2>
+<p>หลังจากคุณแตะ "ลงชื่อเข้าใช้ด้วย Google" และอนุญาตเท่านั้น JorGu จึงได้สิทธิ์<strong>อ่านอย่างเดียว</strong> (ขอบเขต <code>youtube.readonly</code>) และข้อมูลโปรไฟล์พื้นฐาน (ชื่อ อีเมล รูปโปรไฟล์) เพื่อแสดงวิดีโอใหม่จากช่องที่ติดตาม เพลย์ลิสต์ วิดีโอที่ชอบ ชาร์ต YouTube และผลการค้นหา JorGu อัปโหลด กดถูกใจ แสดงความคิดเห็น ติดตาม หรือแก้ไขอะไรในบัญชีของคุณไม่ได้</p>
+
+<h2>ข้อมูลถูกเก็บไว้ที่ไหน</h2>
+<ul>
+  <li><strong>โทเค็นการลงชื่อเข้าใช้:</strong> เข้ารหัส (AES-256-GCM) อยู่ในคุกกี้แบบ httpOnly ที่ปลอดภัยบนอุปกรณ์ของคุณ ซึ่งมีแต่เซิร์ฟเวอร์ JorGu ที่อ่านได้ สคริปต์บนหน้าเว็บอ่านไม่ได้ ไม่ถูกเก็บในที่เก็บข้อมูลของเบราว์เซอร์ และไม่ถูกบันทึกลง log อายุสูงสุด 180 วันหรือจนกว่าคุณจะยกเลิกการเชื่อมต่อ JorGu ไม่มีฐานข้อมูล</li>
+  <li><strong>รายการจาก YouTube</strong> (ชื่อวิดีโอ ชื่อช่อง ลิงก์ภาพตัวอย่าง): เก็บชั่วคราวในเบราว์เซอร์ (IndexedDB) ไม่เกิน 24 ชั่วโมงก่อนรีเฟรช และถูกลบภายใน 30 วันเป็นอย่างช้า</li>
+  <li><strong>คิวเล่น การตั้งค่า เวลาที่ยอมรับนโยบาย ตัวนับการค้นหา:</strong> เก็บใน local storage ของเบราว์เซอร์บนอุปกรณ์ของคุณ</li>
+</ul>
+<p>ข้อมูลของคุณไม่ถูกขายหรือแชร์ให้ใคร JorGu ไม่มีระบบวิเคราะห์ โฆษณา หรือการติดตาม ข้อมูลเดินทางระหว่างอุปกรณ์ของคุณ เซิร์ฟเวอร์ JorGu และ Google เท่านั้น</p>
+
+<h2>ผู้ให้บริการโฮสต์</h2>
+<p>JorGu ทำงานบน Cloudflare Workers ซึ่งเก็บ log คำขอระยะสั้นไว้แก้ปัญหา (เช่น ที่อยู่ที่ถูกเรียก ซึ่งอาจมีคำค้นหา) เป็นเวลาไม่กี่วัน ดู<a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">นโยบายความเป็นส่วนตัวของ Cloudflare</a></p>
+
+<h2>การเล่นวิดีโอ</h2>
+<p>วิดีโอเล่นในตัวเล่นแบบฝังของ YouTube เอง ระหว่างที่คุณดู YouTube อาจใช้คุกกี้และเก็บข้อมูลตามนโยบายความเป็นส่วนตัวของ Google</p>
+
+<h2>การยกเลิกสิทธิ์และลบข้อมูล</h2>
+<ul>
+  <li>ใน JorGu: <strong>การตั้งค่า → บัญชี YouTube → ยกเลิกการเชื่อมต่อ YouTube</strong> ระบบจะยกเลิกสิทธิ์ของ JorGu ที่ Google ทันที และลบคุกกี้และข้อมูล YouTube ที่เก็บไว้บนอุปกรณ์ทั้งหมด</li>
+  <li>ที่ Google: <a href="https://security.google.com/settings/security/permissions" target="_blank" rel="noopener">การตั้งค่าความปลอดภัยของบัญชี Google</a> หลังจากนั้นข้อมูล YouTube ที่เก็บไว้บนอุปกรณ์จะถูกลบภายใน 30 วันเป็นอย่างช้า</li>
+</ul>
+
+<h2>ติดต่อ</h2>
+<p>คำถามหรือคำขอ: <a href="https://github.com/polxvii/JorGU/issues" target="_blank" rel="noopener">github.com/polxvii/JorGU/issues</a></p>
+
+<h2>การเปลี่ยนแปลง</h2>
+<p>หากนโยบายนี้เปลี่ยน วันที่ด้านบนจะเปลี่ยนตาม</p>
+</section>
+</main>
+</body>
+</html>

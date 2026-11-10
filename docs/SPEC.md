@@ -761,6 +761,8 @@ Primary column: **CarPlay browser app (CarTV / AP TV) on iPhone 16 Pro Max**. Ad
 3. If on Premium Lite and mostly playing music: ads on music remain (§3.2)
 4. ~~Enable billing for Maps JavaScript API (10,000 free loads/month), or use the free Embed mode only?~~ **Decided 2026-11-10:** mode A with billing, under the hard rule in §7.1 (never more than 9,500 billed events a month per SKU; past that, mode B).
 5. Import Google Maps saved places from a Google Takeout export into JorGu's saved places? (Google has no API for them outside the EEA/CH/UK.)
+6. **Parked (user, 2026-11-10):** a "Later" list inside JorGu (stored on the device; save from library, search, Trending), because the Data API returns Watch Later empty since 2016 (§3.3). Until then: save videos to an own YouTube playlist, which shows in the Playlists tab.
+7. **Parked:** discovery beyond subscriptions ("saved topics" / "creator picks"); only if asked.
 
 ## References
 

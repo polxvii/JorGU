@@ -5,7 +5,8 @@
 
 ### Changes during M5 (2026-11-10)
 
-- M5 (Web app) built before M4: M4 waits for the Maps billing decision (§19.4).
+- M5 (Web app) built before M4: M4 waited for the Maps billing decision (§19.4), since decided: mode A with the §7.1 cost rule.
+- Live check (2026-11-10): DNS-over-HTTPS works from the Worker; example.com and wikipedia.org `allowed`, github.com `blocked` (CSP), youtube.com `blocked` (X-Frame-Options); localhost, 10.0.0.1, 169.254.169.254 rejected (400). google.com answers the Worker with a 429 bot page, so it comes out `unknown` and the iframe shows Google's refusal; Open in new tab still works.
 - **Web pane header stays on screen** and holds the web controls: site name (opens the **Web menu**), Reload (or **Reload in this view** after a view change), Open in new tab. The site starts below a 56 px band, so no JorGu control covers it. In full screen the site gets the whole screen; the Web menu is on the floating bar (8th button).
 - **Web menu** (sheet): address bar · Home · Reload · Open in new tab · Bookmark · view toggle (Auto + zoom, Mobile, Desktop + width 1024/1280/1440, help text) · Bookmarks (pin to App Picker, rename, delete) · Recent. An empty Web pane shows a start page with the address bar, bookmarks and Recent.
 - Reload re-navigates the iframe to the page that was opened (a parent can't read a cross-origin frame's current URL). Picking "Web" again in the same session resumes that pane's last page. JorGu's own origin can't be opened in a Web pane.
@@ -331,7 +332,10 @@ When YouTube is playing but not assigned to a visible pane (another app is full 
 - Current position: `AdvancedMarkerElement` with a heading arrow; follow mode on by default; dragging the map pauses follow and shows "Back to my location"
 - `TrafficLayer` toggle
 - Speed readout overlaid in the corner nearest the driver
-- Cost guard: in Cloud Console, cap the Maps JavaScript API map-load quota at ~300/day (≈ 9,300/month, under the 10,000 free events) and add a billing budget alert [Proposal; Verify quota name in console]
+- **Cost rule (user decision 2026-11-10, binding):** never more than **9,500 billed events per calendar month for each billed SKU** (Dynamic Maps for map loads; Routes "Compute Routes Essentials" for the route overview), below the 10,000 free. When the next event would pass 9,500, or Google refuses a load for quota, the app switches to **mode B** (Embed, no charge) until the month resets; the route overview falls back to the Embed directions view.
+  - Hard guard (can't be bypassed by a bug or a second device): in Cloud Console, cap each billed API at **306 requests/day** (306 × 31 = 9,486) [Verify the quota names and that a per-day cap exists for the Routes API; if it doesn't, the app counter is the guard and the cap goes per minute].
+  - App counter: counts its own map loads and route requests per month (Pacific time, like Google's billing) in localStorage and switches to mode B at 9,500. Per device only, which is why the hard guard exists.
+  - Budget alert at USD 1 as an early warning (alerts don't stop charges).
 
 ### 7.2 Mode B — Maps Embed API (zero-cost fallback)
 
@@ -755,7 +759,7 @@ Primary column: **CarPlay browser app (CarTV / AP TV) on iPhone 16 Pro Max**. Ad
 1. ~~Main device?~~ **Decided 2026-11-09:** iPhone 16 Pro Max via a CarPlay browser app (§3.10). Host app: **CarTV**. Still open: the car's CarPlay screen resolution (M0 probe measures it). Hosting: `https://jorgu.pv-proj.workers.dev` (free `workers.dev` name, no own domain for now).
 2. Reconnect YouTube every 7 days (Testing), or try publishing unverified?
 3. If on Premium Lite and mostly playing music: ads on music remain (§3.2)
-4. Enable billing for Maps JavaScript API (10,000 free loads/month), or use the free Embed mode only? The route overview (§7.4) needs mode A, so billing is needed for it.
+4. ~~Enable billing for Maps JavaScript API (10,000 free loads/month), or use the free Embed mode only?~~ **Decided 2026-11-10:** mode A with billing, under the hard rule in §7.1 (never more than 9,500 billed events a month per SKU; past that, mode B).
 5. Import Google Maps saved places from a Google Takeout export into JorGu's saved places? (Google has no API for them outside the EEA/CH/UK.)
 
 ## References

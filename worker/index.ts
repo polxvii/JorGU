@@ -2,6 +2,7 @@
 // Tokens live only in the encrypted jg_session cookie and are never returned or logged.
 import { open, randomToken, seal } from './lib/crypto';
 import { type Env, authEnv } from './lib/env';
+import { RateLimiter, assertNotCrossSite, frameCheck } from './lib/frameCheck';
 import { authorizationUrl, exchangeCode, pkceChallenge, profileFromIdToken, revokeToken } from './lib/google';
 import { HttpError, assertSameOrigin, clearCookie, cookie, json, readCookie, redirect } from './lib/http';
 import { STATE_COOKIE, SessionContext } from './lib/session';
@@ -14,6 +15,7 @@ const PLAYLIST_ID = /^[A-Za-z0-9_-]{10,64}$/;
 const CATEGORY_ID = /^\d{1,3}$/;
 const SEARCH_GAP_MS = 1000;
 const STATE_MAX_AGE = 600;
+const frameCheckLimiter = new RateLimiter(10, 60_000);
 
 /** Reports only whether SESSION_SECRET is usable (32 bytes, base64) — never its value. */
 function sessionSecretStatus(value: string | undefined): string {
@@ -30,7 +32,7 @@ function health(env: Env): Response {
   return json({
     ok: true,
     app: 'jorgu',
-    milestone: 'M2',
+    milestone: 'M5',
     // Presence only; values are never returned or logged.
     config: {
       clientId: !!env.GOOGLE_CLIENT_ID,
@@ -152,9 +154,26 @@ const routes: Record<string, { method: 'GET' | 'POST'; handler: Handler }> = {
   },
 };
 
+/** Web app pre-check (§9.3). Needs no account, so it runs before the OAuth config check. */
+async function handleFrameCheck(req: Request, url: URL, env: Env): Promise<Response> {
+  if (req.method !== 'GET') return json({ code: 'METHOD_NOT_ALLOWED' }, 405);
+  try {
+    assertNotCrossSite(req);
+    const target = url.searchParams.get('url') ?? '';
+    if (!target || target.length > 2048) throw new HttpError(400, 'BAD_URL');
+    if (!frameCheckLimiter.take(req.headers.get('CF-Connecting-IP') ?? 'local')) throw new HttpError(429, 'SLOW_DOWN');
+    return json(await frameCheck(target, env.APP_ORIGIN ?? url.origin));
+  } catch (e) {
+    if (e instanceof HttpError) return json({ code: e.code, ...e.extra }, e.status);
+    console.error(`frame-check error: ${(e as Error)?.message ?? 'unknown'}`);
+    return json({ code: 'INTERNAL' }, 500);
+  }
+}
+
 export async function handleApi(req: Request, env: Env): Promise<Response> {
   const url = new URL(req.url);
   if (url.pathname === '/api/health') return health(env);
+  if (url.pathname === '/api/frame-check') return handleFrameCheck(req, url, env);
   const route = routes[url.pathname];
   if (!route) return json({ code: 'NOT_FOUND' }, 404);
   if (req.method !== route.method) return json({ code: 'METHOD_NOT_ALLOWED' }, 405);

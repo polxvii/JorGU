@@ -33,6 +33,8 @@ const PATHS = {
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
   user: 'M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 20a8 8 0 0 1 16 0',
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
+  pin: 'M9 3h6l-1 6 3 3v2H7v-2l3-3zM12 14v7',
+  edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
 } as const;
 
 export type IconName = keyof typeof PATHS;

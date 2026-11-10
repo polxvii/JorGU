@@ -6,9 +6,10 @@ import { useSettings } from '../features/settings/settingsStore';
 import { useUi } from '../features/settings/uiStore';
 import type { AppRef, PaneIndex, SurfaceId } from '../features/settings/types';
 import { surfaceIdOf } from '../features/settings/types';
-import { DashboardPlaceholder, MapPlaceholder, WebPlaceholder } from '../apps/placeholders';
+import { DashboardPlaceholder, MapPlaceholder } from '../apps/placeholders';
+import { WebSurface } from '../apps/web/WebSurface';
 import { YouTubeSurface } from '../apps/youtube/YouTubeSurface';
-import type { LayoutResult } from './computeLayout';
+import { L, type LayoutResult } from './computeLayout';
 import type { Rect } from './geometry';
 
 const ORDER: Record<string, number> = { dashboard: 0, map: 1, 'web:w1': 2, 'web:w2': 3, youtube: 4 };
@@ -36,7 +37,8 @@ const SurfaceContent = memo(function SurfaceContent({ id, layout }: { id: Surfac
     return <YouTubeSurface surface={layout.youtube.surface} player={layout.youtube.player} mode={layout.youtube.mode} />;
   }
   const web = lastWeb.get(id);
-  return web ? <WebPlaceholder app={web} surfaceId={id} /> : null;
+  // Full screen gives the site the whole surface; in a pane the header band sits above it.
+  return web ? <WebSurface app={web} surfaceId={id} band={layout.mode === 'fullscreen' ? 0 : L.WEB_BAND} /> : null;
 });
 
 export function SurfaceLayer({ layout }: { layout: LayoutResult }) {

@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import * as W from '../../apps/web/webActions';
 import * as A from '../../shell/layoutActions';
 import { mergeSettings } from './merge';
-import type { AppPick, DriverSide, Language, MiniPlayerSize, PaneIndex, Settings, SplitDirection, ThemeId } from './types';
+import type {
+  AppPick, Bookmark, DriverSide, Language, MiniPlayerSize, PaneIndex, Settings, SplitDirection, ThemeId, WebInstanceId, WebViewMode,
+} from './types';
 import { defaultSettings } from './types';
 
 export const SETTINGS_KEY = 'jorgu:settings';
@@ -24,7 +27,20 @@ export interface SettingsActions {
   enterFullscreen: (pane: PaneIndex) => void;
   exitFullscreen: () => void;
   switchFullscreen: () => void;
+  /** Open `url` in web instance `id` ('' = start page); non-empty URLs go to Recent. */
+  setWebUrl: (id: WebInstanceId, url: string) => void;
+  addBookmark: (url: string, title?: string) => void;
+  updateBookmark: (id: string, patch: Partial<Pick<Bookmark, 'title' | 'pinned'>>) => void;
+  removeBookmark: (id: string) => void;
+  setViewMode: (url: string, mode: WebViewMode) => void;
+  setDesktopWidth: (width: Settings['web']['desktopWidth']) => void;
   reset: () => void;
+}
+
+/** Last page per web instance this session, so picking "Web" again resumes it. */
+const lastUrls: Partial<Record<WebInstanceId, string>> = {};
+function rememberWebUrls(panes: Settings['layout']['panes']): void {
+  for (const p of panes) if (p.kind === 'web') lastUrls[p.id] = p.url;
 }
 
 export type SettingsState = Settings & SettingsActions;
@@ -47,7 +63,13 @@ export const useSettings = create<SettingsState>()(
       setDirection: (direction) => set((s) => ({ layout: { ...s.layout, direction } })),
       setMiniPlayerSize: (miniPlayerSize) => set((s) => ({ youtube: { ...s.youtube, miniPlayerSize } })),
       setPlaybackRate: (playbackRate) => set((s) => ({ youtube: { ...s.youtube, playbackRate } })),
-      assign: (pane, pick) => set((s) => ({ layout: A.assignApp(s.layout, pane, pick) })),
+      assign: (pane, pick) =>
+        set((s) => {
+          rememberWebUrls(s.layout.panes);
+          const layout = A.assignApp(s.layout, pane, pick, lastUrls);
+          const opened = pick.kind === 'web' && pick.url ? W.withRecent(s.web.recent, pick.url) : null;
+          return opened ? { layout, web: { ...s.web, recent: opened } } : { layout };
+        }),
       swap: () => set((s) => ({ layout: A.swapPanes(s.layout) })),
       toggleLayoutMode: () => set((s) => ({ layout: A.toggleLayoutMode(s.layout) })),
       setSplitRatio: (ratio) => set((s) => ({ layout: A.setSplitRatio(s.layout, ratio) })),
@@ -56,6 +78,17 @@ export const useSettings = create<SettingsState>()(
       enterFullscreen: (pane) => set((s) => ({ layout: A.enterFullscreen(s.layout, pane) })),
       exitFullscreen: () => set((s) => ({ layout: A.exitFullscreen(s.layout) })),
       switchFullscreen: () => set((s) => ({ layout: A.switchFullscreen(s.layout) })),
+      setWebUrl: (id, url) =>
+        set((s) => ({
+          layout: W.setPaneUrl(s.layout, id, url),
+          ...(url ? { web: { ...s.web, recent: W.withRecent(s.web.recent, url) } } : {}),
+        })),
+      addBookmark: (url, title) =>
+        set((s) => ({ web: W.addBookmark(s.web, url, title) })),
+      updateBookmark: (id, patch) => set((s) => ({ web: W.updateBookmark(s.web, id, patch) })),
+      removeBookmark: (id) => set((s) => ({ web: W.removeBookmark(s.web, id) })),
+      setViewMode: (url, mode) => set((s) => ({ web: W.setViewModeFor(s.web, url, mode) })),
+      setDesktopWidth: (desktopWidth) => set((s) => ({ web: { ...s.web, desktopWidth } })),
       reset: () => set(defaultSettings()),
     }),
     {

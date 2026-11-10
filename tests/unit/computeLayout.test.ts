@@ -31,7 +31,6 @@ function chromeRects(r: LayoutResult): [string, Rect][] {
   if (r.toast) out.push(['toast', r.toast]);
   for (const p of r.panes) {
     out.push([`header${p.index}`, p.header], [`fs${p.index}`, p.fsButton]);
-    if (p.revealStrip) out.push([`reveal${p.index}`, p.revealStrip]);
   }
   return out;
 }
@@ -98,6 +97,17 @@ describe('full screen (§6.5)', () => {
     expect(r.controlColumn).toEqual({ x: 1024 - L.COLUMN, y: 0, w: L.COLUMN, h: 600 });
     expect(intersects(r.controlColumn!, r.youtube.player!)).toBe(false);
     expect(r.floatingBar).toBeNull();
+  });
+
+  it('Web full screen: the floating bar has room for the Web menu button too', () => {
+    const web: AppRef = { kind: 'web', id: 'w1', url: 'https://a.example/' };
+    for (const viewport of [{ width: 1024, height: 600 }, { width: 932, height: 430 }, { width: 430, height: 932 }]) {
+      const r = computeLayout(input({ viewport, layout: { panes: [{ kind: 'youtube' }, web], fullscreenPane: 1 } }));
+      const bar = r.floatingBar!;
+      expect(bar.rows * bar.cols, JSON.stringify(viewport)).toBeGreaterThanOrEqual(L.FLOAT_BUTTONS + 1);
+      const map = computeLayout(input({ viewport, layout: { fullscreenPane: 1 } })).floatingBar!;
+      expect(map.rows * map.cols).toBeGreaterThanOrEqual(L.FLOAT_BUTTONS);
+    }
   });
 
   it('edge strip only over Web surfaces', () => {

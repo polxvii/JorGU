@@ -3,6 +3,15 @@
 > Version 0.5 · 2026-11-09
 > UX reference: https://duoscreen.vercel.app/ ("CarPlay Multi-Screen Dashboard")
 
+### Changes during M5 (2026-11-10)
+
+- M5 (Web app) built before M4: M4 waits for the Maps billing decision (§19.4).
+- **Web pane header stays on screen** and holds the web controls: site name (opens the **Web menu**), Reload (or **Reload in this view** after a view change), Open in new tab. The site starts below a 56 px band, so no JorGu control covers it. In full screen the site gets the whole screen; the Web menu is on the floating bar (8th button).
+- **Web menu** (sheet): address bar · Home · Reload · Open in new tab · Bookmark · view toggle (Auto + zoom, Mobile, Desktop + width 1024/1280/1440, help text) · Bookmarks (pin to App Picker, rename, delete) · Recent. An empty Web pane shows a start page with the address bar, bookmarks and Recent.
+- Reload re-navigates the iframe to the page that was opened (a parent can't read a cross-origin frame's current URL). Picking "Web" again in the same session resumes that pane's last page. JorGu's own origin can't be opened in a Web pane.
+- A typed `http://` address is checked as `https://`; if that can't be checked, a card offers Open in new tab (http) or Try https anyway.
+- Frame check: DNS via Cloudflare DNS-over-HTTPS (`cloudflare-dns.com/dns-query`, JSON); a failed lookup fetches nothing (`unknown`). A 4xx/5xx page without framing headers is `unknown`. Only `allowed`/`blocked` are cached (7 days per origin, IndexedDB `jorgu-web`). Callers whose `Sec-Fetch-Site` is not `same-origin`/`none` get 403. Rate limit 10/min per client IP in Worker memory (per isolate, best effort): the Workers Rate Limiting binding isn't used because the docs don't confirm it on the Free plan.
+
 ### Changes during M2b (2026-11-10)
 
 - **Top/bottom split** for upright phones, chosen in Settings → Split screen (Auto · Side by side · Top & bottom); portrait Dock, sheets and controls (§6).
@@ -449,6 +458,7 @@ No driving mode. Video keeps playing normally while the car moves (user decision
 - URL bar (accepts bare domains), Home, Reload, "Open in new tab", view toggle **Auto / Mobile / Desktop** (§9.7)
 - Bookmarks: `{id, title, url}` list, user-editable; any bookmark can be pinned to the App Picker as a one-tap app
 - Recent URLs (last 10)
+- Layout (M5): the controls live in the Web pane's header and the Web menu sheet (see "Changes during M5")
 - No Back/Forward buttons: a parent page cannot read or drive a cross-origin iframe's history [Verify if a reliable alternative exists]
 
 ### 9.2 URL normalization
@@ -468,7 +478,7 @@ No driving mode. Video keeps playing normally while the car moves (user decision
 
 `blocked` → show a card in the pane: "This site doesn't allow being shown inside other apps" + "Open in new tab". Results cached per origin for 7 days in IndexedDB. This is a heuristic (headers can vary by user agent, cookies, or region), so "Open in new tab" stays available in the pane header for every site.
 
-**SSRF protection (required):** only `http`/`https`; resolve DNS (Workers have no DNS API: use DNS-over-HTTPS [Verify]) and reject loopback, private, link-local, and cloud metadata ranges (IPv4 and IPv6), including after each redirect; ports 80/443 only; forward no cookies or auth headers; rate limit (e.g. 10/min per session).
+**SSRF protection (required):** only `http`/`https`; no credentials in the URL; resolve DNS (Workers have no DNS API: DNS-over-HTTPS, both A and AAAA; reject if any answer is non-public) and reject loopback, private, link-local, and cloud metadata ranges (IPv4 and IPv6), including after each redirect; ports 80/443 only; forward no cookies or auth headers; rate limit (e.g. 10/min per session).
 
 ### 9.4 Do not proxy
 

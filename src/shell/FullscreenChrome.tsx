@@ -38,12 +38,15 @@ function BigButton({ icon, label, onClick, testId, primary }: {
 
 function useFullscreenActions() {
   const fsPane = useSettings((s) => s.layout.fullscreenPane);
+  const fsKind = useSettings((s) => (s.layout.fullscreenPane === null ? null : s.layout.panes[s.layout.fullscreenPane].kind));
   const openSheet = useUi((s) => s.openSheet);
   const playing = useUi((s) => s.youtube.playing);
   return {
     exit: () => exitFullscreen('button'),
     switchApp: () => switchFullscreen(),
     picker: () => fsPane !== null && openSheet({ kind: 'picker', pane: fsPane }),
+    /** Web full screen has no pane header: its menu comes from the floating bar. */
+    webMenu: fsKind === 'web' && fsPane !== null ? () => openSheet({ kind: 'web', pane: fsPane }) : null,
     yt: { playing, toggle: togglePlay },
   };
 }
@@ -79,6 +82,7 @@ export function FloatingControls({ layout }: { layout: LayoutResult }) {
       <BigButton testId="fs-exit" icon="close" label="fs.exit" onClick={a.exit} primary />
       <BigButton testId="fs-switch" icon="swap" label="fs.switch" onClick={a.switchApp} />
       <BigButton testId="fs-picker" icon="apps" label="fs.picker" onClick={a.picker} />
+      {a.webMenu && <BigButton testId="fs-web-menu" icon="web" label="fs.webMenu" onClick={a.webMenu} />}
       <BigButton testId="fs-yt-prev" icon="prev" label="yt.prev" onClick={previous} />
       <BigButton
         testId="fs-yt-toggle"

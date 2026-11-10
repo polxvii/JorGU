@@ -15,12 +15,20 @@ function freeWebId(panes: [AppRef, AppRef], pane: PaneIndex): WebInstanceId {
   return taken.kind === 'web' && taken.id === 'w1' ? 'w2' : 'w1';
 }
 
-/** Put an app into a pane. A singleton already in the other pane swaps instead (§6.1). */
-export function assignApp(layout: LayoutSettings, pane: PaneIndex, pick: AppPick): LayoutSettings {
+/**
+ * Put an app into a pane. A singleton already in the other pane swaps instead (§6.1).
+ * Picking plain "Web" keeps the pane's page, or resumes the instance's last page (`lastUrls`).
+ */
+export function assignApp(
+  layout: LayoutSettings,
+  pane: PaneIndex,
+  pick: AppPick,
+  lastUrls: Partial<Record<WebInstanceId, string>> = {},
+): LayoutSettings {
   const panes: [AppRef, AppRef] = [layout.panes[0], layout.panes[1]];
   if (pick.kind === 'web') {
     const id = freeWebId(panes, pane);
-    const prevUrl = panes[pane].kind === 'web' ? (panes[pane] as { url: string }).url : '';
+    const prevUrl = panes[pane].kind === 'web' ? (panes[pane] as { url: string }).url : (lastUrls[id] ?? '');
     panes[pane] = { kind: 'web', id, url: pick.url ?? prevUrl };
     return { ...layout, panes };
   }

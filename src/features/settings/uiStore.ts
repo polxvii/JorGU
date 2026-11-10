@@ -8,7 +8,8 @@ export type SheetState =
   | { kind: 'picker'; pane: PaneIndex }
   | { kind: 'settings' }
   | { kind: 'library'; tab?: LibraryTab }
-  | { kind: 'queue' };
+  | { kind: 'queue' }
+  | { kind: 'web'; pane: PaneIndex };
 
 export type LibraryTab = 'paste' | 'feed' | 'playlists' | 'trending' | 'search';
 

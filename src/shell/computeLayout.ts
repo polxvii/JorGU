@@ -11,6 +11,8 @@ export const L = {
   HEADER: 40,
   /** Reserved band above the YouTube player for the pane header and ⛶ (nothing may overlap the player). */
   YT_BAND: 56,
+  /** Web panes reserve the same band: their header (with the web controls) never covers the site (§9.1). */
+  WEB_BAND: 56,
   /** Title + transport row below the player in pane mode. */
   YT_CONTROLS: 88,
   GAP: 16,
@@ -27,7 +29,7 @@ export const L = {
   MINI_HANDLE: 48,
   SHEET_MAX: 400,
   SHEET_MIN: 300,
-  REVEAL: 20,
+  /** Floating full-screen buttons: exit, switch, picker, ⏮ ⏯ ⏭, speed (+ web menu on Web). */
   FLOAT_BUTTONS: 7,
   TOAST_H: 56,
   TOAST_MAX_W: 460,
@@ -46,8 +48,6 @@ export interface PaneBox {
   rect: Rect;
   header: Rect;
   fsButton: Rect;
-  /** Transparent strip over iframe content that brings the header back. */
-  revealStrip: Rect | null;
 }
 
 export interface SurfaceBox {
@@ -189,8 +189,7 @@ function paneToastCandidates(r: Rect): Rect[] {
 }
 
 /** Full-screen floating controls: a column-first grid on the driver side, or a short grid along the top in portrait. */
-function floatBar(content: Rect, driverRight: boolean, portrait: boolean) {
-  const n = L.FLOAT_BUTTONS;
+function floatBar(content: Rect, driverRight: boolean, portrait: boolean, n: number) {
   const step = L.FLOAT_BUTTON + L.FLOAT_GAP;
   let rows: number;
   if (portrait) {
@@ -302,7 +301,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
         ? placeBand(content, !m, m ? { ...m, minH: m.h } : null)
         : placeSheet(content, driverRight, m ? { ...m, minW: m.w } : null);
     }
-    const bar = sheet ? null : floatBar(content, driverRight, portrait);
+    const bar = sheet ? null : floatBar(content, driverRight, portrait, L.FLOAT_BUTTONS + (fsApp.kind === 'web' ? 1 : 0));
     const toast = input.toast
       ? placeToast(content, [mini?.rect, mini?.handle, sheet, bar?.rect], [], sheet)
       : null;
@@ -469,7 +468,6 @@ export function computeLayout(input: LayoutInput): LayoutResult {
         w: L.FS_BUTTON,
         h: L.FS_BUTTON,
       },
-      revealStrip: app.kind === 'web' ? { x: rect.x, y: rect.y, w: rect.w, h: L.REVEAL } : null,
     });
   }
   if (mini) surfaces.youtube = { id: 'youtube', rect: mini.rect, visible: true, z: Z_MINI };
@@ -481,7 +479,6 @@ export function computeLayout(input: LayoutInput): LayoutResult {
       const hidden = { x: p.rect.x, y: p.rect.y, w: 0, h: 0 };
       p.header = clearOf(p.header, miniArea, 200, hidden);
       p.fsButton = clearOf(p.fsButton, miniArea, L.FS_BUTTON, hidden);
-      if (p.revealStrip) p.revealStrip = clearOf(p.revealStrip, miniArea, L.FS_BUTTON, hidden);
     }
   }
 

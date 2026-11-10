@@ -1,9 +1,11 @@
 // Pane header (≤ 40 px, auto-hides), the always-visible ⛶ button, and drag-to-swap (spec §6.2).
 // Drag feedback stays on the headers: nothing follows the finger across a YouTube player (§3.9).
+// Web panes keep their header (with the web controls) on screen: it sits in a band above the site (§9.1).
 import { type PointerEvent as ReactPointerEvent, useRef } from 'react';
 import { useSettings } from '../features/settings/settingsStore';
 import { useUi } from '../features/settings/uiStore';
 import type { PaneIndex } from '../features/settings/types';
+import { WebHeaderControls } from '../apps/web/WebHeaderControls';
 import { type MessageKey, useT } from '../i18n';
 import type { LayoutResult, PaneBox } from './computeLayout';
 import { enterFullscreen } from './fullscreen';
@@ -39,9 +41,10 @@ function PaneHeader({ pane, layout }: { pane: PaneBox; layout: LayoutResult }) {
   const lifted = drag?.from === pane.index;
   const target = drag?.over === pane.index && drag.from !== pane.index;
   const driverRight = layout.driverSide === 'right';
+  const web = pane.app.kind === 'web' ? pane.app : null;
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button')) return;
+    if ((e.target as HTMLElement).closest('button, a')) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     state.current = { x: e.clientX, y: e.clientY, dragging: false };
   };
@@ -90,7 +93,7 @@ function PaneHeader({ pane, layout }: { pane: PaneBox; layout: LayoutResult }) {
         top: pane.header.y,
         width: pane.header.w,
         height: pane.header.h,
-        visibility: visible || drag ? 'visible' : 'hidden',
+        visibility: visible || drag || web ? 'visible' : 'hidden',
         touchAction: 'none',
         // Leave room for the ⛶ button on the driver side.
         [driverRight ? 'paddingRight' : 'paddingLeft']: 56,
@@ -98,9 +101,15 @@ function PaneHeader({ pane, layout }: { pane: PaneBox; layout: LayoutResult }) {
       title={canDrag ? t('pane.dragToSwap') : undefined}
     >
       {canDrag && <Icon name="grip" size={18} className="shrink-0 opacity-60" />}
-      <Icon name={pane.app.kind as IconName} size={20} className="shrink-0" />
-      <span className="min-w-0 truncate text-[15px] font-semibold">{t(APP_LABEL[pane.app.kind])}</span>
-      <span className="flex-1" />
+      {web ? (
+        <WebHeaderControls pane={pane.index} app={web} />
+      ) : (
+        <>
+          <Icon name={pane.app.kind as IconName} size={20} className="shrink-0" />
+          <span className="min-w-0 truncate text-[15px] font-semibold">{t(APP_LABEL[pane.app.kind])}</span>
+          <span className="flex-1" />
+        </>
+      )}
       <button
         type="button"
         data-testid={`pane-change-${pane.index}`}
@@ -131,31 +140,11 @@ function FullscreenButton({ pane }: { pane: PaneBox }) {
   );
 }
 
-function RevealStrip({ pane }: { pane: PaneBox }) {
-  const t = useT();
-  const visible = useUi((s) => s.headersVisible);
-  const r = pane.revealStrip;
-  if (!r || visible) return null;
-  return (
-    <button
-      type="button"
-      data-chrome="reveal-strip"
-      aria-label={t('pane.showHeader')}
-      onPointerDown={() => useUi.getState().showHeaders()}
-      className="absolute z-10 bg-transparent"
-      style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
-    />
-  );
-}
-
 export function PaneChrome({ layout }: { layout: LayoutResult }) {
   return (
     <>
       {layout.panes.map((p) => (
         <PaneHeader key={`h${p.index}`} pane={p} layout={layout} />
-      ))}
-      {layout.panes.map((p) => (
-        <RevealStrip key={`r${p.index}`} pane={p} />
       ))}
       {layout.panes.map((p) => (
         <FullscreenButton key={`f${p.index}`} pane={p} />

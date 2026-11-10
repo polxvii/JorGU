@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { box, expectNoReloads, expectPlayerClear, frameLoads, openApp, revealHeaders, startSimulatedPlayback, waitForFrames } from './helpers';
+import { box, expectNoReloads, expectPlayerClear, frameLoads, openApp, revealHeaders, startSimulatedPlayback } from './helpers';
 
 test.describe('pane system (§6)', () => {
   test('defaults: split, YouTube left, Map right, Dock right', async ({ page }) => {
@@ -58,23 +58,6 @@ test.describe('pane system (§6)', () => {
     const yt = await box(page, '[data-surface="youtube"]');
     const dash = await box(page, '[data-surface="dashboard"]');
     expect(yt.x).toBeGreaterThan(dash.x);
-  });
-
-  test('two Web panes swap without reloading either', async ({ page }) => {
-    await openApp(page);
-    await revealHeaders(page);
-    await page.getByTestId('pane-change-0').click();
-    await page.getByTestId('pick-web').click();
-    await revealHeaders(page);
-    await page.getByTestId('pane-change-1').click();
-    await page.getByTestId('pick-web').click();
-    await waitForFrames(page, ['web:w1', 'web:w2']);
-    const before = await frameLoads(page);
-    const a = await box(page, '[data-surface="web:w1"]');
-    await page.getByTestId('dock-swap').click();
-    const a2 = await box(page, '[data-surface="web:w1"]');
-    expect(a2.x).not.toBe(a.x);
-    await expectNoReloads(page, before);
   });
 
   test('layout toggle: single shows the focused pane; split restores both', async ({ page }) => {

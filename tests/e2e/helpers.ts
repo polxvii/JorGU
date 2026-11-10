@@ -19,10 +19,12 @@ export async function openApp(page: Page, settings?: Record<string, unknown>): P
   await page.goto('/');
   await page.evaluate(
     async ([key, s]) => {
-      await new Promise((done) => {
-        const req = indexedDB.deleteDatabase('jorgu-cache');
-        req.onsuccess = req.onerror = req.onblocked = () => done(null);
-      });
+      for (const db of ['jorgu-cache', 'jorgu-web']) {
+        await new Promise((done) => {
+          const req = indexedDB.deleteDatabase(db);
+          req.onsuccess = req.onerror = req.onblocked = () => done(null);
+        });
+      }
       localStorage.clear();
       localStorage.setItem('jorgu:e2e', '1');
       if (s) localStorage.setItem(key as string, JSON.stringify({ state: s, version: 1 }));
@@ -30,8 +32,52 @@ export async function openApp(page: Page, settings?: Record<string, unknown>): P
     [SETTINGS_KEY, settings ?? null] as const,
   );
   await page.reload();
-  await expect(page.locator('[data-surface="youtube"]')).toHaveCount(1);
+  // The YouTube surface only mounts once it has a pane or plays; the surface layer is always there.
+  await expect(page.locator('#jorgu-root [data-layer="surfaces"]')).toHaveCount(1);
   await page.waitForFunction(() => !!window.__jorgu);
+}
+
+/**
+ * A responsive test site: "mobile" layout at ≤ 600 px, "desktop" above; a random token proves it didn't reload;
+ * a button counts taps (proves taps land through the CSS scale).
+ */
+export const TEST_SITE_HTML = `<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Test site</title>
+<style>body{margin:0;font:16px sans-serif;background:#fff;color:#111} button{width:220px;height:64px;font-size:18px}</style>
+</head><body><p id="layout"></p><p id="token"></p><button id="tap">Tap me</button><p id="count">0</p>
+<script>
+var n = 0;
+document.getElementById('token').textContent = Math.random().toString(36).slice(2);
+document.getElementById('tap').onclick = function () { n += 1; document.getElementById('count').textContent = String(n); };
+function measure() {
+  var mobile = matchMedia('(max-width: 600px)').matches;
+  document.body.dataset.layout = mobile ? 'mobile' : 'desktop';
+  document.body.dataset.width = String(innerWidth);
+  document.getElementById('layout').textContent = (mobile ? 'mobile ' : 'desktop ') + innerWidth;
+}
+measure(); addEventListener('resize', measure);
+</script></body></html>`;
+
+export interface WebMock {
+  checks: string[];
+}
+
+/**
+ * Serves https://*.test/ sites and answers /api/frame-check: `blocked` hosts are blocked, `unknownHosts` fail the
+ * check (like a Worker that can't reach them), everything else is allowed. Needs `serviceWorkers: 'block'`.
+ */
+export async function mockWeb(page: Page, opts: { blocked?: string[]; unknownHosts?: string[] } = {}): Promise<WebMock> {
+  const m: WebMock = { checks: [] };
+  await page.route('**/api/frame-check?*', (route) => {
+    const target = new URL(route.request().url()).searchParams.get('url') ?? '';
+    m.checks.push(target);
+    const host = new URL(target).hostname;
+    if (opts.unknownHosts?.includes(host)) return route.fulfill({ status: 503, contentType: 'application/json', body: '{"code":"NOT_CONFIGURED"}' });
+    const status = opts.blocked?.includes(host) ? 'blocked' : 'allowed';
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ status, finalUrl: target, reason: 'test' }) });
+  });
+  await page.route(/^https:\/\/[a-z0-9.-]+\.test\//, (route) => route.fulfill({ contentType: 'text/html', body: TEST_SITE_HTML }));
+  return m;
 }
 
 export async function waitForFrames(page: Page, names: string[]): Promise<void> {

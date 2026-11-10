@@ -1,4 +1,5 @@
-// Divider rules (spec §6.1, §6.2, §3.9): 30–70 %, snap at 40/50/60 %, YouTube pane ≥ 356 px.
+// Divider rules (spec §6.1, §6.2, §3.9): 30–70 %, snap at 40/50/60 %, YouTube pane ≥ 356 px wide
+// (side by side) or tall enough for a ≥ 356×200 player plus its band and controls (top/bottom).
 import type { PaneIndex } from '../features/settings/types';
 
 export const SPLIT_MIN = 0.3;
@@ -6,6 +7,8 @@ export const SPLIT_MAX = 0.7;
 export const SNAP_POINTS = [0.4, 0.5, 0.6] as const;
 export const SNAP_DISTANCE = 0.025;
 export const YT_MIN_WIDTH = 356;
+/** Stacked YouTube pane: 56 band + 201 player (→ 357 px wide at 16:9) + 88 controls. */
+export const YT_MIN_HEIGHT = 56 + 201 + 88;
 
 export interface RatioBounds {
   min: number;
@@ -19,13 +22,13 @@ export function clampRatioLoose(r: number): number {
   return clamp(r, SPLIT_MIN, SPLIT_MAX);
 }
 
-/** Allowed ratio (pane 0 share) given the usable width and which pane, if any, holds YouTube. */
-export function ratioBounds(usableWidth: number, youtubePane: PaneIndex | null): RatioBounds {
+/** Allowed ratio (pane 0 share) given the usable length along the split and which pane, if any, holds YouTube. */
+export function ratioBounds(usable: number, youtubePane: PaneIndex | null, ytMin: number = YT_MIN_WIDTH): RatioBounds {
   let min = SPLIT_MIN;
   let max = SPLIT_MAX;
-  if (usableWidth > 0) {
-    if (youtubePane === 0) min = Math.max(min, YT_MIN_WIDTH / usableWidth);
-    if (youtubePane === 1) max = Math.min(max, 1 - YT_MIN_WIDTH / usableWidth);
+  if (usable > 0) {
+    if (youtubePane === 0) min = Math.max(min, ytMin / usable);
+    if (youtubePane === 1) max = Math.min(max, 1 - ytMin / usable);
   }
   return { min, max };
 }

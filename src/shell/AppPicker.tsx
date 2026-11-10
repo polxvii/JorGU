@@ -50,10 +50,8 @@ export function AppPicker({ rect, pane, layout }: { rect: Rect; pane: PaneIndex;
     assign(pane, pick);
     close();
   };
-  const side = layout.panes.find((p) => p.index === pane)?.side ?? (pane === layout.leftPane ? 'left' : 'right');
-  const title = fullscreen
-    ? t('picker.titleFullscreen')
-    : t('picker.title', { side: t(side === 'left' ? 'pane.left' : 'pane.right') });
+  const side = layout.panes.find((p) => p.index === pane)?.side ?? (pane === layout.firstPane ? 'left' : 'right');
+  const title = fullscreen ? t('picker.titleFullscreen') : t('picker.title', { side: t(`pane.${side}`) });
   const current = panes[pane];
   return (
     <Sheet rect={rect} title={title} testId="app-picker">

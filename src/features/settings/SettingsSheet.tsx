@@ -77,6 +77,20 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
         />
       </Section>
 
+      <Section title={t('settings.splitDirection')}>
+        <Segmented
+          testId="setting-direction"
+          value={s.layout.direction}
+          onChange={s.setDirection}
+          options={[
+            { value: 'auto', label: t('settings.directionAuto') },
+            { value: 'side', label: t('settings.directionSide') },
+            { value: 'stacked', label: t('settings.directionStacked') },
+          ]}
+        />
+        <p className="mt-2 px-1 text-[13px] text-text-dim">{t('settings.directionHint')}</p>
+      </Section>
+
       <Section title={t('settings.theme')}>
         <div className="grid grid-cols-2 gap-2" role="radiogroup" data-testid="setting-theme">
           {THEME_IDS.map((id: ThemeId) => (

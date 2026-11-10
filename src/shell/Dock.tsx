@@ -36,11 +36,15 @@ export function Dock({ rect }: { rect: Rect }) {
   const swap = useSettings((s) => s.swap);
   const toggle = useSettings((s) => s.toggleLayoutMode);
   const openSheet = useUi((s) => s.openSheet);
+  const row = rect.w > rect.h;
   return (
     <nav
       data-chrome="dock"
+      data-orientation={row ? 'row' : 'column'}
       aria-label={t('dock.label')}
-      className="absolute z-10 flex flex-col items-center justify-start gap-2 overflow-y-auto bg-surface py-2"
+      className={`absolute z-10 flex items-center bg-surface ${
+        row ? 'flex-row justify-evenly overflow-x-auto px-2' : 'flex-col justify-start gap-2 overflow-y-auto py-2'
+      }`}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
     >
       <DockButton testId="dock-home" icon="home" label="dock.home" onClick={() => assign(focused, { kind: 'dashboard' })} />

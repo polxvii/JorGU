@@ -4,7 +4,7 @@ import type { AppRef, LayoutSettings, MiniPlayerSize, PaneIndex, SurfaceId } fro
 import { surfaceIdOf } from '../features/settings/types';
 import { type Rect, bottom, fit16x9, intersects, right } from './geometry';
 import { youtubePane } from './layoutActions';
-import { type RatioBounds, YT_MIN_WIDTH, ratioBounds, splitFeasible } from './splitRatio';
+import { type RatioBounds, YT_MIN_HEIGHT, YT_MIN_WIDTH, ratioBounds, splitFeasible } from './splitRatio';
 
 export const L = {
   DOCK: 80,
@@ -36,11 +36,13 @@ export const L = {
 
 export type YtMode = 'pane' | 'mini' | 'fullscreen' | 'hidden';
 export type Side = 'left' | 'right';
+/** Where a pane sits: left/right side by side, top/bottom when stacked. */
+export type PanePos = Side | 'top' | 'bottom';
 
 export interface PaneBox {
   index: PaneIndex;
   app: AppRef;
-  side: Side;
+  side: PanePos;
   rect: Rect;
   header: Rect;
   fsButton: Rect;
@@ -74,11 +76,16 @@ export interface LayoutResult {
   appArea: Rect;
   mode: 'split' | 'single' | 'fullscreen';
   panes: PaneBox[];
-  /** Index of the pane on the left edge (pane 1 always sits on the driver side). */
-  leftPane: PaneIndex;
+  /** Pane on the left edge, or on top when stacked. Side by side, pane 1 always sits on the driver side. */
+  firstPane: PaneIndex;
+  /** Panes are stacked top/bottom (setting `direction`, or 'auto' on a portrait screen). */
+  stacked: boolean;
+  /** The content area is taller than wide: Dock along the bottom, sheets slide in from the bottom (or top). */
+  portrait: boolean;
   divider: { line: Rect; hit: Rect } | null;
   bounds: RatioBounds | null;
-  usableWidth: number;
+  /** Length the two panes share along the split (width side by side, height stacked), without the gap. */
+  splitLength: number;
   surfaces: Partial<Record<SurfaceId, SurfaceBox>>;
   youtube: { mode: YtMode; surface: Rect; player: Rect | null; paneIndex: PaneIndex | null };
   floatingBar: { rect: Rect; rows: number; cols: number } | null;
@@ -105,7 +112,9 @@ function ytPanePlayer(s: Rect): Rect {
 }
 
 function miniBox(area: Rect, size: MiniPlayerSize, driverRight: boolean) {
-  const [w, h] = size === '480x270' ? [480, 270] : [356, 200];
+  // The large size falls back to 356×200 where it doesn't fit (narrow portrait screens).
+  const big = size === '480x270' && area.w >= 480 + 2 * L.MINI_MARGIN && area.h >= 270 + L.MINI_HANDLE + 2 * L.MINI_MARGIN;
+  const [w, h] = big ? [480, 270] : [356, 200];
   const x = driverRight ? area.x + L.MINI_MARGIN : right(area) - L.MINI_MARGIN - w;
   const y = bottom(area) - L.MINI_MARGIN - h;
   const rect = { x, y, w, h };
@@ -126,7 +135,20 @@ function placeSheet(area: Rect, atRight: boolean, avoid: (Rect & { minW: number 
   return rectFor(Math.max(0, Math.floor(sw)));
 }
 
-/** First candidate (bottom-centre, top-centre, then extras) that avoids every rectangle in `avoid`. */
+/**
+ * Portrait: a full-width sheet along the bottom (or top) of `area`. If it would cover `avoid`, it gets shorter so
+ * that at least `avoid.minH` px of `avoid` stay uncovered.
+ */
+function placeBand(area: Rect, atBottom: boolean, avoid: (Rect & { minH: number }) | null): Rect {
+  let sh = Math.min(area.h, Math.max(L.SHEET_MIN, Math.round(area.h * 0.55)));
+  const rectFor = (h: number): Rect => ({ x: area.x, y: atBottom ? bottom(area) - h : area.y, w: area.w, h });
+  if (avoid && intersects(rectFor(sh), avoid)) {
+    const limit = atBottom ? bottom(area) - avoid.y - avoid.minH : bottom(avoid) - area.y - avoid.minH;
+    sh = Math.min(sh, limit);
+  }
+  return rectFor(Math.max(0, Math.floor(sh)));
+}
+
 /**
  * Free spot for a toast that touches none of `avoid` (player, mini player, sheet…). If there is none and a sheet is
  * open, the toast goes over the bottom of the sheet: the sheet is our own chrome, never the player (§3.9).
@@ -148,6 +170,15 @@ function placeToast(area: Rect, avoid: (Rect | null | undefined)[], extra: Rect[
   return blockers.every((b) => b === sheet || !intersects(inSheet, b)) ? inSheet : null;
 }
 
+/** `r` trimmed to its larger part beside `m` (4 px clear), or `hidden` if that part is narrower than `minW`. */
+function clearOf(r: Rect, m: Rect, minW: number, hidden: Rect): Rect {
+  if (!intersects(r, m)) return r;
+  const before = { ...r, w: Math.max(0, m.x - 4 - r.x) };
+  const after = { ...r, x: right(m) + 4, w: Math.max(0, right(r) - right(m) - 4) };
+  const best = before.w >= after.w ? before : after;
+  return best.w >= minW ? best : hidden;
+}
+
 function paneToastCandidates(r: Rect): Rect[] {
   const w = Math.max(0, Math.min(L.TOAST_MAX_W, r.w - 24));
   const x = r.x + Math.floor((r.w - w) / 2);
@@ -157,15 +188,23 @@ function paneToastCandidates(r: Rect): Rect[] {
   ];
 }
 
-function floatBar(content: Rect, driverRight: boolean) {
+/** Full-screen floating controls: a column-first grid on the driver side, or a short grid along the top in portrait. */
+function floatBar(content: Rect, driverRight: boolean, portrait: boolean) {
   const n = L.FLOAT_BUTTONS;
   const step = L.FLOAT_BUTTON + L.FLOAT_GAP;
-  const rows = Math.max(1, Math.min(n, Math.floor((content.h - 2 * L.FLOAT_GAP - L.FLOAT_GAP) / step)));
+  let rows: number;
+  if (portrait) {
+    const maxCols = Math.max(1, Math.min(n, Math.floor((content.w - 2 * L.FLOAT_GAP - L.FLOAT_GAP) / step)));
+    rows = Math.ceil(n / maxCols);
+  } else {
+    rows = Math.max(1, Math.min(n, Math.floor((content.h - 2 * L.FLOAT_GAP - L.FLOAT_GAP) / step)));
+  }
   const cols = Math.ceil(n / rows);
   const w = cols * L.FLOAT_BUTTON + (cols + 1) * L.FLOAT_GAP;
   const h = rows * L.FLOAT_BUTTON + (rows + 1) * L.FLOAT_GAP;
-  const x = driverRight ? right(content) - L.FLOAT_INSET - w : content.x + L.FLOAT_INSET;
-  const y = content.y + Math.floor((content.h - h) / 2);
+  const inset = portrait ? L.MINI_MARGIN : L.FLOAT_INSET;
+  const x = driverRight ? right(content) - inset - w : content.x + inset;
+  const y = portrait ? content.y + L.MINI_MARGIN : content.y + Math.floor((content.h - h) / 2);
   return { rect: { x, y, w, h }, rows, cols };
 }
 
@@ -182,6 +221,8 @@ export function computeLayout(input: LayoutInput): LayoutResult {
   const banner = bannerH > 0 ? { x: outer.x, y: outer.y, w: outer.w, h: bannerH } : null;
   const content: Rect = { x: outer.x, y: outer.y + bannerH, w: outer.w, h: Math.max(0, outer.h - bannerH) };
   const ytIdx = youtubePane(layout);
+  const portrait = content.h > content.w;
+  const stacked = layout.direction === 'stacked' || (layout.direction === 'auto' && portrait);
 
   const surfaces: Partial<Record<SurfaceId, SurfaceBox>> = {};
   for (const app of layout.panes) {
@@ -194,7 +235,9 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     driverSide: layout.driverSide,
     content,
     banner,
-    leftPane: (driverRight ? 0 : 1) as PaneIndex,
+    firstPane: (driverRight ? 0 : 1) as PaneIndex,
+    stacked,
+    portrait,
   };
   const showMiniWhenOff = input.youtube.playing || input.youtube.miniSticky;
 
@@ -202,12 +245,21 @@ export function computeLayout(input: LayoutInput): LayoutResult {
   if (layout.fullscreenPane !== null) {
     const fsApp = layout.panes[layout.fullscreenPane];
     if (fsApp.kind === 'youtube') {
-      const column = { x: driverRight ? right(content) - L.COLUMN : content.x, y: content.y, w: L.COLUMN, h: content.h };
-      let area: Rect = driverRight
-        ? { x: content.x, y: content.y, w: content.w - L.COLUMN, h: content.h }
-        : { x: content.x + L.COLUMN, y: content.y, w: content.w - L.COLUMN, h: content.h };
+      // Controls: a column on the driver side, or a row along the bottom on a portrait screen.
+      const column = portrait
+        ? { x: content.x, y: bottom(content) - L.COLUMN, w: content.w, h: L.COLUMN }
+        : { x: driverRight ? right(content) - L.COLUMN : content.x, y: content.y, w: L.COLUMN, h: content.h };
+      let area: Rect = portrait
+        ? { x: content.x, y: content.y, w: content.w, h: Math.max(0, content.h - L.COLUMN) }
+        : driverRight
+          ? { x: content.x, y: content.y, w: content.w - L.COLUMN, h: content.h }
+          : { x: content.x + L.COLUMN, y: content.y, w: content.w - L.COLUMN, h: content.h };
       let sheet: Rect | null = null;
-      if (input.sheetOpen) {
+      if (input.sheetOpen && portrait) {
+        // The player keeps ≥ 201 px of height (→ ≥ 357×201) even after a toast strip comes off.
+        sheet = placeBand(area, true, { ...area, minH: 201 + L.TOAST_STRIP });
+        area = { ...area, h: area.h - sheet.h };
+      } else if (input.sheetOpen) {
         sheet = placeSheet(area, driverRight, { ...area, minW: YT_MIN_WIDTH });
         area = driverRight ? { ...area, w: area.w - sheet.w } : { ...area, x: area.x + sheet.w, w: area.w - sheet.w };
       }
@@ -227,7 +279,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
         panes: [],
         divider: null,
         bounds: null,
-        usableWidth: content.w,
+        splitLength: content.w,
         surfaces,
         youtube: { mode: 'fullscreen', surface: area, player: fit16x9(area), paneIndex: layout.fullscreenPane },
         floatingBar: null,
@@ -245,13 +297,20 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     if (mini) surfaces.youtube = { id: 'youtube', rect: mini.rect, visible: true, z: Z_MINI };
     let sheet: Rect | null = null;
     if (input.sheetOpen) {
-      const avoid = mini ? { ...mini.handle, h: mini.handle.h + mini.rect.h, minW: mini.rect.w } : null;
-      sheet = placeSheet(content, driverRight, avoid);
+      const m = mini ? { ...mini.handle, h: mini.handle.h + mini.rect.h } : null;
+      sheet = portrait
+        ? placeBand(content, !m, m ? { ...m, minH: m.h } : null)
+        : placeSheet(content, driverRight, m ? { ...m, minW: m.w } : null);
     }
-    const bar = sheet ? null : floatBar(content, driverRight);
+    const bar = sheet ? null : floatBar(content, driverRight, portrait);
     const toast = input.toast
       ? placeToast(content, [mini?.rect, mini?.handle, sheet, bar?.rect], [], sheet)
       : null;
+    // Web: a strip along the driver edge brings the controls back; it stops above the mini player on narrow screens.
+    let edge: Rect = { x: driverRight ? right(content) - L.EDGE : content.x, y: content.y, w: L.EDGE, h: content.h };
+    if (mini && (intersects(edge, mini.handle) || intersects(edge, mini.rect))) {
+      edge = { ...edge, h: Math.max(0, mini.handle.y - 4 - edge.y) };
+    }
     return {
       ...base,
       dock: null,
@@ -260,15 +319,13 @@ export function computeLayout(input: LayoutInput): LayoutResult {
       panes: [],
       divider: null,
       bounds: null,
-      usableWidth: content.w,
+      splitLength: content.w,
       surfaces,
       youtube: mini
         ? { mode: 'mini', surface: mini.rect, player: mini.rect, paneIndex: ytIdx }
         : { mode: 'hidden', surface: content, player: null, paneIndex: ytIdx },
       floatingBar: bar,
-      edgeStrip: fsApp.kind === 'web'
-        ? { x: driverRight ? right(content) - L.EDGE : content.x, y: content.y, w: L.EDGE, h: content.h }
-        : null,
+      edgeStrip: fsApp.kind === 'web' ? edge : null,
       controlColumn: null,
       mini,
       sheet,
@@ -277,35 +334,46 @@ export function computeLayout(input: LayoutInput): LayoutResult {
   }
 
   // ---------- panes (§6.1, §6.4) ----------
-  const dock = { x: driverRight ? right(content) - L.DOCK : content.x, y: content.y, w: L.DOCK, h: content.h };
-  const appArea: Rect = driverRight
-    ? { x: content.x, y: content.y, w: Math.max(0, content.w - L.DOCK), h: content.h }
-    : { x: content.x + L.DOCK, y: content.y, w: Math.max(0, content.w - L.DOCK), h: content.h };
-  const usableWidth = Math.max(0, appArea.w - L.GAP);
-  const bounds = ratioBounds(usableWidth, ytIdx);
+  // Dock: on the driver side, or along the bottom on a portrait screen.
+  const dock = portrait
+    ? { x: content.x, y: bottom(content) - L.DOCK, w: content.w, h: L.DOCK }
+    : { x: driverRight ? right(content) - L.DOCK : content.x, y: content.y, w: L.DOCK, h: content.h };
+  const appArea: Rect = portrait
+    ? { x: content.x, y: content.y, w: content.w, h: Math.max(0, content.h - L.DOCK) }
+    : driverRight
+      ? { x: content.x, y: content.y, w: Math.max(0, content.w - L.DOCK), h: content.h }
+      : { x: content.x + L.DOCK, y: content.y, w: Math.max(0, content.w - L.DOCK), h: content.h };
+  const splitLength = Math.max(0, (stacked ? appArea.h : appArea.w) - L.GAP);
+  const bounds = ratioBounds(splitLength, ytIdx, stacked ? YT_MIN_HEIGHT : YT_MIN_WIDTH);
   let mode: 'split' | 'single' = layout.mode;
-  if (mode === 'split' && ytIdx !== null && !splitFeasible(bounds)) mode = 'single';
+  const ytFits = splitFeasible(bounds) && (!stacked || appArea.w >= YT_MIN_WIDTH);
+  if (mode === 'split' && ytIdx !== null && !ytFits) mode = 'single';
 
   const rects: [Rect | null, Rect | null] = [null, null];
   let divider: LayoutResult['divider'] = null;
-  const leftIdx = base.leftPane;
-  const rightIdx: PaneIndex = leftIdx === 0 ? 1 : 0;
+  const firstIdx = base.firstPane;
+  const secondIdx: PaneIndex = firstIdx === 0 ? 1 : 0;
 
   if (mode === 'split') {
     const ratio = Math.min(bounds.max, Math.max(bounds.min, layout.splitRatio));
-    const w0 = Math.round(usableWidth * ratio);
-    const leftW = leftIdx === 0 ? w0 : usableWidth - w0;
-    const leftRect = { x: appArea.x, y: appArea.y, w: leftW, h: appArea.h };
-    const gap = { x: appArea.x + leftW, y: appArea.y, w: L.GAP, h: appArea.h };
-    const rightRect = { x: right(gap), y: appArea.y, w: appArea.w - leftW - L.GAP, h: appArea.h };
-    rects[leftIdx] = leftRect;
-    rects[rightIdx] = rightRect;
+    const len0 = Math.round(splitLength * ratio);
+    const firstLen = firstIdx === 0 ? len0 : splitLength - len0;
     // The touch target may grow into a neighbouring pane, but never into the YouTube pane.
-    const leftYt = layout.panes[leftIdx].kind === 'youtube';
-    const rightYt = layout.panes[rightIdx].kind === 'youtube';
-    const extL = leftYt ? 0 : rightYt ? L.DIVIDER_EXTEND : L.DIVIDER_EXTEND / 2;
-    const extR = rightYt ? 0 : leftYt ? L.DIVIDER_EXTEND : L.DIVIDER_EXTEND / 2;
-    divider = { line: gap, hit: { x: gap.x - extL, y: gap.y, w: L.GAP + extL + extR, h: gap.h } };
+    const firstYt = layout.panes[firstIdx].kind === 'youtube';
+    const secondYt = layout.panes[secondIdx].kind === 'youtube';
+    const ext1 = firstYt ? 0 : secondYt ? L.DIVIDER_EXTEND : L.DIVIDER_EXTEND / 2;
+    const ext2 = secondYt ? 0 : firstYt ? L.DIVIDER_EXTEND : L.DIVIDER_EXTEND / 2;
+    if (stacked) {
+      const gap = { x: appArea.x, y: appArea.y + firstLen, w: appArea.w, h: L.GAP };
+      rects[firstIdx] = { x: appArea.x, y: appArea.y, w: appArea.w, h: firstLen };
+      rects[secondIdx] = { x: appArea.x, y: bottom(gap), w: appArea.w, h: appArea.h - firstLen - L.GAP };
+      divider = { line: gap, hit: { x: gap.x, y: gap.y - ext1, w: gap.w, h: L.GAP + ext1 + ext2 } };
+    } else {
+      const gap = { x: appArea.x + firstLen, y: appArea.y, w: L.GAP, h: appArea.h };
+      rects[firstIdx] = { x: appArea.x, y: appArea.y, w: firstLen, h: appArea.h };
+      rects[secondIdx] = { x: right(gap), y: appArea.y, w: appArea.w - firstLen - L.GAP, h: appArea.h };
+      divider = { line: gap, hit: { x: gap.x - ext1, y: gap.y, w: L.GAP + ext1 + ext2, h: gap.h } };
+    }
   } else {
     rects[layout.focusedPane] = appArea;
   }
@@ -320,19 +388,28 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     mini = miniBox(appArea, input.youtube.miniSize, driverRight);
     yt = { mode: 'mini', surface: mini.rect, player: mini.rect, paneIndex: ytIdx };
   }
+  const miniArea = mini ? { ...mini.handle, h: mini.handle.h + mini.rect.h } : null;
 
-  // Sheet: driver side, or passenger side when YouTube is the driver-side pane. Never over the player:
-  // if it must overlap the YouTube pane, that pane shrinks beside it (still ≥ 356 px).
+  // Sheet, never over the player. Landscape: driver side, or passenger side when YouTube is the driver-side pane.
+  // Portrait: a band from the bottom, or from the top when YouTube is the bottom pane or the mini player shows.
+  // If it must overlap the YouTube pane, that pane shrinks beside it and still fits a ≥ 356×200 player.
   let sheet: Rect | null = null;
-  if (input.sheetOpen) {
+  if (input.sheetOpen && portrait) {
+    const ytSecond = yt.mode === 'pane' && mode === 'split' && stacked && yt.paneIndex === secondIdx;
+    const atBottom = !ytSecond && !miniArea;
+    const avoid =
+      yt.mode === 'pane' ? { ...yt.surface, minH: YT_MIN_HEIGHT } : miniArea ? { ...miniArea, minH: miniArea.h } : null;
+    sheet = placeBand(content, atBottom, avoid);
+    if (yt.mode === 'pane' && intersects(sheet, yt.surface)) {
+      const s = yt.surface;
+      const clipped = atBottom ? { ...s, h: sheet.y - s.y } : { ...s, y: bottom(sheet), h: bottom(s) - bottom(sheet) };
+      yt = { ...yt, surface: clipped, player: ytPanePlayer(clipped) };
+    }
+  } else if (input.sheetOpen) {
     const ytOnDriverSide = yt.mode === 'pane' && mode === 'split' && yt.paneIndex === 1;
     const atRight = ytOnDriverSide ? !driverRight : driverRight;
     const avoid =
-      yt.mode === 'pane'
-        ? { ...yt.surface, minW: YT_MIN_WIDTH }
-        : mini
-          ? { ...mini.handle, h: mini.handle.h + mini.rect.h, minW: mini.rect.w }
-          : null;
+      yt.mode === 'pane' ? { ...yt.surface, minW: YT_MIN_WIDTH } : miniArea ? { ...miniArea, minW: miniArea.w } : null;
     sheet = placeSheet(content, atRight, avoid);
     if (yt.mode === 'pane' && intersects(sheet, yt.surface)) {
       const s = yt.surface;
@@ -342,14 +419,20 @@ export function computeLayout(input: LayoutInput): LayoutResult {
   }
 
   // Keep the divider clear of the mini player and its handle.
-  if (divider && mini) {
-    const top = mini.handle.y - 4;
-    if (intersects(divider.hit, { ...mini.handle, h: mini.handle.h + mini.rect.h })) {
-      divider = {
-        line: { ...divider.line, h: Math.max(0, top - divider.line.y) },
-        hit: { ...divider.hit, h: Math.max(0, top - divider.hit.y) },
-      };
+  if (divider && miniArea && intersects(divider.hit, miniArea)) {
+    let cut: (r: Rect) => Rect;
+    if (!stacked) {
+      const top = miniArea.y - 4;
+      cut = (r) => ({ ...r, h: Math.max(0, top - r.y) });
+    } else if (driverRight) {
+      // Mini player sits at the left: the divider starts after it.
+      const from = right(miniArea) + 4;
+      cut = (r) => ({ ...r, x: from, w: Math.max(0, right(r) - from) });
+    } else {
+      const to = miniArea.x - 4;
+      cut = (r) => ({ ...r, w: Math.max(0, to - r.x) });
     }
+    divider = { line: cut(divider.line), hit: cut(divider.hit) };
   }
 
   const panes: PaneBox[] = [];
@@ -360,10 +443,24 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     const id = surfaceIdOf(app);
     const surfaceRect = app.kind === 'youtube' ? yt.surface : rect;
     surfaces[id] = { id, rect: surfaceRect, visible: true, z: app.kind === 'youtube' ? Z_YOUTUBE : Z_SURFACE };
+    const first = index === firstIdx;
     panes.push({
       index,
       app,
-      side: mode === 'single' ? (driverRight ? 'left' : 'right') : index === leftIdx ? 'left' : 'right',
+      side:
+        mode === 'single'
+          ? stacked
+            ? 'top'
+            : driverRight
+              ? 'left'
+              : 'right'
+          : stacked
+            ? first
+              ? 'top'
+              : 'bottom'
+            : first
+              ? 'left'
+              : 'right',
       rect,
       header: { x: rect.x, y: rect.y, w: rect.w, h: L.HEADER },
       fsButton: {
@@ -376,6 +473,17 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     });
   }
   if (mini) surfaces.youtube = { id: 'youtube', rect: mini.rect, visible: true, z: Z_MINI };
+
+  // Stacked panes on a short screen: the mini player can cross the lower pane's header. Chrome draws above every
+  // surface, so trim that chrome beside the mini player, or hide it while the mini player shows.
+  if (miniArea) {
+    for (const p of panes) {
+      const hidden = { x: p.rect.x, y: p.rect.y, w: 0, h: 0 };
+      p.header = clearOf(p.header, miniArea, 200, hidden);
+      p.fsButton = clearOf(p.fsButton, miniArea, L.FS_BUTTON, hidden);
+      if (p.revealStrip) p.revealStrip = clearOf(p.revealStrip, miniArea, L.FS_BUTTON, hidden);
+    }
+  }
 
   const toast = input.toast
     ? placeToast(
@@ -394,7 +502,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     panes,
     divider,
     bounds: mode === 'split' ? bounds : null,
-    usableWidth,
+    splitLength,
     surfaces,
     youtube: yt,
     floatingBar: null,

@@ -86,6 +86,7 @@ export function sanitizeLayout(input: Partial<LayoutSettings> | undefined, fallb
   const pane = (p: unknown, d: PaneIndex | null) => (p === 0 || p === 1 ? p : d);
   return {
     mode: l.mode === 'single' ? 'single' : 'split',
+    direction: l.direction === 'side' || l.direction === 'stacked' ? l.direction : 'auto',
     splitRatio: typeof l.splitRatio === 'number' && Number.isFinite(l.splitRatio) ? clampRatioLoose(l.splitRatio) : fallback.splitRatio,
     panes,
     focusedPane: pane(l.focusedPane, fallback.focusedPane) as PaneIndex,

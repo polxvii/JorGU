@@ -13,6 +13,8 @@ export function App() {
       id="jorgu-root"
       className="fixed inset-0 overflow-hidden bg-bg text-text"
       data-mode={layout.mode}
+      data-direction={layout.stacked ? 'stacked' : 'side'}
+      data-portrait={layout.portrait ? 'true' : 'false'}
       data-driver={layout.driverSide}
       data-yt={layout.youtube.mode}
     >

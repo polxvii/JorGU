@@ -94,8 +94,9 @@ export function FloatingControls({ layout }: { layout: LayoutResult }) {
 
 export function ControlColumn({ rect }: { rect: Rect }) {
   const a = useFullscreenActions();
-  // Highest priority first; keep only what fits (64 px buttons, 4 px gaps).
-  const fits = Math.max(3, Math.floor((rect.h - 4) / (L.FLOAT_BUTTON + 4)));
+  // Highest priority first; keep only what fits (64 px buttons, 4 px gaps) along the column or row.
+  const row = rect.w > rect.h;
+  const fits = Math.max(3, Math.floor(((row ? rect.w : rect.h) - 4) / (L.FLOAT_BUTTON + 4)));
   const buttons = [
     <BigButton key="exit" testId="fs-exit" icon="close" label="fs.exit" onClick={a.exit} primary />,
     <BigButton key="switch" testId="fs-switch" icon="swap" label="fs.switch" onClick={a.switchApp} />,
@@ -115,7 +116,8 @@ export function ControlColumn({ rect }: { rect: Rect }) {
     <div
       data-chrome="control-column"
       data-testid="control-column"
-      className="absolute z-10 flex flex-col items-center justify-center gap-1 bg-surface"
+      data-orientation={row ? 'row' : 'column'}
+      className={`absolute z-10 flex items-center justify-center gap-1 bg-surface ${row ? 'flex-row' : 'flex-col'}`}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
     >
       {buttons}

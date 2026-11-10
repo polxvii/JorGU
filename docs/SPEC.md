@@ -5,6 +5,8 @@
 
 ### Changes during M2b (2026-11-10)
 
+- **Top/bottom split** for upright phones, chosen in Settings → Split screen (Auto · Side by side · Top & bottom); portrait Dock, sheets and controls (§6).
+
 - **YouTube home page:** the user asked for youtube.com's own signed-in home (recommendations) in the pane. Not possible: youtube.com sends `X-Frame-Options: SAMEORIGIN`, the Data API has no home/recommendations feed, and Developer Policies §III.I.1 forbid recreating the YouTube browse experience. User decision: a one-tap **library sheet** (Link · New · Playlists · Liked · Search · Music · Trending) plus an **"Open YouTube" button** that opens https://www.youtube.com/ in a new tab (§8.9).
 - §8.1: PKCE (S256) added to the redirect flow. `/api/auth/me` answers `{connected:false, configured:false}` (200) when the server has no OAuth secrets.
 - §8.2: the Worker returns `X-Quota-Units` (Data API units spent per request); the client sums them per Pacific day for "About N searches left today". Feed channel limit is 40, not 50: Workers Free allows 50 subrequests per request [Verify plan limit].
@@ -216,6 +218,8 @@ jorgu/
 ### 6.1 Concepts
 
 - **Layout**: `single` (one pane) or `split` (two panes, vertical divider draggable between 30% and 70%). Stretch goal: `triple` (one large pane + two stacked).
+- **Split direction (user request 2026-11-10)**: setting `layout.direction` = `auto` (default) · `side` · `stacked`. `auto` stacks the panes top/bottom when the screen is taller than wide (phone upright) and puts them side by side otherwise. Stacked: the divider is horizontal, and the YouTube pane must fit a ≥ 356×200 player plus its band and controls (≥ 345 px tall, ≥ 356 px wide), otherwise one pane. The pane that is on the left side by side goes on top.
+- **Portrait screens** (any direction): the Dock is a row along the bottom; sheets are full-width bands from the bottom (from the top when YouTube is the bottom pane or the mini player shows); YouTube full-screen controls are a row along the bottom; full-screen floating controls are a grid at the top. Pane chrome that would cross the mini player is trimmed beside it or hidden while it shows. The 480×270 mini player falls back to 356×200 where it doesn't fit.
 - **App**: `dashboard`, `map`, `youtube`, `web` (each web instance carries its own URL)
 - **Assignment**: which app is in which pane, persisted
 

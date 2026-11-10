@@ -1,4 +1,5 @@
-// Draggable divider between panes (spec §6.2): 30–70 %, snaps at 40/50/60 %, keeps the YouTube pane ≥ 356 px.
+// Draggable divider between panes (spec §6.2): 30–70 %, snaps at 40/50/60 %, keeps the YouTube pane big enough.
+// Vertical when panes sit side by side, horizontal when they're stacked top/bottom.
 import { type KeyboardEvent, type PointerEvent as ReactPointerEvent, useRef } from 'react';
 import { useSettings } from '../features/settings/settingsStore';
 import { useT } from '../i18n';
@@ -10,10 +11,11 @@ export function Divider({ layout }: { layout: LayoutResult }) {
   const ratio = useSettings((s) => s.layout.splitRatio);
   const setSplitRatio = useSettings((s) => s.setSplitRatio);
   const dragging = useRef(false);
-  const { divider, bounds, appArea, usableWidth, leftPane } = layout;
+  const { divider, bounds, appArea, splitLength, firstPane, stacked } = layout;
   if (!divider || !bounds) return null;
 
-  const fromLeftShare = (leftShare: number) => (leftPane === 0 ? leftShare : 1 - leftShare);
+  // Ratio is pane 0's share; the first pane (left / top) may be pane 1 when the layout is mirrored.
+  const fromFirstShare = (firstShare: number) => (firstPane === 0 ? firstShare : 1 - firstShare);
   const apply = (pane0Share: number) => setSplitRatio(resolveRatio(pane0Share, bounds));
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -21,30 +23,31 @@ export function Divider({ layout }: { layout: LayoutResult }) {
     dragging.current = true;
   };
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragging.current || usableWidth <= 0) return;
-    const leftW = e.clientX - appArea.x - L.GAP / 2;
-    apply(fromLeftShare(leftW / usableWidth));
+    if (!dragging.current || splitLength <= 0) return;
+    const firstLen = stacked ? e.clientY - appArea.y - L.GAP / 2 : e.clientX - appArea.x - L.GAP / 2;
+    apply(fromFirstShare(firstLen / splitLength));
   };
   const stop = () => {
     dragging.current = false;
   };
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const step = e.key === 'ArrowLeft' ? -0.05 : e.key === 'ArrowRight' ? 0.05 : 0;
+    const [less, more] = stacked ? ['ArrowUp', 'ArrowDown'] : ['ArrowLeft', 'ArrowRight'];
+    const step = e.key === less ? -0.05 : e.key === more ? 0.05 : 0;
     if (!step) return;
     e.preventDefault();
-    const leftShare = leftPane === 0 ? ratio : 1 - ratio;
-    apply(fromLeftShare(leftShare + step));
+    const firstShare = firstPane === 0 ? ratio : 1 - ratio;
+    apply(fromFirstShare(firstShare + step));
   };
 
   const hit = divider.hit;
   const line = divider.line;
-  const value = Math.round((leftPane === 0 ? ratio : 1 - ratio) * 100);
+  const value = Math.round((firstPane === 0 ? ratio : 1 - ratio) * 100);
   return (
     <div
       data-chrome="divider"
       data-testid="divider"
       role="separator"
-      aria-orientation="vertical"
+      aria-orientation={stacked ? 'horizontal' : 'vertical'}
       aria-label={t('divider.label')}
       aria-valuenow={value}
       aria-valuemin={Math.round(bounds.min * 100)}
@@ -55,14 +58,16 @@ export function Divider({ layout }: { layout: LayoutResult }) {
       onPointerUp={stop}
       onPointerCancel={stop}
       onKeyDown={onKeyDown}
-      className="absolute z-10 cursor-col-resize"
+      className={`absolute z-10 ${stacked ? 'cursor-row-resize' : 'cursor-col-resize'}`}
       style={{ left: hit.x, top: hit.y, width: hit.w, height: hit.h, touchAction: 'none' }}
     >
       <div
         className="absolute bg-bg"
-        style={{ left: line.x - hit.x, top: 0, width: line.w, height: line.h }}
+        style={{ left: line.x - hit.x, top: line.y - hit.y, width: line.w, height: line.h }}
       >
-        <div className="absolute left-1/2 top-1/2 h-16 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-text-dim" />
+        <div
+          className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-text-dim ${stacked ? 'h-1.5 w-16' : 'h-16 w-1.5'}`}
+        />
       </div>
     </div>
   );

@@ -47,9 +47,13 @@ export interface SavedPlace {
   source?: 'manual' | 'takeout';
 }
 
+/** How two panes share the screen: 'auto' = top/bottom on a portrait screen, side by side on a landscape one. */
+export type SplitDirection = 'auto' | 'side' | 'stacked';
+
 export interface LayoutSettings {
   mode: LayoutMode;
-  /** Share of the usable width given to pane 0, 0.30–0.70. */
+  direction: SplitDirection;
+  /** Share of the usable width (height when stacked) given to pane 0, 0.30–0.70. */
   splitRatio: number;
   panes: [AppRef, AppRef];
   focusedPane: PaneIndex;
@@ -97,6 +101,7 @@ export function defaultSettings(): Settings {
     nightMode: { auto: true, start: '18:30', end: '06:00' },
     layout: {
       mode: 'split',
+      direction: 'auto',
       splitRatio: 0.5,
       panes: [{ kind: 'youtube' }, { kind: 'map' }],
       focusedPane: 1,

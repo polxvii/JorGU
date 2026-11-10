@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import * as A from '../../shell/layoutActions';
 import { mergeSettings } from './merge';
-import type { AppPick, DriverSide, Language, MiniPlayerSize, PaneIndex, Settings, ThemeId } from './types';
+import type { AppPick, DriverSide, Language, MiniPlayerSize, PaneIndex, Settings, SplitDirection, ThemeId } from './types';
 import { defaultSettings } from './types';
 
 export const SETTINGS_KEY = 'jorgu:settings';
@@ -13,6 +13,7 @@ export interface SettingsActions {
   setTheme: (themeId: ThemeId) => void;
   setNightMode: (patch: Partial<Settings['nightMode']>) => void;
   setDriverSide: (side: DriverSide) => void;
+  setDirection: (direction: SplitDirection) => void;
   setMiniPlayerSize: (size: MiniPlayerSize) => void;
   setPlaybackRate: (rate: number) => void;
   assign: (pane: PaneIndex, pick: AppPick) => void;
@@ -43,6 +44,7 @@ export const useSettings = create<SettingsState>()(
       setTheme: (themeId) => set({ themeId }),
       setNightMode: (patch) => set((s) => ({ nightMode: { ...s.nightMode, ...patch } })),
       setDriverSide: (driverSide) => set((s) => ({ layout: { ...s.layout, driverSide } })),
+      setDirection: (direction) => set((s) => ({ layout: { ...s.layout, direction } })),
       setMiniPlayerSize: (miniPlayerSize) => set((s) => ({ youtube: { ...s.youtube, miniPlayerSize } })),
       setPlaybackRate: (playbackRate) => set((s) => ({ youtube: { ...s.youtube, playbackRate } })),
       assign: (pane, pick) => set((s) => ({ layout: A.assignApp(s.layout, pane, pick) })),

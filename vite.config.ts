@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
@@ -55,8 +56,22 @@ function noWorkerApi(): Plugin {
   };
 }
 
+/** "0.1.0 · ff075a1 · 2026-11-11 17:40" (Bangkok time): Settings shows it, so an old cached copy is easy to spot. */
+function buildStamp(): string {
+  let sha = process.env.WORKERS_CI_COMMIT_SHA?.slice(0, 7) ?? '';
+  if (!sha) {
+    try {
+      sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    } catch {
+      /* no git */
+    }
+  }
+  const at = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Bangkok' }).slice(0, 16);
+  return [pkg.version, sha, at].filter(Boolean).join(' · ');
+}
+
 export default defineConfig({
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  define: { __APP_VERSION__: JSON.stringify(buildStamp()) },
   plugins: [
     noWorkerApi(),
     react(),

@@ -245,8 +245,7 @@ export const en = {
 
   'map.whereTo': 'Where to?',
   'map.destPlaceholder': 'Place or address',
-  'map.navigate': 'Navigate',
-  'map.handoffHint': 'The route shows here in JorGu. For voice guidance, tap Navigate on the route card: it opens the Google Maps app.',
+  'map.handoffHint': 'The route shows here in JorGu and the map follows you. For voice guidance, tap Navigate in Google Maps (here, or the ↗ button on the route bar).',
   'map.savedPlaces': 'Saved places',
   'map.addPlace': 'Add a place',
   'map.placeLabel': 'Name (e.g. Home)',
@@ -254,7 +253,6 @@ export const en = {
   'map.removePlace': 'Remove place',
   'map.recent': 'Recent destinations',
   'map.endRoute': 'End route',
-  'map.routeLeft': '{km} km · {min} min · arrive {eta}',
   'map.routeLoading': 'Finding the route…',
   'map.routeNeedsLocation': 'Turn on location to see the route',
   'map.routeCapped': 'Route limit reached · Shown in the simple map',
@@ -283,6 +281,13 @@ export const en = {
   'map.locationUnavailable': "Can't find your location yet · Check that location is allowed for this browser or app, then tap ⌖",
   'map.showRouteBtn': 'Show route',
   'map.routeFallback': 'Live route line unavailable · Shown in the simple map',
+  'map.routeMin': '{min} min',
+  'map.routeKmEta': '{km} km · arrive {eta}',
+  'map.routeOverview': 'Whole route',
+  'map.navigateGoogle': 'Navigate in Google Maps',
+  'map.avoidTolls': 'Avoid tolls',
+  'map.avoidHighways': 'Avoid highways',
+  'map.avoidHint': 'The Google Maps app (voice guidance) keeps its own route options: turn on Avoid there too.',
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -68,13 +68,30 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   // One map: the route line, the destination pin, the car dot and traffic together. No Embed view on top.
   await expect(page.getByTestId('map-embed')).toHaveCount(0);
   const s = await stub(page);
-  expect(s).toMatchObject({ maps: 1, routes: 1, lines: 1, pins: 1, traffic: true, fitBounds: 1 });
+  expect(s).toMatchObject({ maps: 1, routes: 1, lines: 1, pins: 1, traffic: true, fitBounds: 0, zoom: 16 });
+  await expect(page.getByTestId('map-route-time')).toContainText('min');
   expect(s.lastRoute).toMatchObject({ destination: 'Central World', routingPreference: 'TRAFFIC_UNAWARE', fields: ['durationMillis', 'distanceMeters', 'path'] });
+  expect(s.lastRoute).not.toHaveProperty('extraComputations'); // traffic on the line = Enterprise SKU
+  // See-through line over the Traffic layer, Google's own colour kept.
+  expect(s.lineStyle).toEqual({ strokeColor: '#4285F4', strokeOpacity: 0.5 });
   expect(popups).toBe(0);
-  // Whole-route overview first; ⌖ goes back to following the car.
+  // Follows the car at driving zoom. The bar shows the whole route on request; ⌖ follows again.
+  await expect(page.getByTestId('map-recenter')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('map-route-overview').click();
+  expect((await stub(page)).fitBounds).toBe(1);
   await expect(page.getByTestId('map-recenter')).toHaveAttribute('aria-pressed', 'false');
   await page.getByTestId('map-recenter').click();
   await expect(page.getByTestId('map-recenter')).toHaveAttribute('aria-pressed', 'true');
+  // The slim bar sits beside the control column, not over it.
+  const bar = await box(page, '[data-testid="map-route"]');
+  const controls = await box(page, '[data-testid="map-controls"]');
+  expect(bar.x + bar.width <= controls.x || controls.x + controls.width <= bar.x).toBe(true);
+  expect(bar.height).toBeLessThanOrEqual(64);
+  // The Where to? sheet has the same hand-off, with its full label.
+  await page.getByTestId('map-navigate').click();
+  expect(new URL((await page.getByTestId('map-sheet-navigate').getAttribute('href'))!).searchParams.get('destination')).toBe('Central World');
+  await page.getByTestId('sheet-close').click();
+  await expect(page.getByTestId('map-sheet')).toHaveCount(0);
   // Voice guidance: only the card's Navigate button hands the trip to Google Maps.
   const nav = page.getByTestId('map-route-navigate');
   const href = new URL((await nav.getAttribute('href'))!);
@@ -142,15 +159,42 @@ test("the line can't be drawn (Routes refused, or the daily route limit): the ro
 
 test('Settings → route on the simple map: the route shows in the free Embed view, no Routes call', async ({ page }) => {
   await withLocation(page);
-  await openApp(page, { map: { routeLine: false } });
+  await openApp(page, { map: { routeLine: false, avoidTolls: true } });
   await expect.poll(async () => (await stub(page)).maps).toBe(1);
   await page.getByTestId('map-navigate').click();
   await page.getByTestId('map-dest-input').fill('Central World');
   await page.getByTestId('map-dest-go').click();
-  await expect(page.getByTestId('map-embed')).toHaveAttribute('src', /\/maps\/embed\/v1\/directions\?.*destination=Central\+World/);
+  await expect(page.getByTestId('map-embed')).toHaveAttribute('src', /\/maps\/embed\/v1\/directions\?.*destination=Central\+World.*&avoid=tolls/);
   expect(await stub(page)).toMatchObject({ routes: 0, maps: 1 });
   await page.getByTestId('map-route-end').click();
   await expect(page.getByTestId('map-embed')).toHaveCount(0);
+});
+
+test('avoid tolls / highways: sent with the route, drawn again when changed, remembered', async ({ page }) => {
+  await withLocation(page);
+  await openApp(page);
+  await expect.poll(async () => (await stub(page)).markers).toBe(1);
+  await page.getByTestId('map-navigate').click();
+  await page.getByTestId('map-avoid-tolls').click();
+  await expect(page.getByTestId('map-avoid-tolls')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('map-sheet')).toContainText('Google Maps app');
+  await page.getByTestId('map-dest-input').fill('Central World');
+  await page.getByTestId('map-dest-go').click();
+  await expect(page.getByTestId('map-route')).toHaveAttribute('data-status', 'ready');
+  let s = await stub(page);
+  expect(s.routes).toBe(1);
+  // Plain route modifiers: still the Essentials route SKU.
+  expect(s.lastRoute).toMatchObject({ routingPreference: 'TRAFFIC_UNAWARE', routeModifiers: { avoidTolls: true, avoidHighways: false } });
+  await page.getByTestId('map-navigate').click();
+  await page.getByTestId('map-avoid-highways').click();
+  await expect.poll(async () => (await stub(page)).routes).toBe(2);
+  s = await stub(page);
+  expect(s.lastRoute).toMatchObject({ routeModifiers: { avoidTolls: true, avoidHighways: true } });
+  expect(s.lines).toBe(1);
+  await page.reload();
+  await page.getByTestId('map-navigate').click();
+  await expect(page.getByTestId('map-avoid-tolls')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('map-avoid-highways')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('saved places: add one, show the route to it', async ({ page }) => {

@@ -8,7 +8,7 @@ import { Icon, type IconName } from '../../shell/Icon';
 import { type Rect, intersects } from '../../shell/geometry';
 import { DEFAULT_CENTER, MAPS_KEY } from './config';
 import { kmh, useGeo } from './geo';
-import { attachMap, endRoute, recenter, setTraffic, useMapUi, zoomBy } from './mapController';
+import { attachMap, endRoute, recenter, setTraffic, showRouteOverview, useMapUi, zoomBy } from './mapController';
 import { mapsNavigateUrl } from './navigate';
 import { progress } from './routeMath';
 
@@ -37,17 +37,19 @@ function EmbedFrame() {
   const pos = useGeo((s) => s.pos);
   const route = useMapUi((s) => s.route);
   const nonce = useMapUi((s) => s.embedNonce);
+  const avoid = useSettings((s) => [s.map.avoidTolls && 'tolls', s.map.avoidHighways && 'highways'].filter(Boolean).join('|'));
   // Recompute the URL only on Recenter or a new route: every src change reloads the iframe.
   const src = useMemo(() => {
     const here = pos ? `${pos.lat.toFixed(5)},${pos.lng.toFixed(5)}` : `${DEFAULT_CENTER.lat},${DEFAULT_CENTER.lng}`;
     if (route) {
       const q = new URLSearchParams({ key: MAPS_KEY, origin: here, destination: route.destination, mode: 'driving' });
+      if (avoid) q.set('avoid', avoid);
       return `https://www.google.com/maps/embed/v1/directions?${q}`;
     }
     const q = new URLSearchParams({ key: MAPS_KEY, center: here, zoom: '15' });
     return `https://www.google.com/maps/embed/v1/view?${q}`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nonce, route?.destination, !!pos]);
+  }, [nonce, route?.destination, !!pos, avoid]);
   return (
     <iframe
       title={t('apps.map')}
@@ -61,17 +63,32 @@ function EmbedFrame() {
   );
 }
 
-function RouteCard({ top }: { top: boolean }) {
+function BarButton({ testId, icon, label, onClick }: { testId: string; icon: IconName; label: string; onClick: () => void }) {
+  return (
+    <button type="button" data-testid={testId} aria-label={label} title={label} onClick={onClick} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-bg">
+      <Icon name={icon} size={22} />
+    </button>
+  );
+}
+
+/**
+ * Slim route bar beside the control column (user feedback 2026-11-11: the old card and its big Navigate button
+ * covered the map). Time left, then distance and arrival; whole-route view; Google Maps hand-off; end.
+ */
+function RouteBar({ top, topPx, left }: { top: boolean; topPx: number; left: boolean }) {
   const t = useT();
   const route = useMapUi((s) => s.route);
   const mode = useMapUi((s) => s.mode);
   const pos = useGeo((s) => s.pos);
   if (!route) return null;
+  const line = mode === 'js' && !route.viaEmbed && route.path.length > 1;
+  let time = '';
   let detail = '';
-  if (route.status === 'ready' && mode === 'js' && route.path.length > 1) {
+  if (route.status === 'ready' && line) {
     const p = pos ? progress(pos, route.path, route.distanceMeters, route.durationMillis) : { metersLeft: route.distanceMeters, millisLeft: route.durationMillis };
     const eta = new Date(Date.now() + p.millisLeft).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-    detail = t('map.routeLeft', { km: (p.metersLeft / 1000).toFixed(p.metersLeft < 10000 ? 1 : 0), min: Math.max(1, Math.round(p.millisLeft / 60000)), eta });
+    time = t('map.routeMin', { min: Math.max(1, Math.round(p.millisLeft / 60000)) });
+    detail = t('map.routeKmEta', { km: (p.metersLeft / 1000).toFixed(p.metersLeft < 10000 ? 1 : 0), eta });
   } else if (route.status === 'loading') detail = t('map.routeLoading');
   else if (route.status === 'needsLocation') detail = t('map.routeNeedsLocation');
   else if (route.note) detail = t(route.note);
@@ -80,28 +97,28 @@ function RouteCard({ top }: { top: boolean }) {
     <div
       data-testid="map-route"
       data-status={route.status}
-      className={`absolute left-1/2 flex w-[min(400px,calc(100%-144px))] min-w-[240px] -translate-x-1/2 items-center gap-2 rounded-2xl bg-surface/95 p-2 pl-3 shadow-[0_1px_4px_rgba(0,0,0,0.35)] ${
-        top ? 'top-[60px]' : 'bottom-3'
-      }`}
+      title={route.destination}
+      className={`absolute flex max-w-[min(340px,calc(100%-88px))] items-center gap-1.5 rounded-2xl bg-surface/95 p-1.5 pl-3 shadow-[0_1px_4px_rgba(0,0,0,0.35)] ${left ? 'left-3' : 'right-3'}`}
+      style={top ? { top: topPx } : { bottom: 12 }}
     >
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[16px] font-semibold">{route.destination}</div>
-        {detail && <div className="line-clamp-2 text-[14px] leading-tight text-text-dim" data-testid="map-route-detail">{detail}</div>}
+        {time && <div className="tabular text-[18px] font-bold leading-tight text-accent" data-testid="map-route-time">{time}</div>}
+        <div className="line-clamp-2 text-[13px] leading-tight text-text-dim" data-testid="map-route-detail">{detail || route.destination}</div>
       </div>
+      {line && <BarButton testId="map-route-overview" icon="map" label={t('map.routeOverview')} onClick={showRouteOverview} />}
       {/* Voice guidance: hands the trip to the Google Maps app, only when tapped. */}
       <a
         href={mapsNavigateUrl(route.destination)}
         target="_blank"
         rel="noopener"
         data-testid="map-route-navigate"
-        className="flex h-12 shrink-0 items-center gap-1 rounded-xl bg-accent px-3 text-[14px] font-semibold text-on-accent"
+        aria-label={t('map.navigateGoogle')}
+        title={t('map.navigateGoogle')}
+        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-bg"
       >
-        <Icon name="navigate" size={20} />
-        {t('map.navigate')}
+        <Icon name="external" size={22} />
       </a>
-      <button type="button" data-testid="map-route-end" aria-label={t('map.endRoute')} onClick={endRoute} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-bg">
-        <Icon name="close" size={22} />
-      </button>
+      <BarButton testId="map-route-end" icon="close" label={t('map.endRoute')} onClick={endRoute} />
     </div>
   );
 }
@@ -148,6 +165,7 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   // Controls on the driver side, unless the mini player is there.
   const onRight = avoid && intersects(colAt(driverRight), avoid) ? !driverRight : driverRight;
   const routeTop = !(avoid && avoid.y < size.h / 2);
+  const hasRoute = useMapUi((s) => !!s.route);
   const speed = kmh(pos?.speed ?? null);
 
   return (
@@ -185,12 +203,12 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
               </div>
             )}
           </div>
-          <RouteCard top={routeTop} />
+          <RouteBar top={routeTop} topPx={top} left={onRight} />
           {(notice || geoError) && (
             <div
               role="status"
               data-testid="map-notice"
-              className={`absolute bottom-3 max-w-[60%] rounded-xl bg-surface/95 px-3 py-2 text-[13px] text-text-dim ${onRight ? 'right-3' : 'left-3'}`}
+              className={`absolute max-w-[60%] rounded-xl bg-surface/95 px-3 py-2 text-[13px] text-text-dim ${onRight ? 'right-3' : 'left-3'} ${hasRoute && !routeTop ? 'bottom-[76px]' : 'bottom-3'}`}
             >
               {notice ? t(notice) : t(geoError === 'denied' ? 'map.locationOff' : 'map.locationUnavailable')}
             </div>

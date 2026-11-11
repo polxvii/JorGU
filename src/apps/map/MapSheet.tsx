@@ -10,6 +10,7 @@ import { Icon } from '../../shell/Icon';
 import { Sheet } from '../../shell/Sheet';
 import type { Rect } from '../../shell/geometry';
 import { endRoute, startRoute, useMapUi } from './mapController';
+import { mapsNavigateUrl } from './navigate';
 
 function useShowRoute() {
   const addRecent = useSettings((s) => s.addRecentDestination);
@@ -32,6 +33,23 @@ function Row({ onClick, testId, children }: { onClick: () => void; testId: strin
       className="flex min-h-14 min-w-0 flex-1 items-center gap-2 rounded-xl bg-bg px-4 text-left text-[16px] font-semibold text-text"
     >
       {children}
+    </button>
+  );
+}
+
+function AvoidChip({ what, label }: { what: 'avoidTolls' | 'avoidHighways'; label: string }) {
+  const on = useSettings((s) => s.map[what]);
+  const set = useSettings((s) => s.setMapAvoid);
+  return (
+    <button
+      type="button"
+      data-testid={what === 'avoidTolls' ? 'map-avoid-tolls' : 'map-avoid-highways'}
+      aria-pressed={on}
+      onClick={() => set(what, !on)}
+      className={`flex min-h-12 items-center gap-1 rounded-xl px-3 text-[15px] font-semibold ${on ? 'bg-accent text-on-accent' : 'bg-bg text-text'}`}
+    >
+      {on && <Icon name="close" size={18} />}
+      {label}
     </button>
   );
 }
@@ -101,15 +119,26 @@ export function MapSheet({ rect }: { rect: Rect }) {
   const recent = useSettings((s) => s.map.recentDestinations);
   const removePlace = useSettings((s) => s.removeSavedPlace);
   const route = useMapUi((s) => s.route);
+  const avoidAny = useSettings((s) => s.map.avoidTolls || s.map.avoidHighways);
   const [text, setText] = useState('');
   const dest = text.trim();
   return (
     <Sheet rect={rect} title={t('map.whereTo')} testId="map-sheet">
       <div className="flex flex-col gap-2 pt-1">
         {route && (
-          <div className="flex items-center gap-2 rounded-xl bg-bg p-2 pl-3" data-testid="map-sheet-route">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-bg p-2 pl-3" data-testid="map-sheet-route">
             <Icon name="navigate" size={22} className="shrink-0 text-accent" />
             <span className="min-w-0 flex-1 truncate text-[16px] font-semibold">{route.destination}</span>
+            <a
+              href={mapsNavigateUrl(route.destination)}
+              target="_blank"
+              rel="noopener"
+              data-testid="map-sheet-navigate"
+              className="flex min-h-12 shrink-0 items-center gap-1 rounded-xl bg-accent px-3 text-[15px] font-semibold text-on-accent"
+            >
+              <Icon name="external" size={20} />
+              {t('map.navigateGoogle')}
+            </a>
             <button type="button" data-testid="map-sheet-end" onClick={endRoute} className="min-h-12 shrink-0 rounded-xl bg-surface px-3 text-[15px] font-semibold">
               {t('map.endRoute')}
             </button>
@@ -143,7 +172,12 @@ export function MapSheet({ rect }: { rect: Rect }) {
             {t('map.showRouteBtn')}
           </button>
         </form>
+        <div className="flex flex-wrap gap-2" data-testid="map-avoid">
+          <AvoidChip what="avoidTolls" label={t('map.avoidTolls')} />
+          <AvoidChip what="avoidHighways" label={t('map.avoidHighways')} />
+        </div>
         <p className="px-1 text-[13px] text-text-dim">{t('map.handoffHint')}</p>
+        {avoidAny && <p className="px-1 text-[13px] text-text-dim">{t('map.avoidHint')}</p>}
 
         <SectionTitle>{t('map.savedPlaces')}</SectionTitle>
         <ul className="flex flex-col gap-2" data-testid="map-places">

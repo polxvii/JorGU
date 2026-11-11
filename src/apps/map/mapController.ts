@@ -127,10 +127,15 @@ function updatePosition(pos: Position | null): void {
 
 // ---------- controls ----------
 
+/** Zoom while following the car on a route: streets and the line ahead, not the whole city. */
+export const DRIVE_ZOOM = 16;
+
 export function recenter(): void {
   useSettings.getState().setMapFollow(true);
   const pos = useGeo.getState().pos;
   if (!pos) useGeo.getState().retry();
+  // Back from the whole-route view: zoom in to driving level again.
+  if (map && (useMapUi.getState().route?.path.length ?? 0) > 1 && (map.getZoom() ?? DRIVE_ZOOM) < DRIVE_ZOOM - 1) map.setZoom(DRIVE_ZOOM);
   if (map && pos) map.panTo({ lat: pos.lat, lng: pos.lng });
   const ui = useMapUi.getState();
   if (ui.mode === 'embed' || ui.route?.viaEmbed) useMapUi.setState((s) => ({ embedNonce: s.embedNonce + 1 }));
@@ -148,6 +153,7 @@ export function setTraffic(on: boolean): void {
 // ---------- route overview (§7.4): line, ETA, distance left; no turn instructions ----------
 
 const num = (v: number | (() => number)) => (typeof v === 'function' ? v() : v);
+const ROUTE_OPACITY = 0.5;
 
 function clearLine(): void {
   for (const p of polylines) p.setMap(null);
@@ -156,7 +162,7 @@ function clearLine(): void {
   destMarker = null;
 }
 
-/** Room around the route overview so the route card and the control column don't cover its ends. */
+/** Room around the whole-route view so the route bar and the control column don't cover its ends. */
 function routePadding(): number | { top: number; right: number; bottom: number; left: number } {
   const surface = el?.closest('[data-testid="map-surface"]');
   if (!el || !surface) return 64;
@@ -201,26 +207,29 @@ async function computeRoute(destination: string): Promise<void> {
       // TRAFFIC_UNAWARE keeps it in the Essentials SKU (traffic-aware is Pro).
       routingPreference: 'TRAFFIC_UNAWARE',
       fields: ['durationMillis', 'distanceMeters', 'path'],
+      // Avoid tolls / highways: plain route modifiers, still Essentials (not a Pro or Enterprise trigger).
+      routeModifiers: { avoidTolls: useSettings.getState().map.avoidTolls, avoidHighways: useSettings.getState().map.avoidHighways },
     });
     const r = routes?.[0];
     if (!r || !r.path?.length) return fallBack(destination, 'map.routeFallback');
     const current = useMapUi.getState().route;
     if (current?.destination !== destination) return;
-    // First drawing: show the whole route (the moving dot stays on it; ⌖ goes back to following the car).
-    // A recompute after leaving the route keeps the view the driver has.
+    // First drawing: follow the car at driving zoom, the line ahead on screen. A recompute after leaving the
+    // route keeps the view the driver has. The whole route is one tap away (route bar).
     const first = current.path.length === 0;
     clearLine();
-    polylines = r.createPolylines();
+    // See-through line: the Traffic layer's colours on the road show through it. A line coloured by traffic
+    // ("Traffic information on polylines") is the Enterprise route SKU: 1,000 free a month, not used.
+    polylines = r.createPolylines({ polylineOptions: (o: object) => ({ ...o, strokeOpacity: ROUTE_OPACITY }) });
     for (const p of polylines) p.setMap(map);
     const path = r.path.map((p) => ({ lat: num(p.lat), lng: num(p.lng) }));
     const pin = document.createElement('div');
     pin.className = 'jg-map-dest';
     destMarker = new libs.AdvancedMarkerElement({ map, position: path[path.length - 1], content: pin, title: destination });
     if (first) {
-      useSettings.getState().setMapFollow(false);
-      const bounds = new libs.LatLngBounds();
-      for (const p of path) bounds.extend(p);
-      map.fitBounds(bounds, routePadding());
+      useSettings.getState().setMapFollow(true);
+      map.setZoom(DRIVE_ZOOM);
+      map.panTo({ lat: pos.lat, lng: pos.lng });
     }
     set({ status: 'ready', path, distanceMeters: r.distanceMeters ?? 0, durationMillis: r.durationMillis ?? 0, computedAt: Date.now() });
   } catch {
@@ -241,6 +250,16 @@ export function startRoute(destination: string): void {
     route: { destination, status: line ? 'loading' : 'ready', path: [], distanceMeters: 0, durationMillis: 0, computedAt: 0, viaEmbed: !line, note: null },
   });
   if (line) void computeRoute(destination);
+}
+
+/** Route bar: the whole route on screen; follow pauses until ⌖. */
+export function showRouteOverview(): void {
+  const r = useMapUi.getState().route;
+  if (!map || !libs || !r || r.path.length < 2) return;
+  useSettings.getState().setMapFollow(false);
+  const bounds = new libs.LatLngBounds();
+  for (const p of r.path) bounds.extend(p);
+  map.fitBounds(bounds, routePadding());
 }
 
 /** "Refresh route": at most once a minute. */
@@ -278,6 +297,11 @@ useSettings.subscribe((s, prev) => {
   if (s.map.mode !== prev.map.mode) {
     setMode(decideMode());
     void ensureMap();
+  }
+  // Route options changed during a route: draw it again (the Embed view reloads by itself).
+  if (s.map.avoidTolls !== prev.map.avoidTolls || s.map.avoidHighways !== prev.map.avoidHighways) {
+    const r = useMapUi.getState().route;
+    if (r && !r.viaEmbed && useMapUi.getState().mode === 'js') void computeRoute(r.destination);
   }
 });
 

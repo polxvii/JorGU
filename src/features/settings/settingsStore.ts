@@ -27,6 +27,7 @@ export interface SettingsActions {
   setRouteLine: (on: boolean) => void;
   setMapFollow: (on: boolean) => void;
   setMapTraffic: (on: boolean) => void;
+  setMapAvoid: (what: 'avoidTolls' | 'avoidHighways', on: boolean) => void;
   addSavedPlace: (label: string, query: string) => void;
   removeSavedPlace: (id: string) => void;
   addRecentDestination: (destination: string) => void;
@@ -82,6 +83,7 @@ export const useSettings = create<SettingsState>()(
       setRouteLine: (routeLine) => set((s) => ({ map: { ...s.map, routeLine } })),
       setMapFollow: (follow) => set((s) => ({ map: { ...s.map, follow } })),
       setMapTraffic: (traffic) => set((s) => ({ map: { ...s.map, traffic } })),
+      setMapAvoid: (what, on) => set((s) => ({ map: { ...s.map, [what]: on } })),
       addSavedPlace: (label, query) =>
         set((s) => ({
           map: {

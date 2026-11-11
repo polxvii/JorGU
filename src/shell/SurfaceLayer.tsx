@@ -6,7 +6,7 @@ import { useSettings } from '../features/settings/settingsStore';
 import { useUi } from '../features/settings/uiStore';
 import type { AppRef, PaneIndex, SurfaceId } from '../features/settings/types';
 import { surfaceIdOf } from '../features/settings/types';
-import { MapPlaceholder } from '../apps/placeholders';
+import { MapSurface } from '../apps/map/MapSurface';
 import { WebSurface } from '../apps/web/WebSurface';
 import { YouTubeSurface } from '../apps/youtube/YouTubeSurface';
 import { L, type LayoutResult } from './computeLayout';
@@ -31,7 +31,13 @@ function surfaceStyle(rect: Rect, visible: boolean, z: number): CSSProperties {
 }
 
 const SurfaceContent = memo(function SurfaceContent({ id, layout }: { id: SurfaceId; layout: LayoutResult }) {
-  if (id === 'map') return <MapPlaceholder />;
+  if (id === 'map') {
+    const box = layout.surfaces.map;
+    const r = box?.rect ?? layout.content;
+    const m = layout.mini;
+    const avoid = m ? { x: m.handle.x - r.x, y: m.handle.y - r.y, w: m.rect.w, h: m.handle.h + m.rect.h } : null;
+    return <MapSurface size={{ w: r.w, h: r.h }} avoid={avoid} band={layout.mode === 'fullscreen' ? 0 : L.YT_BAND} />;
+  }
   if (id === 'youtube') {
     return <YouTubeSurface surface={layout.youtube.surface} player={layout.youtube.player} mode={layout.youtube.mode} />;
   }

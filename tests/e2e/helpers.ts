@@ -3,19 +3,68 @@ import { expect, type Page } from '@playwright/test';
 declare global {
   interface Window {
     __jorguFrameLoads?: Record<string, number>;
+    __mapsStub?: { maps: number; panTo: number; zoom: number; traffic: boolean; routes: number; lines: number; markers: number; fitBounds: number; mapId: string | null; lastRoute: Record<string, unknown> | null; fire: (ev: string) => void };
     __jorgu?: {
       setPlaying: (playing: boolean) => void;
       yt: () => { hasPlayer: boolean; state: number | null; time: number; duration: number; rate: number | null; iframeLoads: number; visibleRatio: number };
       seekNearEnd: (seconds?: number) => void;
       queue: () => { items: { videoId: string; title?: string; channel?: string }[]; index: number };
+      map: () => { hasMap: boolean; mode: string; lines: number };
     };
   }
 }
 
 export const SETTINGS_KEY = 'jorgu:settings';
 
-/** Clean app with optional persisted settings (zustand persist format). */
+/**
+ * Stand-in for the Maps JavaScript API (served at maps.googleapis.com/maps/api/js) and the Embed API, so no test
+ * loads real Google Maps or spends a billed event. window.__mapsStub records what the app did.
+ */
+export const MAPS_STUB_JS = `(function () {
+  var S = (window.__mapsStub = { maps: 0, panTo: 0, zoom: 15, traffic: false, routes: 0, lines: 0, markers: 0, fitBounds: 0, listeners: {}, center: null, colorScheme: null, mapId: null, lastRoute: null });
+  function GMap(el, o) { S.maps++; S.center = o.center; S.zoom = o.zoom; S.colorScheme = o.colorScheme; S.mapId = o.mapId; el.setAttribute('data-stub-map', '1'); }
+  GMap.prototype.setCenter = function (c) { S.center = c; };
+  GMap.prototype.panTo = function (c) { S.center = c; S.panTo++; };
+  GMap.prototype.setZoom = function (z) { S.zoom = z; };
+  GMap.prototype.getZoom = function () { return S.zoom; };
+  GMap.prototype.addListener = function (ev, fn) { (S.listeners[ev] = S.listeners[ev] || []).push(fn); return { remove: function () {} }; };
+  GMap.prototype.fitBounds = function () { S.fitBounds++; };
+  function Marker(o) { S.markers++; this.position = o.position; this.map = o.map; }
+  function Traffic() {}
+  Traffic.prototype.setMap = function (m) { S.traffic = !!m; };
+  function Bounds() {}
+  Bounds.prototype.extend = function () {};
+  var Route = { computeRoutes: function (req) {
+    S.routes++; S.lastRoute = req;
+    var o = req.origin;
+    return Promise.resolve({ routes: [{ durationMillis: 1200000, distanceMeters: 12000,
+      path: [{ lat: o.lat, lng: o.lng }, { lat: o.lat + 0.05, lng: o.lng + 0.05 }],
+      createPolylines: function () { return [{ setMap: function (m) { S.lines += m ? 1 : -1; } }]; } }] });
+  } };
+  var libs = { maps: { Map: GMap, TrafficLayer: Traffic }, marker: { AdvancedMarkerElement: Marker }, routes: { Route: Route },
+    core: { LatLngBounds: Bounds, ColorScheme: { LIGHT: 'LIGHT', DARK: 'DARK' } } };
+  window.google = { maps: { importLibrary: function (n) { return Promise.resolve(libs[n]); } } };
+  S.fire = function (ev) { (S.listeners[ev] || []).forEach(function (f) { f(); }); };
+  var cb = new URL(document.currentScript.src).searchParams.get('callback');
+  setTimeout(function () { if (cb && window[cb]) window[cb](); }, 0);
+})();`;
+
+const stubbed = new WeakSet<Page>();
+
+export async function stubMaps(page: Page): Promise<void> {
+  if (stubbed.has(page)) return;
+  stubbed.add(page);
+  await page.route(/^https:\/\/maps\.googleapis\.com\/maps\/api\/js/, (route) =>
+    route.fulfill({ contentType: 'application/javascript', body: MAPS_STUB_JS }),
+  );
+  await page.route(/^https:\/\/www\.google\.com\/maps\/embed\//, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>embed stub</title><p id="embed">embed stub</p>' }),
+  );
+}
+
+/** Clean app with optional persisted settings (zustand persist format). Google Maps is always stubbed. */
 export async function openApp(page: Page, settings?: Record<string, unknown>): Promise<void> {
+  await stubMaps(page);
   await page.goto('/');
   await page.evaluate(
     async ([key, s]) => {

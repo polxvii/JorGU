@@ -71,6 +71,8 @@ export interface Settings {
   layout: LayoutSettings;
   map: {
     mode: 'js' | 'embed';
+    /** Draw the route on the interactive map with the Routes API (billed). Off: the free Embed directions view. */
+    routeLine: boolean;
     follow: boolean;
     traffic: boolean;
     savedPlaces: SavedPlace[];
@@ -108,7 +110,7 @@ export function defaultSettings(): Settings {
       fullscreenPane: null,
       driverSide: 'right',
     },
-    map: { mode: 'js', follow: true, traffic: false, savedPlaces: [], recentDestinations: [] },
+    map: { mode: 'js', routeLine: false, follow: true, traffic: false, savedPlaces: [], recentDestinations: [] },
     web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280 },
     youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', playbackRate: 1, autoContinue: true },
     dockSize: 'normal',

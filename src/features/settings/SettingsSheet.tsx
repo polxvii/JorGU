@@ -9,6 +9,8 @@ import type { ThemeId } from './types';
 import { setSpeed } from '../../apps/youtube/player';
 import { SPEED_PRESETS, formatSpeed } from '../../apps/youtube/speed';
 import { AccountSection } from '../../apps/youtube/library/ConnectCard';
+import { mapsConfigured } from '../../apps/map/config';
+import { DAILY_CAP, MONTHLY_CAP, usedThisMonth, usedToday, useMapUsage } from '../../apps/map/usage';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -50,6 +52,8 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
   const t = useT();
   const s = useSettings();
   const [confirmReset, setConfirmReset] = useState(false);
+  // Re-render when the counters change.
+  useMapUsage((u) => `${u.month}${u.map}/${u.route}${u.day}${u.dayMap}/${u.dayRoute}`);
 
   return (
     <Sheet rect={rect} title={t('settings.title')} testId="settings-sheet">
@@ -201,6 +205,50 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
           ))}
         </div>
         <p className="mt-1 px-1 text-[13px] text-text-dim">{t('settings.cornerHint')}</p>
+      </Section>
+
+      <Section title={t('settings.map')}>
+        {mapsConfigured() ? (
+          <>
+            <Segmented
+              testId="setting-map-mode"
+              value={s.map.mode}
+              onChange={s.setMapMode}
+              options={[
+                { value: 'js', label: t('settings.mapJs') },
+                { value: 'embed', label: t('settings.mapEmbed') },
+              ]}
+            />
+            <div className="mt-3">
+              <Segmented
+                testId="setting-route-line"
+                value={s.map.routeLine ? 'on' : 'off'}
+                onChange={(v) => s.setRouteLine(v === 'on')}
+                options={[
+                  { value: 'off', label: t('settings.routeLineOff') },
+                  { value: 'on', label: t('settings.routeLineOn') },
+                ]}
+              />
+              <p className="mt-1 px-1 text-[13px] text-text-dim">{t('settings.routeLineHint')}</p>
+            </div>
+            <div className="mt-2 flex flex-col gap-1 rounded-xl bg-bg p-3 text-[14px]" data-testid="setting-map-usage">
+              {(['map', 'route'] as const).map((sku) => (
+                <p key={sku} data-testid={`setting-map-usage-${sku}`}>
+                  {t(sku === 'map' ? 'settings.mapQuotaMaps' : 'settings.mapQuotaRoutes', {
+                    leftMonth: (MONTHLY_CAP - usedThisMonth(sku)).toLocaleString('en-US'),
+                    usedMonth: usedThisMonth(sku).toLocaleString('en-US'),
+                    capMonth: MONTHLY_CAP.toLocaleString('en-US'),
+                    usedDay: usedToday(sku),
+                    capDay: DAILY_CAP,
+                  })}
+                </p>
+              ))}
+              <p className="text-[13px] text-text-dim">{t('settings.mapQuotaNote', { capDay: DAILY_CAP })}</p>
+            </div>
+          </>
+        ) : (
+          <p className="px-1 text-[14px] text-text-dim">{t('settings.mapNotSetUp')}</p>
+        )}
       </Section>
 
       <Section title={t('settings.dockSize')}>

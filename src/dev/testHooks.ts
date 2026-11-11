@@ -2,6 +2,7 @@
 import { useUi } from '../features/settings/uiStore';
 import { debugSeekNearEnd, debugState } from '../apps/youtube/player';
 import { useQueue } from '../apps/youtube/queueStore';
+import { debugMap } from '../apps/map/mapController';
 
 declare global {
   interface Window {
@@ -11,6 +12,7 @@ declare global {
       yt: typeof debugState;
       seekNearEnd: typeof debugSeekNearEnd;
       queue: () => ReturnType<typeof useQueue.getState>;
+      map: typeof debugMap;
     };
   }
 }
@@ -28,5 +30,6 @@ export function installTestHooks(): void {
     yt: debugState,
     seekNearEnd: debugSeekNearEnd,
     queue: () => useQueue.getState(),
+    map: debugMap,
   };
 }

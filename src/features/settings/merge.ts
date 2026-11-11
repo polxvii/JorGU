@@ -21,6 +21,8 @@ export function mergeSettings(persisted: unknown, current: Settings): Settings {
   if (!['auto', 'tl', 'tr', 'bl', 'br'].includes(merged.youtube.miniCorner)) merged.youtube.miniCorner = 'auto';
   if (!['normal', 'large', 'xlarge'].includes(merged.dockSize)) merged.dockSize = 'normal';
   if (typeof merged.youtube.autoContinue !== 'boolean') merged.youtube.autoContinue = true;
+  if (typeof merged.map.routeLine !== 'boolean') merged.map.routeLine = false;
+  if (merged.map.mode !== 'js' && merged.map.mode !== 'embed') merged.map.mode = 'js';
   return merged;
 }
 

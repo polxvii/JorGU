@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { withRecentDestination } from '../../apps/map/navigate';
 import * as W from '../../apps/web/webActions';
 import * as A from '../../shell/layoutActions';
 import { mergeSettings } from './merge';
@@ -21,6 +22,13 @@ export interface SettingsActions {
   setMiniCorner: (corner: MiniCorner) => void;
   setAutoContinue: (on: boolean) => void;
   setDockSize: (size: DockSize) => void;
+  setMapMode: (mode: Settings['map']['mode']) => void;
+  setRouteLine: (on: boolean) => void;
+  setMapFollow: (on: boolean) => void;
+  setMapTraffic: (on: boolean) => void;
+  addSavedPlace: (label: string, query: string) => void;
+  removeSavedPlace: (id: string) => void;
+  addRecentDestination: (destination: string) => void;
   setPlaybackRate: (rate: number) => void;
   assign: (pane: PaneIndex, pick: AppPick) => void;
   swap: () => void;
@@ -69,6 +77,19 @@ export const useSettings = create<SettingsState>()(
       setMiniCorner: (miniCorner) => set((s) => ({ youtube: { ...s.youtube, miniCorner } })),
       setAutoContinue: (autoContinue) => set((s) => ({ youtube: { ...s.youtube, autoContinue } })),
       setDockSize: (dockSize) => set({ dockSize }),
+      setMapMode: (mode) => set((s) => ({ map: { ...s.map, mode } })),
+      setRouteLine: (routeLine) => set((s) => ({ map: { ...s.map, routeLine } })),
+      setMapFollow: (follow) => set((s) => ({ map: { ...s.map, follow } })),
+      setMapTraffic: (traffic) => set((s) => ({ map: { ...s.map, traffic } })),
+      addSavedPlace: (label, query) =>
+        set((s) => ({
+          map: {
+            ...s.map,
+            savedPlaces: [...s.map.savedPlaces, { id: `pl-${Date.now().toString(36)}`, label: label.trim() || query.trim(), query: query.trim(), source: 'manual' }],
+          },
+        })),
+      removeSavedPlace: (id) => set((s) => ({ map: { ...s.map, savedPlaces: s.map.savedPlaces.filter((p) => p.id !== id) } })),
+      addRecentDestination: (d) => set((s) => ({ map: { ...s.map, recentDestinations: withRecentDestination(s.map.recentDestinations, d) } })),
       setPlaybackRate: (playbackRate) => set((s) => ({ youtube: { ...s.youtube, playbackRate } })),
       assign: (pane, pick) =>
         set((s) => {

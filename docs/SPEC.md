@@ -3,6 +3,18 @@
 > Version 0.5 · 2026-11-09
 > UX reference: https://duoscreen.vercel.app/ ("CarPlay Multi-Screen Dashboard")
 
+### Changes during M4 (2026-11-11)
+
+- **Loading:** Google's script URL (`maps.googleapis.com/maps/api/js?key=…&v=weekly&loading=async&callback=…&language=th|en&region=TH`), libraries via `google.maps.importLibrary` (maps, marker, routes, core). No npm loader package.
+- **One map per page load** (each `new google.maps.Map` is a billed Dynamic Maps load). Its container is created once and never moved; in mode B it is hidden, not destroyed. `colorScheme` follows night mode **at load only**: switching it later would need a new map (another load).
+- **Cost rule (§7.1) in code:** a per-device counter per Pacific day and month for map loads and route requests; at 320 a day or 9,920 a month the app uses mode B. `gm_authFailure` (key refused: referrer, API off, billing off, quota) also switches to mode B until the next Pacific day. Settings → Map: **Interactive / Simple (free)** and this month's counts.
+- **Controls** (56 px, driver side, moved to the other side when the mini player is there): Where to? · Back to my location (follow; dragging the map pauses it) · Traffic · Zoom + / −, and the speed in km/h when the device reports it. Mode B: Where to? and Recenter (reloads the Embed iframe).
+- **Where to?** sheet: destination text, saved places (add / remove), recent destinations (10). **Navigate** is a real link to `https://www.google.com/maps/dir/?api=1&destination=…&travelmode=driving&dir_action=navigate` (`target=_blank`, `rel=noopener`), plus a `comgooglemaps://?daddr=…&directionsmode=driving` link for hosts that don't hand universal links to apps.
+- **Route overview (§7.4):** by default the free Embed `directions` view over the (hidden, not destroyed) interactive map. Opt-in in Settings (billed, only after the Routes API daily cap is set): Maps JS `Route.computeRoutes` with `routingPreference: TRAFFIC_UNAWARE` (Essentials SKU; traffic-aware is Pro) and `fields: durationMillis, distanceMeters, path`; the line comes from `createPolylines()`. Distance and time left are worked out on the device from the position on the line. Recompute: Refresh (at most once a minute) or more than 200 m off the line (at most once a minute). Kept in memory only. Mode B shows Embed `directions` instead.
+- **No key in the build:** the Map pane says "Google Maps isn't set up yet"; Navigate still works (Maps URLs need no key).
+- **CSP** widened per Google's Maps JavaScript API CSP guide (allowlist variant): `script-src` adds `'unsafe-eval'`, `blob:`, `*.googleapis.com`, `*.gstatic.com`, `*.google.com`; `connect-src` the same plus `data:` `blob:`; `worker-src blob:`; fonts from `fonts.googleapis.com` / `fonts.gstatic.com`. [Verify with the real key that nothing is blocked.]
+- E2E tests serve a stub for the Maps script and the Embed page (fake key `e2e-fake-key`), so tests never load real maps or spend billed events.
+
 ### Changes after M5: user feedback (2026-11-11)
 
 - **Mini player** sits in the **bottom corner on the driver side** by default (was the passenger side). The user can move it: drag the grip on its handle to a corner (it snaps there), tap the grip to step clockwise, or pick Auto / a corner in Settings. Sheets and the full-screen floating bar move to the other side; the edge strip and divider stop short of it (§6.6).
@@ -347,9 +359,10 @@ When YouTube is playing but not assigned to a visible pane (another app is full 
 - Current position: `AdvancedMarkerElement` with a heading arrow; follow mode on by default; dragging the map pauses follow and shows "Back to my location"
 - `TrafficLayer` toggle
 - Speed readout overlaid in the corner nearest the driver
-- **Cost rule (user decision 2026-11-10, binding):** never more than **9,500 billed events per calendar month for each billed SKU** (Dynamic Maps for map loads; Routes "Compute Routes Essentials" for the route overview), below the 10,000 free. When the next event would pass 9,500, or Google refuses a load for quota, the app switches to **mode B** (Embed, no charge) until the month resets; the route overview falls back to the Embed directions view.
-  - Hard guard (can't be bypassed by a bug or a second device): in Cloud Console, cap each billed API at **306 requests/day** (306 × 31 = 9,486) [Verify the quota names and that a per-day cap exists for the Routes API; if it doesn't, the app counter is the guard and the cap goes per minute].
-  - App counter: counts its own map loads and route requests per month (Pacific time, like Google's billing) in localStorage and switches to mode B at 9,500. Per device only, which is why the hard guard exists.
+- **Cost rule (user decisions 2026-11-10 and 2026-11-11, binding): JorGu must never cost money.** At most **320 billed events a day per billed SKU** (320 x 31 = 9,920 a month, under the 10,000 free; first decided as 9,500/month, changed 2026-11-11). Originally: never more than 9,500 billed events per calendar month for each billed SKU (Dynamic Maps for map loads; Routes "Compute Routes Essentials" for the route overview), below the 10,000 free. When the next event would pass the cap, or Google refuses a load for quota, the app switches to **mode B** (Embed, no charge) until the month resets; the route overview falls back to the Embed directions view.
+  - Hard guard (can't be bypassed by a bug or a second device): in Cloud Console, cap each billed API at **320 requests/day** (320 × 31 = 9,920; 330 would allow 10,230) [Verify the quota names and that a per-day cap exists for the Routes API; if it doesn't, the app counter is the guard and the cap goes per minute].
+  - App counter: counts its own map loads and route requests per month and per day (Pacific time, like Google's billing and quota reset) in localStorage and switches to mode B at 9,920 a month or 320 a day. Per device only, which is why the hard guard exists. Settings → Map shows what's left (month) and used (today) for each.
+  - **Free by default (user 2026-11-11: "must never cost money"):** the route overview uses the free Embed directions view; the billed Routes API line is off until the user turns it on in Settings, after setting the Routes API daily cap. Google's caps are per day only (no monthly cap), so the Cloud Console cap must stay at 320/day (max safe 322): a higher daily cap (e.g. 330 or 500) could pass 10,000 in a 31-day month.
   - Budget alert at USD 1 as an early warning (alerts don't stop charges).
 
 ### 7.2 Mode B — Maps Embed API (zero-cost fallback)
@@ -742,14 +755,14 @@ Primary column: **CarPlay browser app (CarTV / AP TV) on iPhone 16 Pro Max**. Ad
 ## 18. Google Cloud setup (user does this)
 
 1. Create a Google Cloud project (one project for both YouTube and Maps)
-2. Enable **YouTube Data API v3**, **Maps JavaScript API**, **Maps Embed API**, **Routes API** (§7.4)
+2. Enable **YouTube Data API v3**, **Maps JavaScript API**, **Maps Embed API**, **Routes API** (§7.4: the Maps JS `Route` class uses it [Verify])
 3. OAuth consent screen (Google Auth Platform): External, Testing, add own Gmail as test user, add scopes from §8.1
 4. Credentials → OAuth client ID → Web application → redirect URIs:
    - `https://<app-host>/api/auth/callback` (the `workers.dev` host or the custom domain, §18a)
    - `http://localhost:5173/api/auth/callback` (local dev: Vite + Cloudflare plugin)
-5. Credentials → API key → restrict to HTTP referrers (app host + localhost) + the Maps APIs above → put in `VITE_GOOGLE_MAPS_API_KEY`
+5. Credentials → API key → restrict to websites (`https://jorgu.pv-proj.workers.dev/*`, `http://localhost:5173/*`, `http://localhost:4173/*`) and to Maps JavaScript API + Maps Embed API + Routes API → put in `VITE_GOOGLE_MAPS_API_KEY` (a Workers Builds **build variable**: it ends up in the page, which is normal for a browser key; the referrer restriction protects it)
 6. Google Maps Platform → Map management → create a Map ID (JavaScript, vector) → `VITE_GOOGLE_MAP_ID`
-7. Billing: link a billing account [Verify requirement], set a budget alert, cap map loads (§7.1)
+7. Billing: link a billing account [Verify requirement], set a budget alert (USD 1), cap each billed API at 320 requests/day in Quotas (§7.1 cost rule)
 8. Worker secrets via `npx wrangler secret put <NAME>`; local secrets in `.dev.vars`; `VITE_*` values in `.env.local` locally and as Workers Builds build variables. `.dev.vars` and `.env.local` are git-ignored.
 
 ## 18a. Cloudflare + GitHub setup (user does this)
@@ -765,7 +778,7 @@ Primary column: **CarPlay browser app (CarTV / AP TV) on iPhone 16 Pro Max**. Ad
 1. ~~Main device?~~ **Decided 2026-11-09:** iPhone 16 Pro Max via a CarPlay browser app (§3.10). Host app: **CarTV**. Still open: the car's CarPlay screen resolution (M0 probe measures it). Hosting: `https://jorgu.pv-proj.workers.dev` (free `workers.dev` name, no own domain for now).
 2. Reconnect YouTube every 7 days (Testing), or try publishing unverified?
 3. If on Premium Lite and mostly playing music: ads on music remain (§3.2)
-4. ~~Enable billing for Maps JavaScript API (10,000 free loads/month), or use the free Embed mode only?~~ **Decided 2026-11-10:** mode A with billing, under the hard rule in §7.1 (never more than 9,500 billed events a month per SKU; past that, mode B).
+4. ~~Enable billing for Maps JavaScript API (10,000 free loads/month), or use the free Embed mode only?~~ **Decided 2026-11-10:** mode A with billing, under the hard rule in §7.1 (now 320 billed events a day per SKU = at most 9,920 a month; past that, mode B).
 5. Import Google Maps saved places from a Google Takeout export into JorGu's saved places? (Google has no API for them outside the EEA/CH/UK.)
 6. **Parked (user, 2026-11-10):** a "Later" list inside JorGu (stored on the device; save from library, search, Trending), because the Data API returns Watch Later empty since 2016 (§3.3). Until then: save videos to an own YouTube playlist, which shows in the Playlists tab.
 7. **Parked:** discovery beyond subscriptions ("saved topics" / "creator picks"); only if asked.

@@ -3,6 +3,7 @@ import { SettingsSheet } from '../features/settings/SettingsSheet';
 import { LibrarySheet } from '../apps/youtube/library/LibrarySheet';
 import { QueueSheet } from '../apps/youtube/QueueSheet';
 import { WebSheet } from '../apps/web/WebSheet';
+import { MapSheet } from '../apps/map/MapSheet';
 import { Toasts } from './Toasts';
 import { AppPicker } from './AppPicker';
 import { Banners } from './Banners';
@@ -29,6 +30,7 @@ export function ChromeLayer({ layout }: { layout: LayoutResult }) {
       {sheet && layout.sheet && sheet.kind === 'library' && <LibrarySheet rect={layout.sheet} />}
       {sheet && layout.sheet && sheet.kind === 'queue' && <QueueSheet rect={layout.sheet} />}
       {sheet && layout.sheet && sheet.kind === 'web' && <WebSheet rect={layout.sheet} pane={sheet.pane} />}
+      {sheet && layout.sheet && sheet.kind === 'map' && <MapSheet rect={layout.sheet} />}
       {layout.toast && <Toasts rect={layout.toast} />}
     </div>
   );

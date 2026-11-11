@@ -9,7 +9,8 @@ export type SheetState =
   | { kind: 'settings' }
   | { kind: 'library'; tab?: LibraryTab }
   | { kind: 'queue' }
-  | { kind: 'web'; pane: PaneIndex };
+  | { kind: 'web'; pane: PaneIndex }
+  | { kind: 'map' };
 
 export type LibraryTab = 'paste' | 'recent' | 'feed' | 'playlists' | 'trending' | 'search';
 

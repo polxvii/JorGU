@@ -30,9 +30,16 @@ interface MapUi {
   route: RouteState | null;
   /** Bumped to reload the Embed iframe at the current position (mode B "Recenter"). */
   embedNonce: number;
+  /** During a free (Embed) route: show the live map with traffic instead of the route view. Both free. */
+  liveDuringRoute: boolean;
 }
 
-export const useMapUi = create<MapUi>()(() => ({ mode: 'none', notice: null, ready: false, route: null, embedNonce: 0 }));
+export const useMapUi = create<MapUi>()(() => ({ mode: 'none', notice: null, ready: false, route: null, embedNonce: 0, liveDuringRoute: false }));
+
+/** Route card switch: Route (free Embed directions) <-> live map + traffic (the one interactive map, no new load). */
+export function toggleLiveDuringRoute(): void {
+  useMapUi.setState((s) => ({ liveDuringRoute: !s.liveDuringRoute }));
+}
 
 let el: HTMLElement | null = null;
 let libs: MapsLibs | null = null;
@@ -190,6 +197,7 @@ export function startRoute(destination: string): void {
   const line = useMapUi.getState().mode === 'js' && useSettings.getState().map.routeLine;
   useMapUi.setState({
     route: { destination, status: line ? 'loading' : 'ready', path: [], distanceMeters: 0, durationMillis: 0, computedAt: 0, viaEmbed: !line },
+    liveDuringRoute: false,
   });
   if (line) void computeRoute(destination);
 }
@@ -204,7 +212,7 @@ export function refreshRoute(): void {
 
 export function endRoute(): void {
   clearLine();
-  useMapUi.setState({ route: null });
+  useMapUi.setState({ route: null, liveDuringRoute: false });
 }
 
 /** > 200 m off the line: recompute, at most once a minute (§7.4). */

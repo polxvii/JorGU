@@ -40,10 +40,13 @@ test('follow, recenter, traffic, zoom', async ({ page }) => {
   await expect(page.getByTestId('map-recenter')).toHaveAttribute('aria-pressed', 'false');
   await page.getByTestId('map-recenter').click();
   await expect(page.getByTestId('map-recenter')).toHaveAttribute('aria-pressed', 'true');
-  await page.getByTestId('map-traffic').click();
-  expect((await stub(page)).traffic).toBe(true);
+  // Traffic is on by default (user request); the button turns it off and on again.
+  await expect.poll(async () => (await stub(page)).traffic).toBe(true);
+  await expect(page.getByTestId('map-traffic')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('map-traffic').click();
   expect((await stub(page)).traffic).toBe(false);
+  await page.getByTestId('map-traffic').click();
+  expect((await stub(page)).traffic).toBe(true);
   await page.getByTestId('map-zoom-in').click();
   expect((await stub(page)).zoom).toBe(16);
 });
@@ -62,6 +65,13 @@ test('Navigate (default): Google Maps gets the destination; the route shows in t
   const s = await stub(page);
   expect(s.routes).toBe(0);
   expect(s.maps).toBe(1);
+  // Switch to the live map with traffic (same map, no new load) and back.
+  await page.getByTestId('map-route-live').click();
+  await expect(page.getByTestId('map-embed')).toHaveCount(0);
+  await expect(page.getByTestId('map-traffic')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('map-route-live').click();
+  await expect(page.getByTestId('map-embed')).toBeVisible();
+  expect((await stub(page)).maps).toBe(1);
   await page.getByTestId('map-route-end').click();
   await expect(page.getByTestId('map-embed')).toHaveCount(0);
 });

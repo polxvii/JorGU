@@ -282,6 +282,8 @@ export const en = {
   'settings.mapQuotaMaps': 'Map loads: {leftMonth} left this month ({usedMonth} / {capMonth}) · today {usedDay} / {capDay}',
   'settings.mapQuotaRoutes': 'Route lines: {leftMonth} left this month ({usedMonth} / {capMonth}) · today {usedDay} / {capDay}',
   'settings.mapQuotaNote': "Counted on this device. At either limit JorGu switches to the free simple map. Google's own daily cap ({capDay}) protects every device.",
+  'map.showLive': 'Traffic',
+  'map.showRoute': 'Route',
 } as const;
 
 export type MessageKey = keyof typeof en;

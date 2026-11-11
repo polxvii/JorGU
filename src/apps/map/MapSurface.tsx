@@ -8,7 +8,7 @@ import { Icon, type IconName } from '../../shell/Icon';
 import { type Rect, intersects } from '../../shell/geometry';
 import { DEFAULT_CENTER, MAPS_KEY } from './config';
 import { kmh, useGeo } from './geo';
-import { attachMap, endRoute, recenter, refreshRoute, setTraffic, useMapUi, zoomBy } from './mapController';
+import { attachMap, endRoute, recenter, refreshRoute, setTraffic, toggleLiveDuringRoute, useMapUi, zoomBy } from './mapController';
 import { progress } from './routeMath';
 
 const BTN = 56;
@@ -64,6 +64,7 @@ function RouteCard({ top }: { top: boolean }) {
   const t = useT();
   const route = useMapUi((s) => s.route);
   const mode = useMapUi((s) => s.mode);
+  const live = useMapUi((s) => s.liveDuringRoute);
   const pos = useGeo((s) => s.pos);
   if (!route) return null;
   let detail = '';
@@ -87,6 +88,18 @@ function RouteCard({ top }: { top: boolean }) {
         <div className="truncate text-[16px] font-semibold">{route.destination}</div>
         {detail && <div className="truncate text-[14px] text-text-dim" data-testid="map-route-detail">{detail}</div>}
       </div>
+      {mode === 'js' && route.viaEmbed && (
+        <button
+          type="button"
+          data-testid="map-route-live"
+          aria-pressed={live}
+          onClick={toggleLiveDuringRoute}
+          className="flex h-12 shrink-0 items-center gap-1 rounded-xl bg-bg px-2 text-[13px] font-semibold"
+        >
+          <Icon name={live ? 'navigate' : 'traffic'} size={20} />
+          {t(live ? 'map.showRoute' : 'map.showLive')}
+        </button>
+      )}
       {mode === 'js' && !route.viaEmbed && (
         <button type="button" data-testid="map-route-refresh" aria-label={t('map.refreshRoute')} onClick={refreshRoute} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-bg">
           <Icon name="refresh" size={22} />
@@ -122,7 +135,8 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   const t = useT();
   const mode = useMapUi((s) => s.mode);
   const notice = useMapUi((s) => s.notice);
-  const embedRoute = useMapUi((s) => !!s.route?.viaEmbed);
+  // A free (Embed) route covers the interactive map, unless the user switched to the live map + traffic.
+  const embedRoute = useMapUi((s) => !!s.route?.viaEmbed && !s.liveDuringRoute);
   const follow = useSettings((s) => s.map.follow);
   const trafficOn = useSettings((s) => s.map.traffic);
   const driverRight = useSettings((s) => s.layout.driverSide) === 'right';

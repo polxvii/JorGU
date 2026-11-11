@@ -285,4 +285,6 @@ export const th: Partial<Record<MessageKey, string>> = {
   'settings.mapQuotaMaps': 'โหลดแผนที่: เหลือ {leftMonth} ครั้งเดือนนี้ (ใช้ {usedMonth} / {capMonth}) · วันนี้ {usedDay} / {capDay}',
   'settings.mapQuotaRoutes': 'เส้นทางบนแผนที่: เหลือ {leftMonth} ครั้งเดือนนี้ (ใช้ {usedMonth} / {capMonth}) · วันนี้ {usedDay} / {capDay}',
   'settings.mapQuotaNote': 'นับเฉพาะเครื่องนี้ ครบเพดานไหนก็ตาม JorGu จะสลับเป็นแผนที่ธรรมดา (ฟรี) เพดานรายวันของ Google ({capDay}) ป้องกันทุกเครื่องอีกชั้น',
+  'map.showLive': 'การจราจร',
+  'map.showRoute': 'เส้นทาง',
 };

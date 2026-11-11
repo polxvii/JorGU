@@ -110,7 +110,7 @@ export function defaultSettings(): Settings {
       fullscreenPane: null,
       driverSide: 'right',
     },
-    map: { mode: 'js', routeLine: false, follow: true, traffic: false, savedPlaces: [], recentDestinations: [] },
+    map: { mode: 'js', routeLine: false, follow: true, traffic: true, savedPlaces: [], recentDestinations: [] },
     web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280 },
     youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', playbackRate: 1, autoContinue: true },
     dockSize: 'normal',

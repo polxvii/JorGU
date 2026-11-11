@@ -10,7 +10,8 @@ import type {
 import { defaultSettings } from './types';
 
 export const SETTINGS_KEY = 'jorgu:settings';
-export const SETTINGS_VERSION = 1;
+/** 2: traffic on by default (user request 2026-11-11). */
+export const SETTINGS_VERSION = 2;
 
 export interface SettingsActions {
   setLanguage: (language: Language) => void;
@@ -126,7 +127,12 @@ export const useSettings = create<SettingsState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: settingsOnly,
       merge: (persisted, current) => ({ ...current, ...mergeSettings(persisted, settingsOnly(current)) }),
-      migrate: (persisted) => persisted as Settings,
+      migrate: (persisted, version) => {
+        const s = (persisted ?? {}) as Partial<Settings>;
+        // v1 saved traffic: false only because it was the default; the user asked to see traffic.
+        if (version < 2 && s.map) return { ...s, map: { ...s.map, traffic: true } } as Settings;
+        return s as Settings;
+      },
     },
   ),
 );

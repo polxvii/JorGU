@@ -23,13 +23,14 @@ import type { CategoryItem, VideoItem } from '../../../../shared/ytTypes';
 
 export const YOUTUBE_SITE = 'https://www.youtube.com/';
 
+/** Order chosen by the user (2026-11-11). */
 const TABS: { id: LibraryTab; label: MessageKey }[] = [
-  { id: 'paste', label: 'library.tab.paste' },
-  { id: 'recent', label: 'library.tab.recent' },
   { id: 'feed', label: 'library.tab.feed' },
   { id: 'playlists', label: 'library.tab.playlists' },
-  { id: 'search', label: 'library.tab.search' },
   { id: 'trending', label: 'library.tab.trending' },
+  { id: 'recent', label: 'library.tab.recent' },
+  { id: 'search', label: 'library.tab.search' },
+  { id: 'paste', label: 'library.tab.paste' },
 ];
 
 /** Music first: the owner listens more than watches. Other categories keep YouTube's order. */
@@ -142,9 +143,10 @@ function Panel({ tab }: { tab: LibraryTab }) {
 
 export function LibrarySheet({ rect }: { rect: Rect }) {
   const t = useT();
-  const tab = useUi((s) => s.libraryTab) ?? 'paste';
   const setTab = useUi((s) => s.setLibraryTab);
   const status = useAccount((s) => s.status);
+  // First open: New when connected, else Link (works without an account). After that, the last tab used.
+  const tab = useUi((s) => s.libraryTab) ?? (status === 'connected' ? 'feed' : 'paste');
   const expired = useAccount((s) => s.expired);
   // Scroll only the tab row (scrollIntoView could also scroll the page).
   const activeRef = useCallback((el: HTMLButtonElement | null) => {

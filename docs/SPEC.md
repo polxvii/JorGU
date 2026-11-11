@@ -754,13 +754,15 @@ Primary column: **CarPlay browser app (CarTV / AP TV) on iPhone 16 Pro Max**. Ad
 
 ## 18. Google Cloud setup (user does this)
 
+Maps part step by step, in Thai: `docs/setup-google-maps-th.md` (quota cap first, key last).
+
 1. Create a Google Cloud project (one project for both YouTube and Maps)
 2. Enable **YouTube Data API v3**, **Maps JavaScript API**, **Maps Embed API**, **Routes API** (§7.4: the Maps JS `Route` class uses it [Verify])
 3. OAuth consent screen (Google Auth Platform): External, Testing, add own Gmail as test user, add scopes from §8.1
 4. Credentials → OAuth client ID → Web application → redirect URIs:
    - `https://<app-host>/api/auth/callback` (the `workers.dev` host or the custom domain, §18a)
    - `http://localhost:5173/api/auth/callback` (local dev: Vite + Cloudflare plugin)
-5. Credentials → API key → restrict to websites (`https://jorgu.pv-proj.workers.dev/*`, `http://localhost:5173/*`, `http://localhost:4173/*`) and to Maps JavaScript API + Maps Embed API + Routes API → put in `VITE_GOOGLE_MAPS_API_KEY` (a Workers Builds **build variable**: it ends up in the page, which is normal for a browser key; the referrer restriction protects it)
+5. Credentials → API key → restrict to websites (`https://jorgu.pv-proj.workers.dev/*`, `http://localhost:5173/*`; not 4173: preview/E2E use a fake key) and to Maps JavaScript API + Maps Embed API + Routes API → put in `VITE_GOOGLE_MAPS_API_KEY` (a Workers Builds **build variable**: it ends up in the page, which is normal for a browser key; the referrer restriction protects it)
 6. Google Maps Platform → Map management → create a Map ID (JavaScript, vector) → `VITE_GOOGLE_MAP_ID`
 7. Billing: link a billing account [Verify requirement], set a budget alert (USD 1), cap each billed API at 320 requests/day in Quotas (§7.1 cost rule)
 8. Worker secrets via `npx wrangler secret put <NAME>`; local secrets in `.dev.vars`; `VITE_*` values in `.env.local` locally and as Workers Builds build variables. `.dev.vars` and `.env.local` are git-ignored.

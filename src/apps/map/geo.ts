@@ -18,7 +18,11 @@ interface GeoState {
   error: 'denied' | 'unavailable' | null;
   watching: boolean;
   start: () => void;
+  /** Ask once more (from a tap, so a browser that allows it can show its permission prompt again). */
+  retry: () => void;
 }
+
+const OPTIONS: PositionOptions = { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 };
 
 export const useGeo = create<GeoState>()((set, get) => ({
   pos: null,
@@ -31,23 +35,33 @@ export const useGeo = create<GeoState>()((set, get) => ({
       return;
     }
     set({ watching: true });
-    navigator.geolocation.watchPosition(
-      (p) =>
-        set({
-          error: null,
-          pos: {
-            lat: p.coords.latitude,
-            lng: p.coords.longitude,
-            speed: p.coords.speed,
-            heading: p.coords.heading,
-            accuracy: p.coords.accuracy,
-            at: p.timestamp,
-          },
-        }),
-      (e) => set({ error: e.code === e.PERMISSION_DENIED ? 'denied' : 'unavailable' }),
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 },
-    );
+    navigator.geolocation.watchPosition(onPos, onErr, OPTIONS);
+  },
+  retry: () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    if (!get().watching) get().start();
+    navigator.geolocation.getCurrentPosition(onPos, onErr, OPTIONS);
   },
 }));
+
+function onPos(p: GeolocationPosition): void {
+  useGeo.setState({
+    error: null,
+    pos: {
+      lat: p.coords.latitude,
+      lng: p.coords.longitude,
+      speed: p.coords.speed,
+      heading: p.coords.heading,
+      accuracy: p.coords.accuracy,
+      at: p.timestamp,
+    },
+  });
+}
+
+function onErr(e: GeolocationPositionError): void {
+  // A timeout while a fix already exists isn't worth a message.
+  if (e.code === e.TIMEOUT && useGeo.getState().pos) return;
+  useGeo.setState({ error: e.code === e.PERMISSION_DENIED ? 'denied' : 'unavailable' });
+}
 
 export const kmh = (mps: number | null): number | null => (mps === null || mps < 0 ? null : Math.round(mps * 3.6));

@@ -3,7 +3,7 @@ import { expect, type Page } from '@playwright/test';
 declare global {
   interface Window {
     __jorguFrameLoads?: Record<string, number>;
-    __mapsStub?: { maps: number; panTo: number; zoom: number; traffic: boolean; routes: number; lines: number; markers: number; fitBounds: number; mapId: string | null; lastRoute: Record<string, unknown> | null; fire: (ev: string) => void };
+    __mapsStub?: { maps: number; panTo: number; zoom: number; traffic: boolean; routes: number; lines: number; markers: number; pins: number; fitBounds: number; failRoutes: boolean; mapId: string | null; lastRoute: Record<string, unknown> | null; fire: (ev: string) => void };
     __jorgu?: {
       setPlaying: (playing: boolean) => void;
       yt: () => { hasPlayer: boolean; state: number | null; time: number; duration: number; rate: number | null; iframeLoads: number; visibleRatio: number };
@@ -15,13 +15,15 @@ declare global {
 }
 
 export const SETTINGS_KEY = 'jorgu:settings';
+/** = SETTINGS_VERSION in src/features/settings/settingsStore.ts. */
+export const SEED_SETTINGS_VERSION = 3;
 
 /**
  * Stand-in for the Maps JavaScript API (served at maps.googleapis.com/maps/api/js) and the Embed API, so no test
  * loads real Google Maps or spends a billed event. window.__mapsStub records what the app did.
  */
 export const MAPS_STUB_JS = `(function () {
-  var S = (window.__mapsStub = { maps: 0, panTo: 0, zoom: 15, traffic: false, routes: 0, lines: 0, markers: 0, fitBounds: 0, listeners: {}, center: null, colorScheme: null, mapId: null, lastRoute: null });
+  var S = (window.__mapsStub = { maps: 0, panTo: 0, zoom: 15, traffic: false, routes: 0, lines: 0, markers: 0, pins: 0, fitBounds: 0, failRoutes: false, listeners: {}, center: null, colorScheme: null, mapId: null, lastRoute: null });
   function GMap(el, o) { S.maps++; S.center = o.center; S.zoom = o.zoom; S.colorScheme = o.colorScheme; S.mapId = o.mapId; el.setAttribute('data-stub-map', '1'); }
   GMap.prototype.setCenter = function (c) { S.center = c; };
   GMap.prototype.panTo = function (c) { S.center = c; S.panTo++; };
@@ -29,13 +31,19 @@ export const MAPS_STUB_JS = `(function () {
   GMap.prototype.getZoom = function () { return S.zoom; };
   GMap.prototype.addListener = function (ev, fn) { (S.listeners[ev] = S.listeners[ev] || []).push(fn); return { remove: function () {} }; };
   GMap.prototype.fitBounds = function () { S.fitBounds++; };
-  function Marker(o) { S.markers++; this.position = o.position; this.map = o.map; }
+  // pins = destination pins currently on the map.
+  function Marker(o) { S.markers++; this._pin = !!(o.content && o.content.className === 'jg-map-dest'); this.position = o.position; this.map = o.map; }
+  Object.defineProperty(Marker.prototype, 'map', {
+    get: function () { return this._map || null; },
+    set: function (m) { if (this._pin) S.pins += (m ? 1 : 0) - (this._map ? 1 : 0); this._map = m; },
+  });
   function Traffic() {}
   Traffic.prototype.setMap = function (m) { S.traffic = !!m; };
   function Bounds() {}
   Bounds.prototype.extend = function () {};
   var Route = { computeRoutes: function (req) {
     S.routes++; S.lastRoute = req;
+    if (S.failRoutes) return Promise.reject(new Error('Routes API not allowed'));
     var o = req.origin;
     return Promise.resolve({ routes: [{ durationMillis: 1200000, distanceMeters: 12000,
       path: [{ lat: o.lat, lng: o.lng }, { lat: o.lat + 0.05, lng: o.lng + 0.05 }],
@@ -67,7 +75,7 @@ export async function openApp(page: Page, settings?: Record<string, unknown>): P
   await stubMaps(page);
   await page.goto('/');
   await page.evaluate(
-    async ([key, s]) => {
+    async ([key, s, v]) => {
       for (const db of ['jorgu-cache', 'jorgu-web']) {
         await new Promise((done) => {
           const req = indexedDB.deleteDatabase(db);
@@ -76,9 +84,10 @@ export async function openApp(page: Page, settings?: Record<string, unknown>): P
       }
       localStorage.clear();
       localStorage.setItem('jorgu:e2e', '1');
-      if (s) localStorage.setItem(key as string, JSON.stringify({ state: s, version: 1 }));
+      // Seeded as the current settings version, so migrations don't rewrite what a test asks for.
+      if (s) localStorage.setItem(key as string, JSON.stringify({ state: s, version: v }));
     },
-    [SETTINGS_KEY, settings ?? null] as const,
+    [SETTINGS_KEY, settings ?? null, SEED_SETTINGS_VERSION] as const,
   );
   await page.reload();
   // The YouTube surface only mounts once it has a pane or plays; the surface layer is always there.

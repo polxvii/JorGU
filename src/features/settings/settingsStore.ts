@@ -10,8 +10,8 @@ import type {
 import { defaultSettings } from './types';
 
 export const SETTINGS_KEY = 'jorgu:settings';
-/** 2: traffic on by default (user request 2026-11-11). */
-export const SETTINGS_VERSION = 2;
+/** 2: traffic on by default; 3: route on the live map by default (user requests 2026-11-11). */
+export const SETTINGS_VERSION = 3;
 
 export interface SettingsActions {
   setLanguage: (language: Language) => void;
@@ -130,8 +130,11 @@ export const useSettings = create<SettingsState>()(
       migrate: (persisted, version) => {
         const s = (persisted ?? {}) as Partial<Settings>;
         // v1 saved traffic: false only because it was the default; the user asked to see traffic.
-        if (version < 2 && s.map) return { ...s, map: { ...s.map, traffic: true } } as Settings;
-        return s as Settings;
+        if (!s.map) return s as Settings;
+        const map = { ...s.map };
+        if (version < 2) map.traffic = true;
+        if (version < 3) map.routeLine = true;
+        return { ...s, map } as Settings;
       },
     },
   ),

@@ -19,8 +19,10 @@ export interface RouteState {
   distanceMeters: number;
   durationMillis: number;
   computedAt: number;
-  /** Shown with the free Embed directions view (mode B, or the route line is off). */
+  /** Shown with the free Embed directions view (mode B, the route line is off, or it couldn't be drawn). */
   viaEmbed: boolean;
+  /** Why the free view is used instead of the live line. */
+  note: MessageKey | null;
 }
 
 interface MapUi {
@@ -30,16 +32,9 @@ interface MapUi {
   route: RouteState | null;
   /** Bumped to reload the Embed iframe at the current position (mode B "Recenter"). */
   embedNonce: number;
-  /** During a free (Embed) route: show the live map with traffic instead of the route view. Both free. */
-  liveDuringRoute: boolean;
 }
 
-export const useMapUi = create<MapUi>()(() => ({ mode: 'none', notice: null, ready: false, route: null, embedNonce: 0, liveDuringRoute: false }));
-
-/** Route card switch: Route (free Embed directions) <-> live map + traffic (the one interactive map, no new load). */
-export function toggleLiveDuringRoute(): void {
-  useMapUi.setState((s) => ({ liveDuringRoute: !s.liveDuringRoute }));
-}
+export const useMapUi = create<MapUi>()(() => ({ mode: 'none', notice: null, ready: false, route: null, embedNonce: 0 }));
 
 let el: HTMLElement | null = null;
 let libs: MapsLibs | null = null;
@@ -49,6 +44,7 @@ let marker: GMarker | null = null;
 let markerDot: HTMLElement | null = null;
 let traffic: GLayer | null = null;
 let polylines: GPolyline[] = [];
+let destMarker: GMarker | null = null;
 
 /** Which map to show now: none without a key; Embed if chosen in Settings, or when the cost rule stops mode A. */
 export function decideMode(): MapMode {
@@ -123,6 +119,9 @@ function updatePosition(pos: Position | null): void {
     if (markerDot) markerDot.style.setProperty('--jg-heading', `${pos.heading ?? 0}deg`);
     if (useSettings.getState().map.follow) map.panTo(here);
   }
+  // A route waiting for the first position starts now.
+  const r = useMapUi.getState().route;
+  if (r?.status === 'needsLocation') void computeRoute(r.destination);
   checkRoute(pos);
 }
 
@@ -131,6 +130,7 @@ function updatePosition(pos: Position | null): void {
 export function recenter(): void {
   useSettings.getState().setMapFollow(true);
   const pos = useGeo.getState().pos;
+  if (!pos) useGeo.getState().retry();
   if (map && pos) map.panTo({ lat: pos.lat, lng: pos.lng });
   const ui = useMapUi.getState();
   if (ui.mode === 'embed' || ui.route?.viaEmbed) useMapUi.setState((s) => ({ embedNonce: s.embedNonce + 1 }));
@@ -152,6 +152,15 @@ const num = (v: number | (() => number)) => (typeof v === 'function' ? v() : v);
 function clearLine(): void {
   for (const p of polylines) p.setMap(null);
   polylines = [];
+  if (destMarker) destMarker.map = null;
+  destMarker = null;
+}
+
+/** The live line can't be drawn: show the route in the free Embed view instead, and say why. */
+function fallBack(destination: string, note: MessageKey): void {
+  useMapUi.setState((s) =>
+    s.route?.destination === destination ? { route: { ...s.route, status: 'ready', viaEmbed: true, note } } : s,
+  );
 }
 
 async function computeRoute(destination: string): Promise<void> {
@@ -159,8 +168,8 @@ async function computeRoute(destination: string): Promise<void> {
   const set = (patch: Partial<RouteState>) =>
     useMapUi.setState((s) => (s.route?.destination === destination ? { route: { ...s.route, ...patch } } : s));
   if (!pos) return set({ status: 'needsLocation' });
-  if (!canSpend('route')) return set({ status: 'capped' });
-  if (!libs || !map) return set({ status: 'error' });
+  if (!canSpend('route')) return fallBack(destination, 'map.routeCapped');
+  if (!libs || !map) return fallBack(destination, 'map.routeFallback');
   useMapUsage.getState().record('route');
   set({ status: 'loading', computedAt: Date.now() });
   try {
@@ -173,31 +182,42 @@ async function computeRoute(destination: string): Promise<void> {
       fields: ['durationMillis', 'distanceMeters', 'path'],
     });
     const r = routes?.[0];
-    if (!r || !r.path?.length) return set({ status: 'error' });
-    if (useMapUi.getState().route?.destination !== destination) return;
+    if (!r || !r.path?.length) return fallBack(destination, 'map.routeFallback');
+    const current = useMapUi.getState().route;
+    if (current?.destination !== destination) return;
+    // First drawing: show the whole route (the moving dot stays on it; ⌖ goes back to following the car).
+    // A recompute after leaving the route keeps the view the driver has.
+    const first = current.path.length === 0;
     clearLine();
     polylines = r.createPolylines();
     for (const p of polylines) p.setMap(map);
     const path = r.path.map((p) => ({ lat: num(p.lat), lng: num(p.lng) }));
-    const bounds = new libs.LatLngBounds();
-    for (const p of path) bounds.extend(p);
-    map.fitBounds(bounds, 48);
+    const pin = document.createElement('div');
+    pin.className = 'jg-map-dest';
+    destMarker = new libs.AdvancedMarkerElement({ map, position: path[path.length - 1], content: pin, title: destination });
+    if (first) {
+      useSettings.getState().setMapFollow(false);
+      const bounds = new libs.LatLngBounds();
+      for (const p of path) bounds.extend(p);
+      map.fitBounds(bounds, 64);
+    }
     set({ status: 'ready', path, distanceMeters: r.distanceMeters ?? 0, durationMillis: r.durationMillis ?? 0, computedAt: Date.now() });
   } catch {
-    set({ status: 'error' });
+    // e.g. Routes API not allowed for this key: still show Google's route, in the free view.
+    fallBack(destination, 'map.routeFallback');
   }
 }
 
 /**
- * Navigate tapped: show the route overview. Default: the free Embed directions view (no billed SKU). The line on
- * the interactive map (Routes API, billed) only when switched on in Settings, after its daily cap is set.
+ * "Show route": the route on the live map (position, traffic) with the Routes API — capped at 320 a day like map
+ * loads. The free Embed directions view is used in mode B, when the route line is off in Settings, or as fallback.
+ * Opening Google Maps for guidance is a separate button (route card).
  */
 export function startRoute(destination: string): void {
   clearLine();
   const line = useMapUi.getState().mode === 'js' && useSettings.getState().map.routeLine;
   useMapUi.setState({
-    route: { destination, status: line ? 'loading' : 'ready', path: [], distanceMeters: 0, durationMillis: 0, computedAt: 0, viaEmbed: !line },
-    liveDuringRoute: false,
+    route: { destination, status: line ? 'loading' : 'ready', path: [], distanceMeters: 0, durationMillis: 0, computedAt: 0, viaEmbed: !line, note: null },
   });
   if (line) void computeRoute(destination);
 }
@@ -212,7 +232,7 @@ export function refreshRoute(): void {
 
 export function endRoute(): void {
   clearLine();
-  useMapUi.setState({ route: null, liveDuringRoute: false });
+  useMapUi.setState({ route: null });
 }
 
 /** > 200 m off the line: recompute, at most once a minute (§7.4). */

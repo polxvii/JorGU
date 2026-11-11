@@ -1,6 +1,7 @@
-// "Where to?" (spec §7.3): type a destination or pick a saved place / recent one. Navigate hands the trip to the
-// Google Maps app (voice guidance there) and starts the route overview here (§7.4). Plain text is passed to
-// Google Maps, which resolves it: no Places Autocomplete (an extra billed SKU).
+// "Where to?" (spec §7.3): type a destination or pick a saved place / recent one. "Show route" stays in JorGu:
+// the route is drawn on the live map (§7.4). Handing the trip to the Google Maps app (voice guidance) is a separate,
+// explicit button on the route card (user request 2026-11-11: searching must not jump to Google Maps).
+// Plain text is passed on as is: no Places Autocomplete (an extra billed SKU).
 import { type ReactNode, useState } from 'react';
 import { useSettings } from '../../features/settings/settingsStore';
 import { useUi } from '../../features/settings/uiStore';
@@ -9,41 +10,29 @@ import { Icon } from '../../shell/Icon';
 import { Sheet } from '../../shell/Sheet';
 import type { Rect } from '../../shell/geometry';
 import { endRoute, startRoute, useMapUi } from './mapController';
-import { mapsAppSchemeUrl, mapsNavigateUrl } from './navigate';
 
-function useGo() {
+function useShowRoute() {
   const addRecent = useSettings((s) => s.addRecentDestination);
   const close = useUi((s) => s.closeSheet);
   return (destination: string) => {
-    addRecent(destination);
-    startRoute(destination);
+    const d = destination.trim();
+    if (!d) return;
+    addRecent(d);
+    startRoute(d);
     close();
   };
 }
 
-/** A real link (most reliable way to hand off to the Maps app from a tap); the route overview starts on the same tap. */
-function NavigateLink({ destination, testId, children, primary, row }: {
-  destination: string;
-  testId: string;
-  children: ReactNode;
-  primary?: boolean;
-  /** Full-width list row instead of a button. */
-  row?: boolean;
-}) {
-  const go = useGo();
+function Row({ onClick, testId, children }: { onClick: () => void; testId: string; children: ReactNode }) {
   return (
-    <a
-      href={mapsNavigateUrl(destination)}
-      target="_blank"
-      rel="noopener"
+    <button
+      type="button"
       data-testid={testId}
-      onClick={() => go(destination)}
-      className={`flex min-h-14 items-center gap-2 rounded-xl px-4 text-[16px] font-semibold ${
-        row ? 'min-w-0 flex-1 justify-start bg-bg text-left text-text' : `shrink-0 justify-center ${primary ? 'bg-accent text-on-accent' : 'bg-surface text-text'}`
-      }`}
+      onClick={onClick}
+      className="flex min-h-14 min-w-0 flex-1 items-center gap-2 rounded-xl bg-bg px-4 text-left text-[16px] font-semibold text-text"
     >
       {children}
-    </a>
+    </button>
   );
 }
 
@@ -107,7 +96,7 @@ function AddPlace() {
 
 export function MapSheet({ rect }: { rect: Rect }) {
   const t = useT();
-  const go = useGo();
+  const show = useShowRoute();
   const places = useSettings((s) => s.map.savedPlaces);
   const recent = useSettings((s) => s.map.recentDestinations);
   const removePlace = useSettings((s) => s.removeSavedPlace);
@@ -130,9 +119,7 @@ export function MapSheet({ rect }: { rect: Rect }) {
           className="flex gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!dest) return;
-            window.open(mapsNavigateUrl(dest), '_blank', 'noopener');
-            go(dest);
+            show(dest);
           }}
         >
           <input
@@ -146,33 +133,29 @@ export function MapSheet({ rect }: { rect: Rect }) {
             onChange={(e) => setText(e.target.value)}
             className="min-h-14 min-w-0 flex-1 rounded-xl bg-bg px-3 text-[16px] text-text select-text"
           />
-          {dest ? (
-            <NavigateLink destination={dest} testId="map-dest-go" primary>
-              <Icon name="navigate" size={22} />
-              {t('map.navigate')}
-            </NavigateLink>
-          ) : (
-            <span className="flex min-h-14 shrink-0 items-center rounded-xl bg-bg px-4 text-[16px] font-semibold text-text-dim">{t('map.navigate')}</span>
-          )}
+          <button
+            type="submit"
+            data-testid="map-dest-go"
+            disabled={!dest}
+            className="flex min-h-14 shrink-0 items-center gap-2 rounded-xl bg-accent px-4 text-[16px] font-semibold text-on-accent disabled:bg-bg disabled:text-text-dim"
+          >
+            <Icon name="navigate" size={22} />
+            {t('map.showRouteBtn')}
+          </button>
         </form>
-        {dest && (
-          <a href={mapsAppSchemeUrl(dest)} data-testid="map-dest-app" className="px-1 text-[14px] text-accent underline">
-            {t('map.openAppScheme')}
-          </a>
-        )}
         <p className="px-1 text-[13px] text-text-dim">{t('map.handoffHint')}</p>
 
         <SectionTitle>{t('map.savedPlaces')}</SectionTitle>
         <ul className="flex flex-col gap-2" data-testid="map-places">
           {places.map((p) => (
             <li key={p.id} className="flex gap-1">
-              <NavigateLink destination={p.query} testId={`map-place-${p.id}`} row>
+              <Row testId={`map-place-${p.id}`} onClick={() => show(p.query)}>
                 <Icon name="star" size={20} className="shrink-0 text-accent" />
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate">{p.label}</span>
                   <span className="truncate text-[13px] font-normal text-text-dim">{p.query}</span>
                 </span>
-              </NavigateLink>
+              </Row>
               <button type="button" aria-label={t('map.removePlace')} onClick={() => removePlace(p.id)} className="flex h-14 w-12 shrink-0 items-center justify-center rounded-xl bg-bg">
                 <Icon name="trash" size={20} />
               </button>
@@ -187,10 +170,10 @@ export function MapSheet({ rect }: { rect: Rect }) {
             <ul className="flex flex-col gap-2" data-testid="map-recent">
               {recent.map((d, i) => (
                 <li key={d} className="flex gap-1">
-                  <NavigateLink destination={d} testId={`map-recent-${i}`} row>
+                  <Row testId={`map-recent-${i}`} onClick={() => show(d)}>
                     <Icon name="navigate" size={20} className="shrink-0 text-text-dim" />
                     <span className="truncate font-normal">{d}</span>
-                  </NavigateLink>
+                  </Row>
                 </li>
               ))}
             </ul>

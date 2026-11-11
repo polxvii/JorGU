@@ -8,7 +8,8 @@ import { Icon, type IconName } from '../../shell/Icon';
 import { type Rect, intersects } from '../../shell/geometry';
 import { DEFAULT_CENTER, MAPS_KEY } from './config';
 import { kmh, useGeo } from './geo';
-import { attachMap, endRoute, recenter, refreshRoute, setTraffic, toggleLiveDuringRoute, useMapUi, zoomBy } from './mapController';
+import { attachMap, endRoute, recenter, setTraffic, useMapUi, zoomBy } from './mapController';
+import { mapsNavigateUrl } from './navigate';
 import { progress } from './routeMath';
 
 const BTN = 56;
@@ -64,7 +65,6 @@ function RouteCard({ top }: { top: boolean }) {
   const t = useT();
   const route = useMapUi((s) => s.route);
   const mode = useMapUi((s) => s.mode);
-  const live = useMapUi((s) => s.liveDuringRoute);
   const pos = useGeo((s) => s.pos);
   if (!route) return null;
   let detail = '';
@@ -74,13 +74,13 @@ function RouteCard({ top }: { top: boolean }) {
     detail = t('map.routeLeft', { km: (p.metersLeft / 1000).toFixed(p.metersLeft < 10000 ? 1 : 0), min: Math.max(1, Math.round(p.millisLeft / 60000)), eta });
   } else if (route.status === 'loading') detail = t('map.routeLoading');
   else if (route.status === 'needsLocation') detail = t('map.routeNeedsLocation');
-  else if (route.status === 'capped') detail = t('map.routeCapped');
+  else if (route.note) detail = t(route.note);
   else if (route.status === 'error') detail = t('map.routeError');
   return (
     <div
       data-testid="map-route"
       data-status={route.status}
-      className={`absolute left-1/2 flex w-[min(360px,calc(100%-160px))] min-w-[220px] -translate-x-1/2 items-center gap-2 rounded-2xl bg-surface/95 p-2 pl-3 shadow-[0_1px_4px_rgba(0,0,0,0.35)] ${
+      className={`absolute left-1/2 flex w-[min(400px,calc(100%-144px))] min-w-[240px] -translate-x-1/2 items-center gap-2 rounded-2xl bg-surface/95 p-2 pl-3 shadow-[0_1px_4px_rgba(0,0,0,0.35)] ${
         top ? 'top-[60px]' : 'bottom-3'
       }`}
     >
@@ -88,23 +88,17 @@ function RouteCard({ top }: { top: boolean }) {
         <div className="truncate text-[16px] font-semibold">{route.destination}</div>
         {detail && <div className="truncate text-[14px] text-text-dim" data-testid="map-route-detail">{detail}</div>}
       </div>
-      {mode === 'js' && route.viaEmbed && (
-        <button
-          type="button"
-          data-testid="map-route-live"
-          aria-pressed={live}
-          onClick={toggleLiveDuringRoute}
-          className="flex h-12 shrink-0 items-center gap-1 rounded-xl bg-bg px-2 text-[13px] font-semibold"
-        >
-          <Icon name={live ? 'navigate' : 'traffic'} size={20} />
-          {t(live ? 'map.showRoute' : 'map.showLive')}
-        </button>
-      )}
-      {mode === 'js' && !route.viaEmbed && (
-        <button type="button" data-testid="map-route-refresh" aria-label={t('map.refreshRoute')} onClick={refreshRoute} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-bg">
-          <Icon name="refresh" size={22} />
-        </button>
-      )}
+      {/* Voice guidance: hands the trip to the Google Maps app, only when tapped. */}
+      <a
+        href={mapsNavigateUrl(route.destination)}
+        target="_blank"
+        rel="noopener"
+        data-testid="map-route-navigate"
+        className="flex h-12 shrink-0 items-center gap-1 rounded-xl bg-accent px-3 text-[14px] font-semibold text-on-accent"
+      >
+        <Icon name="navigate" size={20} />
+        {t('map.navigate')}
+      </a>
       <button type="button" data-testid="map-route-end" aria-label={t('map.endRoute')} onClick={endRoute} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-bg">
         <Icon name="close" size={22} />
       </button>
@@ -135,8 +129,8 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   const t = useT();
   const mode = useMapUi((s) => s.mode);
   const notice = useMapUi((s) => s.notice);
-  // A free (Embed) route covers the interactive map, unless the user switched to the live map + traffic.
-  const embedRoute = useMapUi((s) => !!s.route?.viaEmbed && !s.liveDuringRoute);
+  // A route in the free Embed view covers the interactive map (mode B, route line off, or fallback).
+  const embedRoute = useMapUi((s) => !!s.route?.viaEmbed);
   const follow = useSettings((s) => s.map.follow);
   const trafficOn = useSettings((s) => s.map.traffic);
   const driverRight = useSettings((s) => s.layout.driverSide) === 'right';
@@ -192,13 +186,13 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
             )}
           </div>
           <RouteCard top={routeTop} />
-          {(notice || geoError === 'denied') && (
+          {(notice || geoError) && (
             <div
               role="status"
               data-testid="map-notice"
               className={`absolute bottom-3 max-w-[60%] rounded-xl bg-surface/95 px-3 py-2 text-[13px] text-text-dim ${onRight ? 'right-3' : 'left-3'}`}
             >
-              {notice ? t(notice) : t('map.locationOff')}
+              {notice ? t(notice) : t(geoError === 'denied' ? 'map.locationOff' : 'map.locationUnavailable')}
             </div>
           )}
         </>

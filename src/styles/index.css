@@ -98,3 +98,14 @@ button {
   transform: translateX(-50%) rotate(var(--jg-heading, 0deg));
   transform-origin: 50% 20px;
 }
+
+/* Map: destination pin. */
+.jg-map-dest {
+  width: 18px;
+  height: 18px;
+  border-radius: 50% 50% 50% 0;
+  background: #d93025;
+  border: 3px solid #fff;
+  transform: rotate(-45deg) translate(3px, -3px);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+}

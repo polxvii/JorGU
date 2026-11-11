@@ -72,7 +72,16 @@ export function youtubePane(layout: LayoutSettings): PaneIndex | null {
   return null;
 }
 
-const KINDS = new Set(['dashboard', 'map', 'youtube', 'web']);
+const KINDS = new Set(['map', 'youtube', 'web']);
+
+/**
+ * The Dashboard app was removed (M6 cut, 2026-11-11). A saved Dashboard pane becomes Map, or YouTube when Map is
+ * already in the other pane.
+ */
+function withoutDashboard(x: unknown, other: unknown): unknown {
+  if (!x || typeof x !== 'object' || (x as { kind?: unknown }).kind !== 'dashboard') return x;
+  return { kind: (other as { kind?: unknown } | null)?.kind === 'map' ? 'youtube' : 'map' };
+}
 
 function validApp(x: unknown): x is AppRef {
   if (!x || typeof x !== 'object') return false;
@@ -85,9 +94,12 @@ function validApp(x: unknown): x is AppRef {
 /** Repairs a persisted layout: invalid apps, duplicate singletons, duplicate web ids, out-of-range values. */
 export function sanitizeLayout(input: Partial<LayoutSettings> | undefined, fallback: LayoutSettings): LayoutSettings {
   const l = { ...fallback, ...(input ?? {}) } as LayoutSettings;
-  let panes: [AppRef, AppRef] = Array.isArray(l.panes) && l.panes.length === 2 && validApp(l.panes[0]) && validApp(l.panes[1])
-    ? [l.panes[0], l.panes[1]]
-    : fallback.panes;
+  let saved: unknown[] | null = null;
+  if (Array.isArray(l.panes) && l.panes.length === 2) {
+    const first = withoutDashboard(l.panes[0], l.panes[1]);
+    saved = [first, withoutDashboard(l.panes[1], first)];
+  }
+  let panes: [AppRef, AppRef] = saved && validApp(saved[0]) && validApp(saved[1]) ? [saved[0], saved[1]] : fallback.panes;
   const [a, b] = panes;
   if (a.kind === b.kind && a.kind !== 'web') panes = fallback.panes;
   if (a.kind === 'web' && b.kind === 'web' && a.id === b.id) panes = [a, { ...b, id: a.id === 'w1' ? 'w2' : 'w1' }];

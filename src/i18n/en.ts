@@ -2,7 +2,6 @@
 export const en = {
   'app.name': 'JorGu',
 
-  'apps.dashboard': 'Dashboard',
   'apps.map': 'Map',
   'apps.youtube': 'YouTube',
   'apps.web': 'Web',
@@ -16,7 +15,6 @@ export const en = {
   'pane.dragToSwap': 'Drag onto the other pane to swap',
 
   'dock.label': 'Dock',
-  'dock.home': 'Home',
   'dock.swap': 'Swap',
   'dock.split': 'Two panes',
   'dock.single': 'One pane',
@@ -70,7 +68,6 @@ export const en = {
   'banner.update': 'New version available',
   'banner.reload': 'Reload',
 
-  'placeholder.dashboard': 'Speed, clock, and alerts arrive in a later version',
   'placeholder.map': 'Google Maps arrives in a later version',
   'placeholder.youtube': 'YouTube player arrives in the next version',
 

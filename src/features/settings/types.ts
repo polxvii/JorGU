@@ -1,18 +1,16 @@
 // Settings shape (spec §13). Persisted in localStorage.
 // Extension vs §13: web AppRefs carry a stable instance `id` so swapping two web panes never reloads them (M1 plan Q3).
 
-export type AppKind = 'dashboard' | 'map' | 'youtube' | 'web';
+export type AppKind = 'map' | 'youtube' | 'web';
 export type WebInstanceId = 'w1' | 'w2';
 
 export type AppRef =
-  | { kind: 'dashboard' }
   | { kind: 'map' }
   | { kind: 'youtube' }
   | { kind: 'web'; id: WebInstanceId; url: string };
 
-/** What the App Picker / voice can request. Web instances get their id assigned by the store. */
+/** What the App Picker can request. Web instances get their id assigned by the store. */
 export type AppPick =
-  | { kind: 'dashboard' }
   | { kind: 'map' }
   | { kind: 'youtube' }
   | { kind: 'web'; url?: string };
@@ -81,16 +79,7 @@ export interface Settings {
     desktopWidth: 1024 | 1280 | 1440;
   };
   youtube: { miniPlayerSize: MiniPlayerSize; playbackRate: number };
-  alerts: {
-    overspeedEnabled: boolean;
-    limitKmh: number;
-    cooldownSec: number;
-    ttsEnabled: boolean;
-    ttsVoiceURI?: string;
-  };
   library: { feedChannelLimit: number };
-  voice: { enabled: boolean };
-  clock: { buddhistYear: boolean };
   playbackLoginCheck?: { testedAt: string; sawAds: boolean; browser: string };
 }
 
@@ -111,14 +100,11 @@ export function defaultSettings(): Settings {
     map: { mode: 'js', follow: true, traffic: false, savedPlaces: [], recentDestinations: [] },
     web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280 },
     youtube: { miniPlayerSize: '356x200', playbackRate: 1 },
-    alerts: { overspeedEnabled: true, limitKmh: 90, cooldownSec: 30, ttsEnabled: true },
     library: { feedChannelLimit: 50 },
-    voice: { enabled: true },
-    clock: { buddhistYear: false },
   };
 }
 
-export type SurfaceId = 'dashboard' | 'map' | 'youtube' | `web:${WebInstanceId}`;
+export type SurfaceId = 'map' | 'youtube' | `web:${WebInstanceId}`;
 
 export function surfaceIdOf(app: AppRef): SurfaceId {
   return app.kind === 'web' ? `web:${app.id}` : app.kind;

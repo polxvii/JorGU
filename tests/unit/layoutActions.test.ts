@@ -8,8 +8,20 @@ const base = (): LayoutSettings => defaultSettings().layout;
 
 describe('assignApp', () => {
   it('replaces a non-singleton pane', () => {
-    const l = assignApp(base(), 1, { kind: 'dashboard' });
-    expect(l.panes).toEqual([{ kind: 'youtube' }, { kind: 'dashboard' }]);
+    const l = assignApp(base(), 1, { kind: 'web', url: 'https://a.example/' });
+    expect(l.panes).toEqual([{ kind: 'youtube' }, { kind: 'web', id: 'w1', url: 'https://a.example/' }]);
+  });
+
+  it('a saved Dashboard pane (app removed) becomes Map, or YouTube when Map is taken', () => {
+    const fb = base();
+    const fix = (panes: unknown[]) => sanitizeLayout({ ...fb, panes } as never, fb).panes;
+    expect(fix([{ kind: 'dashboard' }, { kind: 'youtube' }])).toEqual([{ kind: 'map' }, { kind: 'youtube' }]);
+    expect(fix([{ kind: 'map' }, { kind: 'dashboard' }])).toEqual([{ kind: 'map' }, { kind: 'youtube' }]);
+    expect(fix([{ kind: 'dashboard' }, { kind: 'dashboard' }])).toEqual([{ kind: 'map' }, { kind: 'youtube' }]);
+    expect(fix([{ kind: 'web', id: 'w2', url: 'https://a.example/' }, { kind: 'dashboard' }])).toEqual([
+      { kind: 'web', id: 'w2', url: 'https://a.example/' },
+      { kind: 'map' },
+    ]);
   });
 
   it('swaps when the singleton is already in the other pane (§6.1)', () => {

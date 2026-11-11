@@ -47,9 +47,9 @@ export type SettingsState = Settings & SettingsActions;
 
 function settingsOnly(s: SettingsState): Settings {
   const {
-    language, themeId, nightMode, layout, map, web, youtube, alerts, library, voice, clock, playbackLoginCheck,
+    language, themeId, nightMode, layout, map, web, youtube, library, playbackLoginCheck,
   } = s;
-  return { language, themeId, nightMode, layout, map, web, youtube, alerts, library, voice, clock, playbackLoginCheck };
+  return { language, themeId, nightMode, layout, map, web, youtube, library, playbackLoginCheck };
 }
 
 export const useSettings = create<SettingsState>()(

@@ -1,4 +1,4 @@
-// App Picker (spec §6.2): Dashboard, Map, YouTube, Web, plus pinned bookmarks as one-tap entries.
+// App Picker (spec §6.2): Map, YouTube, Web, plus pinned bookmarks as one-tap entries.
 import { useSettings } from '../features/settings/settingsStore';
 import { useUi } from '../features/settings/uiStore';
 import type { AppPick, PaneIndex } from '../features/settings/types';
@@ -8,8 +8,7 @@ import { Icon, type IconName } from './Icon';
 import { Sheet } from './Sheet';
 import type { Rect } from './geometry';
 
-const ENTRIES: { kind: 'dashboard' | 'map' | 'youtube' | 'web'; label: MessageKey; icon: IconName }[] = [
-  { kind: 'dashboard', label: 'apps.dashboard', icon: 'dashboard' },
+const ENTRIES: { kind: 'map' | 'youtube' | 'web'; label: MessageKey; icon: IconName }[] = [
   { kind: 'map', label: 'apps.map', icon: 'map' },
   { kind: 'youtube', label: 'apps.youtube', icon: 'youtube' },
   { kind: 'web', label: 'apps.web', icon: 'web' },

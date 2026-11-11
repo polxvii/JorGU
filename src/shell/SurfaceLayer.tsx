@@ -6,13 +6,13 @@ import { useSettings } from '../features/settings/settingsStore';
 import { useUi } from '../features/settings/uiStore';
 import type { AppRef, PaneIndex, SurfaceId } from '../features/settings/types';
 import { surfaceIdOf } from '../features/settings/types';
-import { DashboardPlaceholder, MapPlaceholder } from '../apps/placeholders';
+import { MapPlaceholder } from '../apps/placeholders';
 import { WebSurface } from '../apps/web/WebSurface';
 import { YouTubeSurface } from '../apps/youtube/YouTubeSurface';
 import { L, type LayoutResult } from './computeLayout';
 import type { Rect } from './geometry';
 
-const ORDER: Record<string, number> = { dashboard: 0, map: 1, 'web:w1': 2, 'web:w2': 3, youtube: 4 };
+const ORDER: Record<string, number> = { map: 1, 'web:w1': 2, 'web:w2': 3, youtube: 4 };
 
 /** Last known web AppRef per instance, so an unassigned (hidden) web surface keeps its URL. */
 const lastWeb = new Map<SurfaceId, Extract<AppRef, { kind: 'web' }>>();
@@ -31,7 +31,6 @@ function surfaceStyle(rect: Rect, visible: boolean, z: number): CSSProperties {
 }
 
 const SurfaceContent = memo(function SurfaceContent({ id, layout }: { id: SurfaceId; layout: LayoutResult }) {
-  if (id === 'dashboard') return <DashboardPlaceholder />;
   if (id === 'map') return <MapPlaceholder />;
   if (id === 'youtube') {
     return <YouTubeSurface surface={layout.youtube.surface} player={layout.youtube.player} mode={layout.youtube.mode} />;

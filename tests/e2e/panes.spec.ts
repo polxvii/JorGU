@@ -48,16 +48,17 @@ test.describe('pane system (§6)', () => {
     await page.getByTestId('pane-change-1').click();
     await expect(page.getByTestId('app-picker')).toBeVisible();
     await expectPlayerClear(page);
-    await page.getByTestId('pick-dashboard').click();
-    await expect(page.locator('[data-surface="dashboard"]')).toHaveAttribute('data-visible', '1');
+    await expect(page.getByTestId('pick-dashboard')).toHaveCount(0);
+    await page.getByTestId('pick-web').click();
+    await expect(page.locator('[data-surface="web:w1"]')).toHaveAttribute('data-visible', '1');
     await expect(page.locator('[data-surface="map"]')).toHaveAttribute('data-visible', '0');
 
     await revealHeaders(page);
     await page.getByTestId('pane-change-1').click();
     await page.getByTestId('pick-youtube').click();
     const yt = await box(page, '[data-surface="youtube"]');
-    const dash = await box(page, '[data-surface="dashboard"]');
-    expect(yt.x).toBeGreaterThan(dash.x);
+    const web = await box(page, '[data-surface="web:w1"]');
+    expect(yt.x).toBeGreaterThan(web.x);
   });
 
   test('layout toggle: single shows the focused pane; split restores both', async ({ page }) => {

@@ -6,7 +6,7 @@ test.describe('persistence and settings (§13)', () => {
     await openApp(page);
     await revealHeaders(page);
     await page.getByTestId('pane-change-1').click();
-    await page.getByTestId('pick-dashboard').click();
+    await page.getByTestId('pick-web').click();
     await page.getByTestId('divider').focus();
     await page.keyboard.press('ArrowRight');
     await page.getByTestId('dock-settings').click();
@@ -16,7 +16,7 @@ test.describe('persistence and settings (§13)', () => {
     await page.getByTestId('sheet-close').click();
 
     await page.reload();
-    await expect(page.locator('[data-surface="dashboard"]')).toHaveAttribute('data-visible', '1');
+    await expect(page.locator('[data-surface="web:w1"]')).toHaveAttribute('data-visible', '1');
     await expect(page.locator('#jorgu-root')).toHaveAttribute('data-driver', 'left');
     await expect(page.locator('html')).toHaveAttribute('lang', 'th');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'neon');

@@ -4,7 +4,6 @@ import type { MessageKey } from './en';
 export const th: Partial<Record<MessageKey, string>> = {
   'app.name': 'JorGu',
 
-  'apps.dashboard': 'หน้าหลัก',
   'apps.map': 'แผนที่',
   'apps.youtube': 'YouTube',
   'apps.web': 'เว็บ',
@@ -18,7 +17,6 @@ export const th: Partial<Record<MessageKey, string>> = {
   'pane.dragToSwap': 'ลากไปวางบนอีกจอเพื่อสลับ',
 
   'dock.label': 'แถบเมนู',
-  'dock.home': 'หน้าหลัก',
   'dock.swap': 'สลับจอ',
   'dock.split': 'สองจอ',
   'dock.single': 'จอเดียว',
@@ -73,7 +71,6 @@ export const th: Partial<Record<MessageKey, string>> = {
   'banner.update': 'มีเวอร์ชันใหม่',
   'banner.reload': 'โหลดใหม่',
 
-  'placeholder.dashboard': 'ความเร็ว นาฬิกา และการแจ้งเตือน จะมาในเวอร์ชันถัดไป',
   'placeholder.map': 'Google Maps จะมาในเวอร์ชันถัดไป',
   'placeholder.youtube': 'ตัวเล่น YouTube จะมาในเวอร์ชันหน้า',
 

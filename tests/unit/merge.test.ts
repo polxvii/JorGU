@@ -10,7 +10,7 @@ describe('mergeSettings', () => {
     expect(m.layout.driverSide).toBe('left');
     expect(m.layout.panes).toEqual(defaultSettings().layout.panes);
     expect(m.youtube.miniPlayerSize).toBe('356x200');
-    expect(m.alerts.cooldownSec).toBe(30);
+    expect(m.web.desktopWidth).toBe(1280);
   });
 
   it('ignores garbage', () => {

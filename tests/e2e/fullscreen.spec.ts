@@ -100,8 +100,8 @@ test.describe('per-pane full screen (§6.5)', () => {
     await page.getByTestId('pane-fullscreen-1').click();
     await showFloatingBar(page);
     await page.getByTestId('fs-picker').click();
-    await page.getByTestId('pick-dashboard').click();
-    await expect(page.locator('[data-surface="dashboard"]')).toHaveAttribute('data-visible', '1');
+    await page.getByTestId('pick-web').click();
+    await expect(page.locator('[data-surface="web:w1"]')).toHaveAttribute('data-visible', '1');
     await expect(root(page)).toHaveAttribute('data-mode', 'fullscreen');
   });
 

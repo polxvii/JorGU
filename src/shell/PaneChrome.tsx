@@ -15,7 +15,6 @@ const DRAG_THRESHOLD = 10;
 const DOUBLE_TAP_MS = 320;
 
 const APP_LABEL: Record<string, MessageKey> = {
-  dashboard: 'apps.dashboard',
   map: 'apps.map',
   youtube: 'apps.youtube',
   web: 'apps.web',

@@ -31,8 +31,6 @@ function DockButton({ icon, label, onClick, testId, active }: {
 export function Dock({ rect }: { rect: Rect }) {
   const t = useT();
   const mode = useSettings((s) => s.layout.mode);
-  const focused = useSettings((s) => s.layout.focusedPane);
-  const assign = useSettings((s) => s.assign);
   const swap = useSettings((s) => s.swap);
   const toggle = useSettings((s) => s.toggleLayoutMode);
   const openSheet = useUi((s) => s.openSheet);
@@ -47,7 +45,6 @@ export function Dock({ rect }: { rect: Rect }) {
       }`}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
     >
-      <DockButton testId="dock-home" icon="home" label="dock.home" onClick={() => assign(focused, { kind: 'dashboard' })} />
       <DockButton testId="dock-swap" icon="swap" label="dock.swap" onClick={swap} />
       <DockButton
         testId="dock-layout"

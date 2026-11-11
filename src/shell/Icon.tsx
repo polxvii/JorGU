@@ -14,7 +14,6 @@ const PATHS = {
   play: 'M7 4.5v15L19.5 12z',
   pause: 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z',
   restore: 'M4 6h16v12H4zM9 3v3M15 3v3',
-  dashboard: 'M4 15a8 8 0 1 1 16 0M12 15l4-5M8 19h8',
   map: 'M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14',
   youtube: 'M3 7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3zM10 9v6l5-3z',
   web: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18',

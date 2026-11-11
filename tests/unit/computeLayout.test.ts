@@ -154,7 +154,7 @@ describe('§3.9 invariants across every combination', () => {
   const paneSets: [AppRef, AppRef][] = [
     [{ kind: 'youtube' }, { kind: 'map' }],
     [{ kind: 'map' }, { kind: 'youtube' }],
-    [{ kind: 'dashboard' }, { kind: 'map' }],
+    [{ kind: 'web', id: 'w1', url: '' }, { kind: 'map' }],
     [{ kind: 'web', id: 'w1', url: '' }, { kind: 'youtube' }],
     [{ kind: 'youtube' }, { kind: 'web', id: 'w2', url: '' }],
     [{ kind: 'web', id: 'w1', url: '' }, { kind: 'web', id: 'w2', url: '' }],

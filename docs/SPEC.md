@@ -6,6 +6,7 @@
 ### Changes during M5 (2026-11-10)
 
 - **M6 (Dashboard HUD, overspeed alert, TTS, wake lock) and M7 (voice commands) are cut** (user decision 2026-11-10: not used). §10 and §11 stay for reference only; their rows in §16 and §17 are dropped.
+- With M6 gone, the **Dashboard app and the Dock's Home button are removed** (2026-11-11). Apps are Map, YouTube, Web. A saved Dashboard pane becomes Map (or YouTube when Map is in the other pane). Settings `alerts`, `voice`, `clock` are dropped. The speed readout on the map stays in M4.
 
 - M5 (Web app) built before M4: M4 waited for the Maps billing decision (§19.4), since decided: mode A with the §7.1 cost rule.
 - Live check (2026-11-10): DNS-over-HTTPS works from the Worker; example.com and wikipedia.org `allowed`, github.com `blocked` (CSP), youtube.com `blocked` (X-Frame-Options); localhost, 10.0.0.1, 169.254.169.254 rejected (400). google.com answers the Worker with a 429 bot page, so it comes out `unknown` and the iframe shows Google's refusal; Open in new tab still works.
@@ -213,7 +214,6 @@ jorgu/
 ├── src/
 │   ├── shell/                # PaneGrid, PaneHeader, Dock, AppPicker, LayoutStore
 │   ├── apps/
-│   │   ├── dashboard/        # HUD: speed, clock, now playing, shortcuts
 │   │   ├── map/              # Google Maps (mode A/B), destinations
 │   │   ├── youtube/          # player, queue, library, search
 │   │   └── web/              # URL bar, bookmarks, iframe, frame-check client
@@ -234,7 +234,7 @@ jorgu/
 - **Layout**: `single` (one pane) or `split` (two panes, vertical divider draggable between 30% and 70%). Stretch goal: `triple` (one large pane + two stacked).
 - **Split direction (user request 2026-11-10)**: setting `layout.direction` = `auto` (default) · `side` · `stacked`. `auto` stacks the panes top/bottom when the screen is taller than wide (phone upright) and puts them side by side otherwise. Stacked: the divider is horizontal, and the YouTube pane must fit a ≥ 356×200 player plus its band and controls (≥ 345 px tall, ≥ 356 px wide), otherwise one pane. The pane that is on the left side by side goes on top.
 - **Portrait screens** (any direction): the Dock is a row along the bottom; sheets are full-width bands from the bottom (from the top when YouTube is the bottom pane or the mini player shows); YouTube full-screen controls are a row along the bottom; full-screen floating controls are a grid at the top. Pane chrome that would cross the mini player is trimmed beside it or hidden while it shows. The 480×270 mini player falls back to 356×200 where it doesn't fit.
-- **App**: `dashboard`, `map`, `youtube`, `web` (each web instance carries its own URL)
+- **App**: `map`, `youtube`, `web` (each web instance carries its own URL). The Dashboard app was removed with M6 (2026-11-11).
 - **Assignment**: which app is in which pane, persisted
 
 Rules:
@@ -247,7 +247,7 @@ Rules:
 
 | Action | Result |
 |---|---|
-| Tap pane header "Change" | App Picker sheet: Dashboard, Map, YouTube, Web, plus saved bookmarks as one-tap entries |
+| Tap pane header "Change" | App Picker sheet: Map, YouTube, Web, plus pinned bookmarks as one-tap entries |
 | Tap ⇄ in Dock | Swap the two panes' contents |
 | Drag one pane header onto the other pane | Swap |
 | Tap ⛶ on a pane (or double-tap its header) | That pane goes full screen (§6.5) |
@@ -261,7 +261,7 @@ Pane headers are slim (≤ 40 px) and auto-hide after 4 s of no touch; tap the p
 Removing an iframe from the DOM and inserting it elsewhere reloads it, which would stop YouTube playback and reset web pages. Therefore:
 - Render each app surface **once**, inside a single fixed container.
 - Position surfaces with CSS (`grid-area` or absolute positioning computed from the assignment). **Never re-parent iframes or the map container.**
-- Hidden surfaces (Dashboard, Map, Web): `visibility: hidden` + `pointer-events: none`, kept mounted. The YouTube surface is never hidden or covered while playing; it is repositioned as the mini player instead (§6.6). If YouTube is paused and not assigned to a visible pane, it may be hidden.
+- Hidden surfaces (Map, Web): `visibility: hidden` + `pointer-events: none`, kept mounted. The YouTube surface is never hidden or covered while playing; it is repositioned as the mini player instead (§6.6). If YouTube is paused and not assigned to a visible pane, it may be hidden.
 - Stacking order: the YouTube surface is always the top layer among app surfaces, and no app UI (headers, floating bars, toasts, sheets) may be placed over its rectangle. Sheets and toasts position themselves around it.
 - After a resize or swap, re-center the map once the transition ends [Verify whether the Maps JS API handles container resize automatically].
 
@@ -272,11 +272,11 @@ Removing an iframe from the DOM and inserting it elsewhere reloads it, which wou
 ```
 split (default, driverSide = right)
 ┌─────────────────────────────┬─────────────────────────────┬────┐
-│ ▸ YouTube     [Change]  ⛶   │ ▸ Map         [Change]  ⛶   │ ⌂  │
-│ ┌─────────────────────────┐ │                             │ ⇄  │
-│ │ video / artwork          │ │          ● you              │ ◫  │
-│ └─────────────────────────┘ │                             │ 🎤 │
-│ Song title · Channel        │                 ┌────────┐  │ ⚙  │
+│ ▸ YouTube     [Change]  ⛶   │ ▸ Map         [Change]  ⛶   │ ⇄  │
+│ ┌─────────────────────────┐ │                             │ ◫  │
+│ │ video / artwork          │ │          ● you              │ ⚙  │
+│ └─────────────────────────┘ │                             │    │
+│ Song title · Channel        │                 ┌────────┐  │    │
 │   ⏮      ⏯      ⏭          │                 │   72   │  │    │
 │                             │                 │  km/h  │  │ ♫▸ │
 └─────────────────────────────┴─────────────────┴────────┴──┴────┘
@@ -297,7 +297,7 @@ split (default, driverSide = right)
 | iPhone Safari | ✓ | ✗ element full screen is not supported on iPhone (iPad only) [Secondary] → advise installing to Home Screen to hide Safari's UI |
 | Voice command | ✓ | skip — browsers require a user gesture for `requestFullscreen` [Secondary] |
 
-**While full screen — floating controls:** a tap on the edge strip (or a tap when the surface is the Map/Dashboard) shows, for 4 s, a floating bar on the driver side with large (≥ 64 px) buttons:
+**While full screen — floating controls:** a tap on the edge strip (or a tap when the surface is the Map) shows, for 4 s, a floating bar on the driver side with large (≥ 64 px) buttons:
 - **Exit full screen** (✕)
 - **⇄ Switch** — puts the *other* pane's app full screen instead (fast Map ↔ YouTube flip while staying full screen)
 - **App picker** — choose which app is full screen
@@ -628,7 +628,6 @@ Landscape. Primary: the user's CarPlay screen size (to be measured with the M0 p
 
 ```ts
 type AppRef =
-  | { kind: 'dashboard' }
   | { kind: 'map' }
   | { kind: 'youtube' }
   | { kind: 'web'; url: string };
@@ -667,16 +666,7 @@ interface Settings {
     desktopWidth: 1024 | 1280 | 1440;          // default 1280
   };
   youtube: { miniPlayerSize: '356x200' | '480x270'; playbackRate: number }; // playbackRate default 1
-  alerts: {
-    overspeedEnabled: boolean;
-    limitKmh: number;
-    cooldownSec: number;
-    ttsEnabled: boolean;
-    ttsVoiceURI?: string;
-  };
   library: { feedChannelLimit: number };
-  voice: { enabled: boolean };
-  clock: { buddhistYear: boolean };
   playbackLoginCheck?: { testedAt: string; sawAds: boolean; browser: string };
 }
 ```

@@ -1,17 +1,6 @@
-// Placeholders for apps that arrive in later milestones (Dashboard M6, Map M4).
+// Placeholder for the Map app until M4.
 import { useT } from '../i18n';
 import { Icon } from '../shell/Icon';
-
-export function DashboardPlaceholder() {
-  const t = useT();
-  return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-bg p-6 text-center">
-      <Icon name="dashboard" size={56} className="text-accent" />
-      <div className="text-2xl font-semibold">{t('apps.dashboard')}</div>
-      <div className="max-w-md text-text-dim">{t('placeholder.dashboard')}</div>
-    </div>
-  );
-}
 
 export function MapPlaceholder() {
   const t = useT();

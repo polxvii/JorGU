@@ -62,7 +62,7 @@ export function enterFullscreen(pane: PaneIndex, opts: { gesture: boolean } = { 
 
 let poppingOwnEntry = false;
 
-export type ExitSource = 'button' | 'esc' | 'popstate' | 'browser' | 'voice';
+export type ExitSource = 'button' | 'esc' | 'popstate' | 'browser';
 
 export function exitFullscreen(source: ExitSource): void {
   const s = useSettings.getState();

@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { useSettings } from '../../features/settings/settingsStore';
 import { useUi } from '../../features/settings/uiStore';
 import { type YTPlayer, YT_STATE, loadIframeApi } from './iframeApi';
+import { useHistory } from './historyStore';
 import { type QueueItem, currentItem, nextIndex, prevIndex, useQueue } from './queueStore';
 import { applicableRate, nextSpeed } from './speed';
 
@@ -19,6 +20,7 @@ export interface PlayerUi {
   needsTap: boolean;
   /** A video ended while the player was not visible; the next one waits. */
   pendingNext: boolean;
+  muted: boolean;
 }
 
 export const usePlayerUi = create<PlayerUi>()(() => ({
@@ -28,6 +30,7 @@ export const usePlayerUi = create<PlayerUi>()(() => ({
   rates: [],
   needsTap: false,
   pendingNext: false,
+  muted: false,
 }));
 
 let player: YTPlayer | null = null;
@@ -39,6 +42,8 @@ let applyRateOnPlay = true;
 let programmaticRate = NaN;
 let consecutiveErrors = 0;
 let iframeLoads = 0;
+/** Video already written to Recently for the current play. */
+let recordedId = '';
 
 const setUi = (patch: Partial<PlayerUi>) => usePlayerUi.setState(patch);
 
@@ -127,6 +132,7 @@ export function playIndex(index: number, opts: { auto: boolean }): void {
     return;
   }
   setUi({ videoId: item.videoId, status: 'loading', pendingNext: false });
+  recordedId = '';
   applyRateOnPlay = true;
   updateMediaSession(item);
   // Synchronous when the player already exists, so a tap's user activation is still valid.
@@ -173,10 +179,19 @@ function applySavedRate(): void {
 
 function onState(state: number): void {
   const ui = useUi.getState();
+  // The player's own volume control can mute too; keep our button in step.
+  if (player) setUi({ muted: player.isMuted() });
   switch (state) {
     case YT_STATE.PLAYING:
       consecutiveErrors = 0;
       setUi({ status: 'playing', needsTap: false });
+      {
+        const item = currentItem(useQueue.getState());
+        if (item && item.videoId !== recordedId) {
+          recordedId = item.videoId;
+          useHistory.getState().record({ videoId: item.videoId, title: item.title, channel: item.channel });
+        }
+      }
       ui.setYoutube({ playing: true });
       if (applyRateOnPlay) {
         applyRateOnPlay = false;
@@ -302,12 +317,20 @@ export function setSpeed(rate: number): void {
   }
 }
 
-/** Lowers YouTube while the app speaks (M6 TTS). Returns a restore function. */
-export function duck(volumePercent: number): () => void {
-  if (!player) return () => {};
-  const before = player.getVolume();
-  player.setVolume(volumePercent);
-  return () => player?.setVolume(before);
+/** Jump back or ahead (user request: ±10 s). Stays inside the video. */
+export function seekBy(seconds: number): void {
+  if (!player) return;
+  const duration = player.getDuration() || 0;
+  const to = Math.max(0, player.getCurrentTime() + seconds);
+  player.seekTo(duration > 0 ? Math.min(to, Math.max(0, duration - 1)) : to, true);
+}
+
+/** Mute/unmute YouTube, e.g. to hear a video in the Web pane. (iPhone ignores volume levels; mute works.) */
+export function toggleMute(): void {
+  if (!player) return;
+  if (player.isMuted()) player.unMute();
+  else player.mute();
+  setUi({ muted: !usePlayerUi.getState().muted });
 }
 
 /** Read-only hooks for E2E tests. */

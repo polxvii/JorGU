@@ -44,6 +44,15 @@ export function updateBookmark(web: Web, id: string, patch: Partial<Pick<Bookmar
   };
 }
 
+/** Pin a page to the App Picker straight from Recent: bookmarks it if needed; tapping again unpins. */
+export function togglePinUrl(web: Web, url: string): Web {
+  const b = web.bookmarks.find((x) => x.url === url);
+  if (b) return updateBookmark(web, b.id, { pinned: !b.pinned });
+  const added = addBookmark(web, url);
+  const id = added.bookmarks[added.bookmarks.length - 1].id;
+  return updateBookmark(added, id, { pinned: true });
+}
+
 export function removeBookmark(web: Web, id: string): Web {
   return { ...web, bookmarks: web.bookmarks.filter((b) => b.id !== id) };
 }

@@ -21,6 +21,10 @@ export type LayoutMode = 'single' | 'split';
 export type ThemeId = 'carbon' | 'racing' | 'neon' | 'emerald' | 'amber' | 'stealth';
 export type Language = 'en' | 'th';
 export type MiniPlayerSize = '356x200' | '480x270';
+/** Mini player corner: 'auto' = bottom corner on the driver side (user request 2026-11-11); t/b = top/bottom, l/r = left/right. */
+export type MiniCorner = 'auto' | 'tl' | 'tr' | 'bl' | 'br';
+/** Dock (right toolbar) size: button 64 / 80 / 96 px. */
+export type DockSize = 'normal' | 'large' | 'xlarge';
 
 export type WebViewMode =
   | { mode: 'auto'; zoom: 0.75 | 1 | 1.25 | 1.5 }
@@ -78,7 +82,14 @@ export interface Settings {
     viewModes: Record<string, WebViewMode>;
     desktopWidth: 1024 | 1280 | 1440;
   };
-  youtube: { miniPlayerSize: MiniPlayerSize; playbackRate: number };
+  youtube: {
+    miniPlayerSize: MiniPlayerSize;
+    miniCorner: MiniCorner;
+    playbackRate: number;
+    /** Tapping a video in a list keeps playing the rest of that list afterwards. */
+    autoContinue: boolean;
+  };
+  dockSize: DockSize;
   library: { feedChannelLimit: number };
   playbackLoginCheck?: { testedAt: string; sawAds: boolean; browser: string };
 }
@@ -99,7 +110,8 @@ export function defaultSettings(): Settings {
     },
     map: { mode: 'js', follow: true, traffic: false, savedPlaces: [], recentDestinations: [] },
     web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280 },
-    youtube: { miniPlayerSize: '356x200', playbackRate: 1 },
+    youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', playbackRate: 1, autoContinue: true },
+    dockSize: 'normal',
     library: { feedChannelLimit: 50 },
   };
 }

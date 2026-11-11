@@ -82,7 +82,7 @@ test.describe('per-pane full screen (§6.5)', () => {
     const mini = await box(page, '[data-player-rect]');
     expect(mini.width).toBe(356);
     expect(mini.height).toBe(200);
-    expect(mini.x).toBeLessThan(512); // passenger side (driver right)
+    expect(mini.x).toBeGreaterThan(512); // driver side, bottom (user request 2026-11-11)
     await showFloatingBar(page);
     await expectPlayerClear(page);
     await page.getByTestId('fs-picker').click();

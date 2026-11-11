@@ -1,5 +1,6 @@
 // Library data (spec §8.2) through the IndexedDB cache. Client TTLs per the §8.2 table; all ≤ 24 h.
 import type { CategoryItem, PlaylistItem, VideoItem } from '../../../../shared/ytTypes';
+import { useHistory } from '../historyStore';
 import { useQueue } from '../queueStore';
 import { useAccount } from './accountStore';
 import { api } from './api';
@@ -76,6 +77,7 @@ export function warmLibrary(): Promise<void> {
 
 function applyMeta(v: VideoItem): void {
   useQueue.getState().updateMeta(v.videoId, { title: v.title, channel: v.channel });
+  useHistory.getState().updateMeta(v.videoId, { title: v.title, channel: v.channel });
 }
 
 /** Titles for queue items added by link (§8.2 videos.list, cached 6 h). Needs a connected account. */

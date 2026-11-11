@@ -157,12 +157,96 @@ function ManagedBookmark({ b, onOpen }: { b: Bookmark; onOpen: () => void }) {
   );
 }
 
-/** Bookmarks, then recent pages. `manage` adds pin (to the App Picker), rename, and delete. */
+/** "+ Add a site": bookmark any address without opening it (name optional). */
+function AddSite() {
+  const t = useT();
+  const addBookmark = useSettings((s) => s.addBookmark);
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState<MessageKey | null>(null);
+  if (!open) {
+    return (
+      <button
+        type="button"
+        data-testid="web-add-site"
+        onClick={() => setOpen(true)}
+        className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-bg px-3 text-[16px] font-semibold text-text"
+      >
+        <Icon name="plus" size={22} />
+        {t('web.addSite')}
+      </button>
+    );
+  }
+  return (
+    <form
+      noValidate
+      data-testid="web-add-site-form"
+      className="flex flex-col gap-2 rounded-xl bg-bg p-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const n = normalizeUrl(url, location.origin);
+        if (!n.ok) {
+          if (n.reason !== 'empty') setError(ERROR[n.reason]);
+          return;
+        }
+        addBookmark(n.url, name);
+        setOpen(false);
+        setUrl('');
+        setName('');
+        setError(null);
+      }}
+    >
+      <input
+        data-testid="web-add-site-url"
+        type="url"
+        inputMode="url"
+        autoComplete="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        autoFocus
+        value={url}
+        placeholder={t('web.urlPlaceholder')}
+        aria-label={t('web.urlPlaceholder')}
+        onChange={(e) => {
+          setUrl(e.target.value);
+          setError(null);
+        }}
+        className="min-h-14 min-w-0 rounded-xl bg-surface px-3 text-[16px] text-text select-text"
+      />
+      <input
+        data-testid="web-add-site-name"
+        value={name}
+        placeholder={t('web.siteName')}
+        aria-label={t('web.siteName')}
+        onChange={(e) => setName(e.target.value)}
+        className="min-h-14 min-w-0 rounded-xl bg-surface px-3 text-[16px] text-text select-text"
+      />
+      {error && (
+        <p role="alert" data-testid="web-add-site-error" className="px-1 text-[14px] text-warn">
+          {t(error)}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <button type="submit" data-testid="web-add-site-save" className="min-h-14 flex-1 rounded-xl bg-accent px-4 text-[16px] font-semibold text-on-accent">
+          {t('web.save')}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="min-h-14 flex-1 rounded-xl bg-surface px-4 text-[16px] font-semibold text-text">
+          {t('web.cancel')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Bookmarks (+ Add a site), then recent pages, each pinnable to the App Picker. `manage` adds rename and delete. */
 export function SiteLists({ id, manage = false, onOpened }: { id: WebInstanceId; manage?: boolean; onOpened?: () => void }) {
   const t = useT();
   const bookmarks = useSettings((s) => s.web.bookmarks);
   const recent = useSettings((s) => s.web.recent);
   const setWebUrl = useSettings((s) => s.setWebUrl);
+  const togglePinUrl = useSettings((s) => s.togglePinUrl);
+  const update = useSettings((s) => s.updateBookmark);
   const open = (url: string) => {
     setWebUrl(id, url);
     onOpened?.();
@@ -179,20 +263,40 @@ export function SiteLists({ id, manage = false, onOpened }: { id: WebInstanceId;
                 <ManagedBookmark b={b} onOpen={() => open(b.url)} />
               </div>
             ) : (
-              <OpenRow title={b.title} subtitle={hostLabel(b.url)} onOpen={() => open(b.url)} testId={`bookmark-open-${b.id}`} />
+              <div className="flex min-w-0 flex-1 gap-1">
+                <OpenRow title={b.title} subtitle={hostLabel(b.url)} onOpen={() => open(b.url)} testId={`bookmark-open-${b.id}`} />
+                <IconButton
+                  icon="pin"
+                  testId={`bookmark-pin-${b.id}`}
+                  label={b.pinned ? t('web.unpin') : t('web.pin')}
+                  active={b.pinned}
+                  onClick={() => update(b.id, { pinned: !b.pinned })}
+                />
+              </div>
             )}
           </li>
         ))}
       </ul>
+      <AddSite />
       {recent.length > 0 && (
         <>
           <SectionTitle>{t('web.recent')}</SectionTitle>
           <ul className="flex flex-col gap-2" data-testid="web-recent">
-            {recent.map((url, i) => (
-              <li key={url} className="flex">
-                <OpenRow title={hostLabel(url)} subtitle={url.replace(/^https?:\/\//, '')} onOpen={() => open(url)} testId={`recent-open-${i}`} />
-              </li>
-            ))}
+            {recent.map((url, i) => {
+              const pinned = bookmarks.some((b) => b.url === url && b.pinned);
+              return (
+                <li key={url} className="flex gap-1">
+                  <OpenRow title={hostLabel(url)} subtitle={url.replace(/^https?:\/\//, '')} onOpen={() => open(url)} testId={`recent-open-${i}`} />
+                  <IconButton
+                    icon="pin"
+                    testId={`recent-pin-${i}`}
+                    label={pinned ? t('web.unpin') : t('web.pin')}
+                    active={pinned}
+                    onClick={() => togglePinUrl(url)}
+                  />
+                </li>
+              );
+            })}
           </ul>
         </>
       )}

@@ -6,6 +6,8 @@ export interface VideoItem {
   channel: string;
   thumb: string;
   publishedAt?: string;
+  /** Seconds (videos.list contentDetails.duration); 0 for live streams. Only on New and Trending. */
+  duration?: number;
 }
 
 export interface PlaylistItem {

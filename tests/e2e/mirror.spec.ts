@@ -22,7 +22,7 @@ test('driver side "left" mirrors the layout (§6.4)', async ({ page }) => {
   }
 });
 
-test('mirrored full screen: floating bar on the left, mini player on the right', async ({ page }) => {
+test('mirrored full screen: mini player bottom-left (driver side), floating bar opposite it', async ({ page }) => {
   await openApp(page, { layout: { driverSide: 'left' } });
   await startSimulatedPlayback(page);
   await page.getByTestId('pane-fullscreen-1').click();
@@ -30,6 +30,6 @@ test('mirrored full screen: floating bar on the left, mini player on the right',
   await page.mouse.click(s.x + s.width / 2, s.y + 100);
   const bar = await box(page, '[data-testid="floating-bar"]');
   const mini = await box(page, '[data-player-rect]');
-  expect(bar.x).toBeLessThan(W / 2);
-  expect(mini.x).toBeGreaterThan(W / 2);
+  expect(mini.x).toBeLessThan(W / 2);
+  expect(bar.x).toBeGreaterThan(W / 2);
 });

@@ -1,14 +1,16 @@
 // Controls while full screen (spec §6.5) and the mini-player handle (§6.6).
 // For YouTube full screen the controls live in a permanent column beside the player, never on top of it.
-import { useEffect } from 'react';
+import { type ReactElement, useEffect, useRef } from 'react';
 import { useSettings } from '../features/settings/settingsStore';
 import { useUi } from '../features/settings/uiStore';
 import { useT, type MessageKey } from '../i18n';
 import { SpeedButton } from '../apps/youtube/SpeedButton';
+import { MuteButton, SeekButton } from '../apps/youtube/TransportButtons';
 import { next, previous, togglePlay } from '../apps/youtube/player';
 import { youtubePane } from './layoutActions';
 import type { LayoutResult } from './computeLayout';
-import { L } from './computeLayout';
+import { L, miniCornerOf } from './computeLayout';
+import type { MiniCorner } from '../features/settings/types';
 import { exitFullscreen, switchFullscreen } from './fullscreen';
 import { Icon, type IconName } from './Icon';
 import type { Rect } from './geometry';
@@ -98,31 +100,48 @@ export function FloatingControls({ layout }: { layout: LayoutResult }) {
 
 export function ControlColumn({ rect }: { rect: Rect }) {
   const a = useFullscreenActions();
-  // Highest priority first; keep only what fits (64 px buttons, 4 px gaps) along the column or row.
+  // Highest priority first; keep what fits (64 px buttons, 4 px gaps). The column may hold two lines (layout engine).
   const row = rect.w > rect.h;
-  const fits = Math.max(3, Math.floor(((row ? rect.w : rect.h) - 4) / (L.FLOAT_BUTTON + 4)));
-  const buttons = [
-    <BigButton key="exit" testId="fs-exit" icon="close" label="fs.exit" onClick={a.exit} primary />,
-    <BigButton key="switch" testId="fs-switch" icon="swap" label="fs.switch" onClick={a.switchApp} />,
-    <BigButton key="picker" testId="fs-picker" icon="apps" label="fs.picker" onClick={a.picker} />,
-    <BigButton
-      key="toggle"
-      testId="fs-yt-toggle"
-      icon={a.yt.playing ? 'pause' : 'play'}
-      label={a.yt.playing ? 'yt.pause' : 'yt.play'}
-      onClick={a.yt.toggle}
-    />,
-    <SpeedButton key="speed" size="lg" testId="fs-yt-speed" />,
-    <BigButton key="next" testId="fs-yt-next" icon="next" label="yt.next" onClick={next} />,
-    <BigButton key="prev" testId="fs-yt-prev" icon="prev" label="yt.prev" onClick={previous} />,
-  ].slice(0, fits);
+  const step = L.FLOAT_BUTTON + 4;
+  const along = Math.max(1, Math.floor(((row ? rect.w : rect.h) - 4) / step));
+  const lines = Math.max(1, Math.floor(((row ? rect.h : rect.w) + 4) / (L.COLUMN + 4)));
+  const fits = Math.max(3, along * lines);
+  // ±10 s come as a pair: both or neither.
+  const groups: ReactElement[][] = [
+    [<BigButton key="exit" testId="fs-exit" icon="close" label="fs.exit" onClick={a.exit} primary />],
+    [<BigButton key="switch" testId="fs-switch" icon="swap" label="fs.switch" onClick={a.switchApp} />],
+    [<BigButton key="picker" testId="fs-picker" icon="apps" label="fs.picker" onClick={a.picker} />],
+    [
+      <BigButton
+        key="toggle"
+        testId="fs-yt-toggle"
+        icon={a.yt.playing ? 'pause' : 'play'}
+        label={a.yt.playing ? 'yt.pause' : 'yt.play'}
+        onClick={a.yt.toggle}
+      />,
+    ],
+    [<BigButton key="next" testId="fs-yt-next" icon="next" label="yt.next" onClick={next} />],
+    [<SeekButton key="back" seconds={-10} size="lg" testId="fs-yt-back10" />, <SeekButton key="fwd" seconds={10} size="lg" testId="fs-yt-forward10" />],
+    [<MuteButton key="mute" size="lg" testId="fs-yt-mute" />],
+    [<SpeedButton key="speed" size="lg" testId="fs-yt-speed" />],
+    [<BigButton key="prev" testId="fs-yt-prev" icon="prev" label="yt.prev" onClick={previous} />],
+  ];
+  const buttons: ReactElement[] = [];
+  for (const g of groups) if (buttons.length + g.length <= fits) buttons.push(...g);
   return (
     <div
       data-chrome="control-column"
       data-testid="control-column"
       data-orientation={row ? 'row' : 'column'}
-      className={`absolute z-10 flex items-center justify-center gap-1 bg-surface ${row ? 'flex-row' : 'flex-col'}`}
-      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+      className="absolute z-10 grid place-content-center gap-1 bg-surface"
+      style={{
+        left: rect.x,
+        top: rect.y,
+        width: rect.w,
+        height: rect.h,
+        gridAutoFlow: row ? 'row' : 'column',
+        [row ? 'gridTemplateColumns' : 'gridTemplateRows']: `repeat(${Math.min(along, Math.ceil(buttons.length / lines))}, 64px)`,
+      }}
     >
       {buttons}
     </div>
@@ -141,6 +160,61 @@ export function EdgeStrip({ rect }: { rect: Rect }) {
       className="absolute z-[11] bg-transparent"
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
     />
+  );
+}
+
+const CLOCKWISE: Exclude<MiniCorner, 'auto'>[] = ['tl', 'tr', 'br', 'bl'];
+
+/**
+ * Moves the mini player: drag the grip toward a corner (it snaps there on release), or tap it to step clockwise.
+ * Only the player's CSS position changes; nothing is drawn over it while dragging (spec 3.9).
+ */
+function MiniGrip() {
+  const t = useT();
+  const start = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const dragged = useRef(false);
+  const current = (): Exclude<MiniCorner, 'auto'> => {
+    const s = useSettings.getState();
+    const at = miniCornerOf(s.youtube.miniCorner, s.layout.driverSide === 'right');
+    return `${at.top ? 't' : 'b'}${at.right ? 'r' : 'l'}` as Exclude<MiniCorner, 'auto'>;
+  };
+  return (
+    <button
+      type="button"
+      data-testid="mini-move"
+      aria-label={t('mini.move')}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        start.current = { x: e.clientX, y: e.clientY, moved: false };
+      }}
+      onPointerMove={(e) => {
+        const s = start.current;
+        if (s && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 12) s.moved = true;
+      }}
+      onPointerUp={(e) => {
+        const s = start.current;
+        start.current = null;
+        if (!s?.moved) return;
+        dragged.current = true;
+        const corner = `${e.clientY < window.innerHeight / 2 ? 't' : 'b'}${e.clientX < window.innerWidth / 2 ? 'l' : 'r'}` as MiniCorner;
+        useSettings.getState().setMiniCorner(corner);
+      }}
+      onPointerCancel={() => {
+        start.current = null;
+      }}
+      onClick={() => {
+        if (dragged.current) {
+          dragged.current = false;
+          return;
+        }
+        const i = CLOCKWISE.indexOf(current());
+        useSettings.getState().setMiniCorner(CLOCKWISE[(i + 1) % CLOCKWISE.length]);
+      }}
+      className="flex w-11 items-center justify-center rounded-t-xl bg-surface text-text"
+      style={{ touchAction: 'none' }}
+    >
+      <Icon name="grip" size={22} />
+    </button>
   );
 }
 
@@ -167,6 +241,7 @@ export function MiniHandle({ rect }: { rect: Rect }) {
       className="absolute z-[12] flex items-stretch gap-1"
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h - 4 }}
     >
+      <MiniGrip />
       <button
         type="button"
         data-testid="mini-restore"
@@ -178,6 +253,9 @@ export function MiniHandle({ rect }: { rect: Rect }) {
       </button>
       <div className="flex items-center rounded-t-xl bg-surface px-1">
         <SpeedButton testId="mini-speed" />
+      </div>
+      <div className="flex items-center rounded-t-xl bg-surface">
+        <MuteButton testId="mini-mute" />
       </div>
       {!playing && (
         <button

@@ -81,15 +81,36 @@ describe('driver side mirrors everything (§6.4)', () => {
 });
 
 describe('full screen (§6.5)', () => {
-  it('non-YouTube full screen: no dock/headers, floating bar on driver side, mini player on passenger side', () => {
+  it('non-YouTube full screen: no dock/headers; mini player bottom corner on the driver side, floating bar opposite', () => {
     const r = computeLayout(input({ layout: { fullscreenPane: 1 }, youtube: { playing: true, miniSticky: false, miniSize: '356x200' } }));
     expect(r.mode).toBe('fullscreen');
     expect(r.dock).toBeNull();
     expect(r.panes).toHaveLength(0);
     expect(r.surfaces.map).toMatchObject({ visible: true, rect: { x: 0, y: 0, w: 1024, h: 600 } });
     expect(r.youtube.mode).toBe('mini');
-    expect(r.mini!.rect).toEqual({ x: L.MINI_MARGIN, y: 600 - L.MINI_MARGIN - 200, w: 356, h: 200 });
-    expect(r.floatingBar!.rect.x).toBeGreaterThan(512);
+    expect(r.mini!.rect).toEqual({ x: 1024 - L.MINI_MARGIN - 356, y: 600 - L.MINI_MARGIN - 200, w: 356, h: 200 });
+    expect(r.floatingBar!.rect.x).toBeLessThan(512);
+    // Without the mini player the bar is on the driver side.
+    expect(computeLayout(input({ layout: { fullscreenPane: 1 } })).floatingBar!.rect.x).toBeGreaterThan(512);
+  });
+
+  it('mini player corners: chosen corner, handle above it; sheet goes to the other side', () => {
+    const yt = (miniCorner: 'tl' | 'tr' | 'bl' | 'br') => ({ playing: true, miniSticky: false, miniSize: '356x200' as const, miniCorner });
+    const tl = computeLayout(input({ layout: { fullscreenPane: 1 }, youtube: yt('tl') }));
+    expect(tl.mini!.handle).toMatchObject({ x: L.MINI_MARGIN, y: L.MINI_MARGIN });
+    expect(tl.mini!.rect).toMatchObject({ x: L.MINI_MARGIN, y: L.MINI_MARGIN + L.MINI_HANDLE });
+    const bl = computeLayout(input({ layout: { panes: [{ kind: 'map' }, { kind: 'web', id: 'w1', url: '' }] }, youtube: yt('br'), sheetOpen: true }));
+    expect(bl.mini!.rect.x).toBeGreaterThan(512);
+    expect(bl.sheet!.x).toBe(0);
+    expect(intersects(bl.sheet!, bl.mini!.rect)).toBe(false);
+  });
+
+  it('Dock size setting widens the Dock and narrows the panes', () => {
+    for (const [size, w] of [['normal', 80], ['large', 96], ['xlarge', 112]] as const) {
+      const r = computeLayout(input({ dockSize: size }));
+      expect(r.dock).toEqual({ x: 1024 - w, y: 0, w, h: 600 });
+      expect(r.appArea.w).toBe(1024 - w);
+    }
   });
 
   it('YouTube full screen keeps a control column beside the player', () => {
@@ -204,6 +225,47 @@ describe('§3.9 invariants across every combination', () => {
                       }
     expect(checked).toBeGreaterThan(100_000);
   }, 120_000);
+
+  it('same rules for every mini player corner and Dock size', () => {
+    let n = 0;
+    for (const [w, h, safeArea] of viewports)
+      for (const panes of paneSets)
+        for (const driverSide of ['right', 'left'] as const)
+          for (const mode of ['split', 'single'] as const)
+            for (const fullscreenPane of [null, 0, 1] as const)
+              for (const miniCorner of ['auto', 'tl', 'tr', 'bl', 'br'] as const)
+                for (const dockSize of ['normal', 'large', 'xlarge'] as const)
+                  for (const sheetOpen of [false, true])
+                    for (const toast of [false, true]) {
+                      const r = computeLayout({
+                        viewport: { width: w, height: h },
+                        safeArea,
+                        layout: { mode, direction: 'auto', splitRatio: 0.5, panes, focusedPane: 0, fullscreenPane, driverSide },
+                        youtube: { playing: true, miniSticky: false, miniSize: '356x200', miniCorner },
+                        dockSize,
+                        bannerCount: 0,
+                        sheetOpen,
+                        toast,
+                      });
+                      const ctx = JSON.stringify({ w, h, panes: panes.map((p) => p.kind), driverSide, mode, fullscreenPane, miniCorner, dockSize, sheetOpen, toast });
+                      const player = r.youtube.player;
+                      if (player) {
+                        expect(player.w, ctx).toBeGreaterThanOrEqual(356);
+                        expect(player.h, ctx).toBeGreaterThanOrEqual(200);
+                        for (const [name, rc] of chromeRects(r)) {
+                          expect(intersects(rc, player), `${name} overlaps player: ${ctx}`).toBe(false);
+                        }
+                      }
+                      if (r.mode === 'split') {
+                        for (const p of r.panes) {
+                          if (p.app.kind === 'youtube') expect(p.rect.w, ctx).toBeGreaterThanOrEqual(356);
+                          if (r.dock) expect(intersects(p.rect, r.dock), `pane under dock: ${ctx}`).toBe(false);
+                        }
+                      }
+                      n++;
+                    }
+    expect(n).toBeGreaterThan(20_000);
+  }, 120_000);
 });
 
 describe('top/bottom split (portrait, setting `direction`)', () => {
@@ -264,7 +326,8 @@ describe('top/bottom split (portrait, setting `direction`)', () => {
 
   it('YouTube full screen upright: controls in a row along the bottom, full-width player', () => {
     const r = computeLayout(input({ ...PHONE, layout: { fullscreenPane: 0 } }));
-    expect(r.controlColumn).toEqual({ x: 0, y: 932 - 34 - L.COLUMN, w: 430, h: L.COLUMN });
+    // The player is width-limited here, so the row doubles (two lines of buttons) without shrinking it.
+    expect(r.controlColumn).toEqual({ x: 0, y: 932 - 34 - 2 * L.COLUMN, w: 430, h: 2 * L.COLUMN });
     expect(r.youtube.player!.w).toBe(430);
   });
 

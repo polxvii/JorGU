@@ -11,7 +11,7 @@ import { ApiError } from '../account/api';
 import { libraryEntries, loadSearch, warmLibrary } from '../account/library';
 import { type LibraryEntry, searchLibrary, stripPrefix } from '../account/libraryIndex';
 import { useSearchesLeft } from '../account/quota';
-import { playVideo } from '../playActions';
+import { playFromList } from '../playActions';
 import { VideoList, errorKey } from './VideoList';
 
 type YtState = null | { loading: true } | { loading: false; items: VideoItem[] } | { loading: false; error: string };
@@ -49,8 +49,8 @@ export function SearchPanel() {
     );
   };
 
-  const play = (v: VideoItem) => {
-    playVideo(v);
+  const play = (list: VideoItem[], i: number) => {
+    playFromList(list, i);
     close();
   };
 
@@ -91,7 +91,7 @@ export function SearchPanel() {
             <VideoList
               testId="search-library-results"
               items={lib}
-              onPlay={(i) => play(lib[i])}
+              onPlay={(i) => play(lib, i)}
               subtitle={(v) => [v.channel, (v as LibraryEntry).source || t('search.sourceLiked')].filter(Boolean).join(' · ')}
             />
           ) : (
@@ -126,7 +126,7 @@ export function SearchPanel() {
         <section className="flex flex-col gap-2">
           <h3 className="px-1 text-[13px] font-semibold uppercase tracking-wide text-text-dim">{t('search.fromYouTube')}</h3>
           {yt.items.length > 0 ? (
-            <VideoList testId="search-youtube-results" items={yt.items} onPlay={(i) => play(yt.items[i])} />
+            <VideoList testId="search-youtube-results" items={yt.items} onPlay={(i) => play(yt.items, i)} />
           ) : (
             <p className="px-1 text-[14px] text-text-dim">{t('library.empty')}</p>
           )}

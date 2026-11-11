@@ -160,6 +160,19 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
         />
       </Section>
 
+      <Section title={t('settings.autoContinue')}>
+        <Segmented
+          testId="setting-auto-continue"
+          value={s.youtube.autoContinue ? 'on' : 'off'}
+          onChange={(v) => s.setAutoContinue(v === 'on')}
+          options={[
+            { value: 'on', label: t('settings.on') },
+            { value: 'off', label: t('settings.off') },
+          ]}
+        />
+        <p className="mt-1 px-1 text-[13px] text-text-dim">{t('settings.autoContinueHint')}</p>
+      </Section>
+
       <Section title={t('settings.miniPlayer')}>
         <Segmented
           testId="setting-mini-size"
@@ -168,6 +181,37 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
           options={[
             { value: '356x200', label: '356 × 200' },
             { value: '480x270', label: '480 × 270' },
+          ]}
+        />
+        <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" data-testid="setting-mini-corner">
+          {(['auto', 'tl', 'tr', 'bl', 'br'] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              role="radio"
+              aria-checked={s.youtube.miniCorner === c}
+              data-value={c}
+              onClick={() => s.setMiniCorner(c)}
+              className={`min-h-12 rounded-xl px-3 text-[15px] font-semibold ${c === 'auto' ? 'col-span-2' : ''} ${
+                s.youtube.miniCorner === c ? 'bg-accent text-on-accent' : 'bg-bg text-text'
+              }`}
+            >
+              {t(`settings.corner.${c}`)}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 px-1 text-[13px] text-text-dim">{t('settings.cornerHint')}</p>
+      </Section>
+
+      <Section title={t('settings.dockSize')}>
+        <Segmented
+          testId="setting-dock-size"
+          value={s.dockSize}
+          onChange={s.setDockSize}
+          options={[
+            { value: 'normal', label: t('settings.dockNormal') },
+            { value: 'large', label: t('settings.dockLarge') },
+            { value: 'xlarge', label: t('settings.dockXLarge') },
           ]}
         />
       </Section>

@@ -1,7 +1,7 @@
 // YouTube library sheet: paste a link, new from subscriptions, playlists, search, trending by category (§8.2–8.4, §8.9).
 // Liked videos have no tab (user decision 2026-11-10) but stay in the library search.
 // youtube.com itself can't be embedded (X-Frame-Options), so "YouTube" opens the real site in a new tab.
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useSettings } from '../../../features/settings/settingsStore';
 import { type LibraryTab, useUi } from '../../../features/settings/uiStore';
 import { type MessageKey, useT } from '../../../i18n';
@@ -10,7 +10,8 @@ import { Sheet } from '../../../shell/Sheet';
 import type { Rect } from '../../../shell/geometry';
 import { useAccount } from '../account/accountStore';
 import { loadCategories, loadFeed, loadPopular } from '../account/library';
-import { playVideo } from '../playActions';
+import { useHistory } from '../historyStore';
+import { playFromList } from '../playActions';
 import { ConnectCard } from './ConnectCard';
 import { PastePanel } from './PastePanel';
 import { PlaylistsPanel } from './PlaylistsPanel';
@@ -24,6 +25,7 @@ export const YOUTUBE_SITE = 'https://www.youtube.com/';
 
 const TABS: { id: LibraryTab; label: MessageKey }[] = [
   { id: 'paste', label: 'library.tab.paste' },
+  { id: 'recent', label: 'library.tab.recent' },
   { id: 'feed', label: 'library.tab.feed' },
   { id: 'playlists', label: 'library.tab.playlists' },
   { id: 'search', label: 'library.tab.search' },
@@ -47,12 +49,43 @@ function VideoPanel({ load, testId, empty }: { load: (force: boolean) => Promise
           testId={testId}
           items={items}
           onPlay={(i) => {
-            playVideo(items[i]);
+            playFromList(items, i);
             close();
           }}
         />
       )}
     </LoadFrame>
+  );
+}
+
+/** Videos played in JorGu on this device (no account needed). Tap = play from there on. */
+function RecentPanel() {
+  const t = useT();
+  const close = useUi((s) => s.closeSheet);
+  const entries = useHistory((s) => s.entries);
+  const clear = useHistory((s) => s.clear);
+  useEffect(() => useHistory.getState().prune(), []);
+  if (entries.length === 0) return <p className="px-1 py-6 text-center text-text-dim" data-testid="lib-recent-empty">{t('library.recentEmpty')}</p>;
+  const items: VideoItem[] = entries.map((e) => ({
+    videoId: e.videoId,
+    title: e.title ?? t('yt.untitled'),
+    channel: e.channel ?? '',
+    thumb: `https://i.ytimg.com/vi/${e.videoId}/mqdefault.jpg`,
+  }));
+  return (
+    <div className="flex flex-col gap-2">
+      <VideoList
+        testId="lib-recent"
+        items={items}
+        onPlay={(i) => {
+          playFromList(items, i);
+          close();
+        }}
+      />
+      <button type="button" data-testid="lib-recent-clear" onClick={clear} className="min-h-12 rounded-xl bg-bg text-[15px] font-semibold text-danger">
+        {t('library.recentClear')}
+      </button>
+    </div>
   );
 }
 
@@ -94,6 +127,8 @@ function Panel({ tab }: { tab: LibraryTab }) {
   switch (tab) {
     case 'paste':
       return <PastePanel />;
+    case 'recent':
+      return <RecentPanel />;
     case 'feed':
       return <VideoPanel key="feed" load={loadFeed} testId="lib-feed" empty="library.feedEmpty" />;
     case 'playlists':
@@ -117,7 +152,7 @@ export function LibrarySheet({ rect }: { rect: Rect }) {
     if (el && row) row.scrollLeft = Math.max(0, el.offsetLeft - (row.clientWidth - el.offsetWidth) / 2);
   }, []);
 
-  const needsAccount = tab !== 'paste';
+  const needsAccount = tab !== 'paste' && tab !== 'recent';
   const gated = needsAccount && (status === 'disconnected' || status === 'unavailable');
   // After an expiry (REAUTH) cached lists keep working until the user reconnects (§8.1).
   const showPanel = !gated || (status === 'disconnected' && expired);

@@ -224,6 +224,23 @@ describe('Data API proxy', () => {
     expect(bad.status).toBe(400);
   });
 
+  it('Trending hides Shorts (<= 60 s, or <= 3 min tagged #shorts) and adds durations', async () => {
+    google = (url) => {
+      expect(url.searchParams.get('part')).toBe('snippet,contentDetails');
+      return Response.json({
+        items: [
+          { id: 'aaaaaaaaaaa', snippet: { title: 'Song', channelTitle: 'A' }, contentDetails: { duration: 'PT3M30S' } },
+          { id: 'bbbbbbbbbbb', snippet: { title: 'Quick one', channelTitle: 'B' }, contentDetails: { duration: 'PT45S' } },
+          { id: 'ccccccccccc', snippet: { title: 'Dance #shorts', channelTitle: 'C' }, contentDetails: { duration: 'PT2M10S' } },
+          { id: 'ddddddddddd', snippet: { title: 'Live now', channelTitle: 'D' }, contentDetails: { duration: 'P0D' } },
+        ],
+      });
+    };
+    const res = await handleApi(req('/api/yt/popular', { cookie: await sessionCookie() }), env);
+    const body = (await res.json()) as { items: { videoId: string; duration?: number }[] };
+    expect(body.items.map((v) => [v.videoId, v.duration])).toEqual([['aaaaaaaaaaa', 210], ['ddddddddddd', 0]]);
+  });
+
   it('categories: Thai titles via hl, only assignable ones', async () => {
     google = (url) => {
       expect(url.pathname).toBe('/youtube/v3/videoCategories');

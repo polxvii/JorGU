@@ -4,6 +4,8 @@ import { Sheet } from '../../shell/Sheet';
 import type { Rect } from '../../shell/geometry';
 import { type Repeat, useQueue } from './queueStore';
 import { playIndex } from './player';
+import { SpeedButton } from './SpeedButton';
+import { MuteButton, SeekButton } from './TransportButtons';
 
 export function QueueSheet({ rect }: { rect: Rect }) {
   const t = useT();
@@ -19,6 +21,12 @@ export function QueueSheet({ rect }: { rect: Rect }) {
   ];
   return (
     <Sheet rect={rect} title={t('queue.title')} testId="queue-sheet">
+      <div className="flex items-center justify-center gap-2 py-1" data-testid="queue-controls">
+        <SeekButton seconds={-10} testId="queue-back10" />
+        <SeekButton seconds={10} testId="queue-forward10" />
+        <MuteButton testId="queue-mute" />
+        <SpeedButton testId="queue-speed" />
+      </div>
       <div className="flex items-center gap-2 py-1">
         <Icon name="repeat" size={22} className="shrink-0 text-text-dim" />
         <div className="flex flex-1 gap-1" role="radiogroup" aria-label={t('queue.repeat')} data-testid="queue-repeat">
@@ -63,7 +71,7 @@ export function QueueSheet({ rect }: { rect: Rect }) {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[16px] font-semibold">{it.title ?? t('yt.untitled')}</span>
                   <span className="block truncate text-[13px] opacity-75">
-                    {i === index ? t('queue.nowPlaying') : (it.channel ?? it.videoId)}
+                    {i === index ? t('queue.nowPlaying') : [it.channel ?? it.videoId, it.auto ? t('queue.fromList') : ''].filter(Boolean).join(' · ')}
                   </span>
                 </span>
               </button>

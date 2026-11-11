@@ -22,12 +22,20 @@ interface Snippet {
   thumbnails?: Thumbs;
   resourceId?: { videoId?: string; channelId?: string };
   assignable?: boolean;
+  description?: string;
+  tags?: string[];
 }
 
 interface ApiItem {
   id?: string | { videoId?: string };
   snippet?: Snippet;
-  contentDetails?: { videoId?: string; videoPublishedAt?: string; relatedPlaylists?: { uploads?: string }; itemCount?: number };
+  contentDetails?: {
+    videoId?: string;
+    videoPublishedAt?: string;
+    relatedPlaylists?: { uploads?: string };
+    itemCount?: number;
+    duration?: string;
+  };
 }
 
 interface ApiPage {
@@ -75,6 +83,46 @@ function videoFromVideosList(it: ApiItem): VideoItem | null {
   const id = typeof it.id === 'string' ? it.id : undefined;
   if (!id || !it.snippet?.title) return null;
   return { videoId: id, title: it.snippet.title, channel: it.snippet.channelTitle ?? '', thumb: thumbOf(it.snippet.thumbnails), publishedAt: it.snippet.publishedAt };
+}
+
+/** ISO 8601 duration (PT1H2M3S, P1DT2H) to seconds; null if it can't be read. */
+export function parseDuration(iso: string | undefined): number | null {
+  const m = iso ? /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(iso) : null;
+  if (!m) return null;
+  const [, d, h, min, s] = m.map((x) => Number(x ?? 0));
+  return d * 86400 + h * 3600 + min * 60 + s;
+}
+
+/**
+ * The API has no "is a Short" field (user request 2026-11-11: hide Shorts). Guess from length: up to 60 s, or up to
+ * 3 min when tagged #shorts. Live streams (duration 0) are not Shorts.
+ */
+export function looksLikeShort(seconds: number | null, snippet: Snippet | undefined): boolean {
+  if (seconds === null || seconds <= 0) return false;
+  if (seconds <= 60) return true;
+  if (seconds > 180) return false;
+  const text = [snippet?.title ?? '', snippet?.description ?? '', ...(snippet?.tags ?? [])].join(' ');
+  return /#shorts?\b/i.test(text);
+}
+
+/** videos.list (snippet + contentDetails, 1 unit per 50 ids): drops Shorts, adds durations. Order kept. */
+async function withoutShorts(ctx: SessionContext, list: VideoItem[]): Promise<VideoItem[]> {
+  const info = new Map<string, { seconds: number | null; short: boolean }>();
+  for (let i = 0; i < list.length; i += 50) {
+    const ids = list.slice(i, i + 50).map((v) => v.videoId);
+    const page = await ytGet(ctx, 'videos', { part: 'snippet,contentDetails', id: ids.join(','), maxResults: 50 });
+    for (const it of page.items ?? []) {
+      if (typeof it.id !== 'string') continue;
+      const seconds = parseDuration(it.contentDetails?.duration);
+      info.set(it.id, { seconds, short: looksLikeShort(seconds, it.snippet) });
+    }
+  }
+  return list
+    .filter((v) => !info.get(v.videoId)?.short)
+    .map((v) => {
+      const seconds = info.get(v.videoId)?.seconds;
+      return typeof seconds === 'number' ? { ...v, duration: seconds } : v;
+    });
 }
 
 function videoFromPlaylistItem(it: ApiItem): VideoItem | null {
@@ -136,7 +184,9 @@ export async function feed(ctx: SessionContext, limit: number): Promise<VideoIte
     }
   };
   await Promise.all(Array.from({ length: 8 }, worker));
-  return results.sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '')).slice(0, 100);
+  // 40 channels + subscriptions + channels + 2 videos.list calls stay under the 50-subrequest limit.
+  const newest = results.sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '')).slice(0, 100);
+  return withoutShorts(ctx, newest);
 }
 
 export async function playlists(ctx: SessionContext): Promise<PlaylistItem[]> {
@@ -163,13 +213,19 @@ export async function liked(ctx: SessionContext): Promise<VideoItem[]> {
 export async function popular(ctx: SessionContext, categoryId: string | null): Promise<VideoItem[]> {
   try {
     const page = await ytGet(ctx, 'videos', {
-      part: 'snippet',
+      part: 'snippet,contentDetails',
       chart: 'mostPopular',
       regionCode: 'TH',
       maxResults: 30,
       ...(categoryId ? { videoCategoryId: categoryId } : {}),
     });
-    return (page.items ?? []).map(videoFromVideosList).filter((v): v is VideoItem => !!v);
+    return (page.items ?? [])
+      .flatMap((it) => {
+        const v = videoFromVideosList(it);
+        const seconds = parseDuration(it.contentDetails?.duration);
+        if (!v || looksLikeShort(seconds, it.snippet)) return [];
+        return [seconds === null ? v : { ...v, duration: seconds }];
+      });
   } catch (e) {
     if (e instanceof HttpError && e.code === 'YT_ERROR' && e.extra.reason === 'videoChartNotFound') return [];
     throw e;

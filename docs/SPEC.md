@@ -3,6 +3,18 @@
 > Version 0.5 · 2026-11-09
 > UX reference: https://duoscreen.vercel.app/ ("CarPlay Multi-Screen Dashboard")
 
+### Changes after M5: user feedback (2026-11-11)
+
+- **Mini player** sits in the **bottom corner on the driver side** by default (was the passenger side). The user can move it: drag the grip on its handle to a corner (it snaps there), tap the grip to step clockwise, or pick Auto / a corner in Settings. Sheets and the full-screen floating bar move to the other side; the edge strip and divider stop short of it (§6.6).
+- **YouTube controls:** back / forward 10 s and mute (iPhone ignores volume levels; mute works). On narrow panes the transport row drops speed first, then mute; all four are always in the queue sheet, the mini handle (speed, mute) and full screen. In YouTube full screen the control column doubles when the 16:9 player is limited by the other dimension anyway.
+- **Keep playing the list** (Settings, on by default): a tap in New, Trending, Search or Recently plays that video, then the rest of that list (up to 50), after any videos added with +. A tap in another list replaces that part. Playlists already play through. A pasted link has nothing to continue (`search.list relatedToVideoId` was removed in Aug 2023).
+- **Recently** tab in the library: videos played in JorGu on this device, newest first, max 100, kept 30 days (Developer Policies III.E.4); no account needed.
+- **Shorts hidden** on New and Trending. The Data API has no Shorts flag, so: length ≤ 60 s, or ≤ 3 min with `#shorts` in title, description or tags; live streams (0 s) stay. Not applied to Search (III.C.5: don't modify search results) or to the user's own playlists. Trending asks for `contentDetails` in the same call; New adds `videos.list` (≤ 2 units).
+- **Toolbar (Dock) size** in Settings: Normal / Large / Extra large (80 / 96 / 112 px).
+- **Web:** pin a Recent page to the App Picker in one tap; "Add a site" bookmarks any address without opening it.
+- **Not possible:** background playback (Developer Policies III.I.9); a caption on/off button (the IFrame API documents only `cc_load_policy` / `cc_lang_pref` at load; use the player's own CC button, iOS Settings → Accessibility → Subtitles & Captioning, or YouTube's "Always show captions"); signing in to sites inside a Web pane on CarTV (tested by the user 2026-11-11: fails; the WebView blocks the embedded site's cookies, §9.6).
+- **YouTube + a video in the Web pane at once:** allowed (it's one YouTube player). Whether iOS keeps both playing is [Verify]; YouTube's mute button lets the other one have the sound.
+
 ### Changes during M5 (2026-11-10)
 
 - **M6 (Dashboard HUD, overspeed alert, TTS, wake lock) and M7 (voice commands) are cut** (user decision 2026-11-10: not used). §10 and §11 stay for reference only; their rows in §16 and §17 are dropped.
@@ -310,7 +322,7 @@ Edge strip: on Web surfaces, taps go to the iframe, so a transparent ≈ 24 px s
 ### 6.6 YouTube mini player
 
 When YouTube is playing but not assigned to a visible pane (another app is full screen, or `single` layout shows another app):
-- The YouTube surface is repositioned (CSS only, §6.3) to a corner on the **passenger side**, size 356×200 (16:9) by default; user can pick 356×200 / 480×270 in Settings
+- The YouTube surface is repositioned (CSS only, §6.3) to the **bottom corner on the driver side** by default (user request 2026-11-11; was the passenger side), size 356×200 (16:9); user can pick 356×200 / 480×270 and the corner in Settings, or drag / tap the grip on the mini handle
 - It sits above the other app's surface; nothing is drawn over it. Floating bars, toasts, and the map's own controls (ours) avoid its rectangle
 - Tap the mini player's adjacent handle (outside the player) to bring YouTube back into a pane
 - Auto-advance to the next queue item happens only while the player is visible (full pane or mini player). Since the mini player is always visible while playing, auto-advance keeps working
@@ -396,12 +408,12 @@ Tokens never reach the client, never go in localStorage, never get logged.
 | Endpoint | Data API call | Quota | Client cache TTL [Proposal] |
 |---|---|---|---|
 | `GET /api/yt/subscriptions` | `subscriptions.list mine=true part=snippet maxResults=50` (all pages) | 1/page | 6 h |
-| `GET /api/yt/feed` | `channels.list part=contentDetails` (50 ids/call) → `playlistItems.list` on each uploads playlist, 5 items each | ≈ ⌈n/50⌉ + n | 30 min |
+| `GET /api/yt/feed` | `channels.list part=contentDetails` (50 ids/call) → `playlistItems.list` on each uploads playlist, 5 items each → `videos.list part=snippet,contentDetails` on the newest 100 to hide Shorts | ≈ ⌈n/50⌉ + n + 2 | 30 min |
 | `GET /api/yt/playlists` | `playlists.list mine=true` | 1/page | 1 h |
 | `GET /api/yt/playlist-items?id=` | `playlistItems.list` | 1/page | 1 h |
 | `GET /api/yt/liked` | `videos.list myRating=like` | 1/page | 1 h |
 | `GET /api/yt/search?q=` | `search.list type=video regionCode=TH relevanceLanguage=<ui lang> maxResults=20` | 1 search call | 24 h per query |
-| `GET /api/yt/popular?category=` | `videos.list chart=mostPopular regionCode=TH [videoCategoryId]` | 1 | 1 h |
+| `GET /api/yt/popular?category=` | `videos.list part=snippet,contentDetails chart=mostPopular regionCode=TH [videoCategoryId]` (Shorts hidden) | 1 | 1 h |
 | `GET /api/yt/categories?lang=` | `videoCategories.list regionCode=TH hl=<lang>` | 1 | 24 h |
 | `GET /api/yt/videos?ids=` | `videos.list part=snippet,contentDetails` (50 ids/call) | 1 | 6 h |
 
@@ -506,7 +518,7 @@ No geolocation, camera, or microphone permission delegated to embedded sites.
 
 ### 9.6 Logins inside the Web app
 
-Signing in to a site inside the iframe depends on third-party cookies, same as §3.1 (likely works on Chrome, likely not on Safari) [Verify].
+Signing in to a site inside the iframe depends on third-party cookies, same as §3.1 (likely works on Chrome, likely not on Safari). **Tested on CarTV (2026-11-11): fails** — the site forgets the login. Use Open in new tab. JorGu can't fix this without a proxy (§9.4).
 
 ### 9.7 Mobile / Desktop view
 

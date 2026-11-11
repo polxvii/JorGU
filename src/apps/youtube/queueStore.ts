@@ -8,6 +8,8 @@ export interface QueueItem {
   title?: string;
   channel?: string;
   start?: number;
+  /** Added by auto-continue (rest of the list a video was tapped in); replaced when another list is tapped. */
+  auto?: boolean;
 }
 
 export type Repeat = 'off' | 'all' | 'one';
@@ -63,7 +65,10 @@ export function prevIndex(q: QueueData): number | null {
 
 interface QueueActions {
   playNow: (items: QueueItem[], start?: number) => void;
+  /** Adds manual items after the current one and other manual items, before any auto-continue items. */
   addToEnd: (items: QueueItem[]) => void;
+  /** Replaces the auto-continue items after the current one with `items` (they are marked auto). */
+  setAutoTail: (items: QueueItem[]) => void;
   addNext: (item: QueueItem) => void;
   jump: (index: number) => void;
   remove: (index: number) => void;
@@ -88,8 +93,20 @@ export const useQueue = create<QueueState>()(
         }),
       addToEnd: (add) =>
         set((s) => {
-          const items = [...s.items, ...add];
-          return { items, order: s.shuffle ? [...s.order, ...add.map((_, i) => s.items.length + i)] : identity(items.length) };
+          const firstAuto = s.items.findIndex((it, i) => i > s.index && it.auto);
+          if (firstAuto < 0) {
+            const items = [...s.items, ...add];
+            return { items, order: s.shuffle ? [...s.order, ...add.map((_, i) => s.items.length + i)] : identity(items.length) };
+          }
+          const items = [...s.items.slice(0, firstAuto), ...add, ...s.items.slice(firstAuto)];
+          return { items, order: rebuildOrder({ items, index: s.index, shuffle: s.shuffle }) };
+        }),
+      setAutoTail: (add) =>
+        set((s) => {
+          const kept = s.items.filter((it, i) => i <= s.index || !it.auto);
+          const items = [...kept, ...add.map((it) => ({ ...it, auto: true }))];
+          if (items.length === s.items.length && add.length === 0) return s;
+          return { items, order: rebuildOrder({ items, index: s.index, shuffle: s.shuffle }) };
         }),
       addNext: (item) =>
         set((s) => {

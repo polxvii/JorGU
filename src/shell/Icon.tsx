@@ -33,6 +33,9 @@ const PATHS = {
   user: 'M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 20a8 8 0 0 1 16 0',
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
   pin: 'M9 3h6l-1 6 3 3v2H7v-2l3-3zM12 14v7',
+  replay: 'M4 11a8 8 0 1 1 2.3 5.7M4 4v7h7',
+  volume: 'M4 9h4l5-4v14l-5-4H4zM16.5 9a4 4 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11',
+  muted: 'M4 9h4l5-4v14l-5-4H4zM16.5 9.5l5 5M21.5 9.5l-5 5',
   edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
 } as const;
 

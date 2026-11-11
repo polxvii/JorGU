@@ -6,6 +6,13 @@ import { Icon } from '../../../shell/Icon';
 import { queueVideos } from '../playActions';
 import type { LoadState } from './useLoad';
 
+export function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = String(seconds % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
 export function Thumb({ src }: { src: string }) {
   return src ? (
     <img src={src} alt="" loading="lazy" decoding="async" className="h-[54px] w-24 shrink-0 rounded-lg bg-surface object-cover" />
@@ -31,7 +38,9 @@ export function VideoList({ items, onPlay, testId, subtitle }: {
             <Thumb src={v.thumb} />
             <span className="min-w-0 flex-1">
               <span className="line-clamp-2 text-[15px] font-semibold leading-snug">{v.title}</span>
-              <span className="block truncate text-[13px] text-text-dim">{subtitle ? subtitle(v) : v.channel}</span>
+              <span className="block truncate text-[13px] text-text-dim">
+                {subtitle ? subtitle(v) : [v.channel, v.duration ? formatDuration(v.duration) : ''].filter(Boolean).join(' · ')}
+              </span>
             </span>
           </button>
           <button

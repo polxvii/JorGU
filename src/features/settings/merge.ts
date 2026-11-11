@@ -18,6 +18,9 @@ export function mergeSettings(persisted: unknown, current: Settings): Settings {
   const merged = merge(current, isPlainObject(persisted) ? persisted : {}) as Settings;
   merged.layout = sanitizeLayout(merged.layout, current.layout);
   if (merged.language !== 'en' && merged.language !== 'th') merged.language = 'en';
+  if (!['auto', 'tl', 'tr', 'bl', 'br'].includes(merged.youtube.miniCorner)) merged.youtube.miniCorner = 'auto';
+  if (!['normal', 'large', 'xlarge'].includes(merged.dockSize)) merged.dockSize = 'normal';
+  if (typeof merged.youtube.autoContinue !== 'boolean') merged.youtube.autoContinue = true;
   return merged;
 }
 

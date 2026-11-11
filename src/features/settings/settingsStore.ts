@@ -4,7 +4,7 @@ import * as W from '../../apps/web/webActions';
 import * as A from '../../shell/layoutActions';
 import { mergeSettings } from './merge';
 import type {
-  AppPick, Bookmark, DriverSide, Language, MiniPlayerSize, PaneIndex, Settings, SplitDirection, ThemeId, WebInstanceId, WebViewMode,
+  AppPick, Bookmark, DockSize, DriverSide, Language, MiniCorner, MiniPlayerSize, PaneIndex, Settings, SplitDirection, ThemeId, WebInstanceId, WebViewMode,
 } from './types';
 import { defaultSettings } from './types';
 
@@ -18,6 +18,9 @@ export interface SettingsActions {
   setDriverSide: (side: DriverSide) => void;
   setDirection: (direction: SplitDirection) => void;
   setMiniPlayerSize: (size: MiniPlayerSize) => void;
+  setMiniCorner: (corner: MiniCorner) => void;
+  setAutoContinue: (on: boolean) => void;
+  setDockSize: (size: DockSize) => void;
   setPlaybackRate: (rate: number) => void;
   assign: (pane: PaneIndex, pick: AppPick) => void;
   swap: () => void;
@@ -32,6 +35,7 @@ export interface SettingsActions {
   addBookmark: (url: string, title?: string) => void;
   updateBookmark: (id: string, patch: Partial<Pick<Bookmark, 'title' | 'pinned'>>) => void;
   removeBookmark: (id: string) => void;
+  togglePinUrl: (url: string) => void;
   setViewMode: (url: string, mode: WebViewMode) => void;
   setDesktopWidth: (width: Settings['web']['desktopWidth']) => void;
   reset: () => void;
@@ -47,9 +51,9 @@ export type SettingsState = Settings & SettingsActions;
 
 function settingsOnly(s: SettingsState): Settings {
   const {
-    language, themeId, nightMode, layout, map, web, youtube, library, playbackLoginCheck,
+    language, themeId, nightMode, layout, map, web, youtube, dockSize, library, playbackLoginCheck,
   } = s;
-  return { language, themeId, nightMode, layout, map, web, youtube, library, playbackLoginCheck };
+  return { language, themeId, nightMode, layout, map, web, youtube, dockSize, library, playbackLoginCheck };
 }
 
 export const useSettings = create<SettingsState>()(
@@ -62,6 +66,9 @@ export const useSettings = create<SettingsState>()(
       setDriverSide: (driverSide) => set((s) => ({ layout: { ...s.layout, driverSide } })),
       setDirection: (direction) => set((s) => ({ layout: { ...s.layout, direction } })),
       setMiniPlayerSize: (miniPlayerSize) => set((s) => ({ youtube: { ...s.youtube, miniPlayerSize } })),
+      setMiniCorner: (miniCorner) => set((s) => ({ youtube: { ...s.youtube, miniCorner } })),
+      setAutoContinue: (autoContinue) => set((s) => ({ youtube: { ...s.youtube, autoContinue } })),
+      setDockSize: (dockSize) => set({ dockSize }),
       setPlaybackRate: (playbackRate) => set((s) => ({ youtube: { ...s.youtube, playbackRate } })),
       assign: (pane, pick) =>
         set((s) => {
@@ -87,6 +94,7 @@ export const useSettings = create<SettingsState>()(
         set((s) => ({ web: W.addBookmark(s.web, url, title) })),
       updateBookmark: (id, patch) => set((s) => ({ web: W.updateBookmark(s.web, id, patch) })),
       removeBookmark: (id) => set((s) => ({ web: W.removeBookmark(s.web, id) })),
+      togglePinUrl: (url) => set((s) => ({ web: W.togglePinUrl(s.web, url) })),
       setViewMode: (url, mode) => set((s) => ({ web: W.setViewModeFor(s.web, url, mode) })),
       setDesktopWidth: (desktopWidth) => set((s) => ({ web: { ...s.web, desktopWidth } })),
       reset: () => set(defaultSettings()),

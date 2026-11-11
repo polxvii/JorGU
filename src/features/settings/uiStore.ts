@@ -11,7 +11,7 @@ export type SheetState =
   | { kind: 'queue' }
   | { kind: 'web'; pane: PaneIndex };
 
-export type LibraryTab = 'paste' | 'feed' | 'playlists' | 'trending' | 'search';
+export type LibraryTab = 'paste' | 'recent' | 'feed' | 'playlists' | 'trending' | 'search';
 
 export interface Toast {
   id: number;

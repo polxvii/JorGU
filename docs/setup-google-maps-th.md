@@ -57,3 +57,19 @@
 - เปิด JorGu → จอแผนที่ต้องขึ้นแผนที่ Google
 - **Settings → แผนที่** ต้องขึ้นว่า "โหลดแผนที่: เหลือ … ครั้งเดือนนี้ · วันนี้ … / 320"
 - ถ้าขึ้นว่า "Google ไม่รับ key แผนที่" ให้เช็คข้อ 2 และข้อ 5 (เว็บไซต์ที่ใส่ต้องตรงทุกตัวอักษร) แล้วบอกผม
+
+## D. (ไม่บังคับ) เส้นทางบนแผนที่เต็ม — Routes API
+
+ค่าเริ่มต้นของแอป: กดนำทางแล้วเส้นทางจะแสดงในแผนที่ธรรมดา ซึ่งฟรี ถ้าอยากได้เส้นทางบนแผนที่เต็ม (มีการจราจรและจุดรถเลื่อนตามจริง):
+
+1. ☰ → **APIs & Services** → **Library** → **Routes API** → **Enable** (ไม่ใช่ *Route Optimization API* ตัวนั้นเป็นของกองรถขนส่ง ถ้าเผลอเปิดไว้ให้กด **Disable**)
+2. ☰ → **APIs & Services** → **Credentials** → กดชื่อ key → **API restrictions** → ติ๊กเพิ่ม **Routes API** (รวม 3 ตัว) → **Save**
+3. ใน JorGu: **Settings → แผนที่** → **เส้นทางบนแผนที่ (Routes API)** ต้องตั้งทีละเครื่อง
+4. ตอน upgrade บัญชี (หลังหมด Free Trial) ให้ตั้งเพดาน 320 ที่ **Google Maps Platform → Quotas → Routes API → Directions - ComputeRoutes per request quota per day** พร้อมกับ Map loads per day ของ Maps JavaScript API
+
+เส้นทางนี้ไม่คิดการจราจร (เพื่อให้อยู่ในแพ็กเกจราคาถูกสุด) อาจไม่ตรงกับเส้นที่แอป Google Maps พาไป ให้ยึดเสียงนำทางของแอป Google Maps เป็นหลัก
+
+## ช่วง Free Trial
+
+ระหว่างทดลองใช้ Google แก้โควตาไม่ได้ ("Free trial does not permit quota increases") แต่ก็**ตัดเงินจากบัตรไม่ได้** จนกว่าคุณจะกด Upgrade / Activate full account เอง แอปจำกัดวันละ 320 ครั้งเองอยู่แล้ว **ตอนกด Upgrade ให้ตั้งเพดาน 320 ทันที** (ข้อ 3 และข้อ D4)
+

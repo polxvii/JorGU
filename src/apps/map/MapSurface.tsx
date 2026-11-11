@@ -70,7 +70,7 @@ function RouteCard({ top }: { top: boolean }) {
   let detail = '';
   if (route.status === 'ready' && mode === 'js' && route.path.length > 1) {
     const p = pos ? progress(pos, route.path, route.distanceMeters, route.durationMillis) : { metersLeft: route.distanceMeters, millisLeft: route.durationMillis };
-    const eta = new Date(Date.now() + p.millisLeft).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const eta = new Date(Date.now() + p.millisLeft).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
     detail = t('map.routeLeft', { km: (p.metersLeft / 1000).toFixed(p.metersLeft < 10000 ? 1 : 0), min: Math.max(1, Math.round(p.millisLeft / 60000)), eta });
   } else if (route.status === 'loading') detail = t('map.routeLoading');
   else if (route.status === 'needsLocation') detail = t('map.routeNeedsLocation');
@@ -86,7 +86,7 @@ function RouteCard({ top }: { top: boolean }) {
     >
       <div className="min-w-0 flex-1">
         <div className="truncate text-[16px] font-semibold">{route.destination}</div>
-        {detail && <div className="truncate text-[14px] text-text-dim" data-testid="map-route-detail">{detail}</div>}
+        {detail && <div className="line-clamp-2 text-[14px] leading-tight text-text-dim" data-testid="map-route-detail">{detail}</div>}
       </div>
       {/* Voice guidance: hands the trip to the Google Maps app, only when tapped. */}
       <a

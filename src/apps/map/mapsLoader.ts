@@ -14,7 +14,7 @@ export interface GMap {
   setZoom(z: number): void;
   getZoom(): number | undefined;
   addListener(event: string, fn: () => void): { remove(): void };
-  fitBounds(bounds: unknown, padding?: number): void;
+  fitBounds(bounds: unknown, padding?: number | { top: number; right: number; bottom: number; left: number }): void;
 }
 export interface GMarker {
   position: LatLngLiteral | null;

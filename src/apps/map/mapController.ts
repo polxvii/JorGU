@@ -156,6 +156,27 @@ function clearLine(): void {
   destMarker = null;
 }
 
+/** Room around the route overview so the route card and the control column don't cover its ends. */
+function routePadding(): number | { top: number; right: number; bottom: number; left: number } {
+  const surface = el?.closest('[data-testid="map-surface"]');
+  if (!el || !surface) return 64;
+  const b = el.getBoundingClientRect();
+  const pad = { top: 40, right: 40, bottom: 40, left: 40 };
+  const card = surface.querySelector('[data-testid="map-route"]')?.getBoundingClientRect();
+  if (card?.height) {
+    if (card.top - b.top < b.height / 2) pad.top = card.bottom - b.top + 24;
+    else pad.bottom = b.bottom - card.top + 24;
+  }
+  const ctl = surface.querySelector('[data-testid="map-controls"]')?.getBoundingClientRect();
+  if (ctl?.width) {
+    if (ctl.left - b.left < b.width / 2) pad.left = ctl.right - b.left + 16;
+    else pad.right = b.right - ctl.left + 16;
+  }
+  // A small pane: keep most of it for the route.
+  if (pad.top + pad.bottom > b.height * 0.7 || pad.left + pad.right > b.width * 0.7) return 48;
+  return pad;
+}
+
 /** The live line can't be drawn: show the route in the free Embed view instead, and say why. */
 function fallBack(destination: string, note: MessageKey): void {
   useMapUi.setState((s) =>
@@ -199,7 +220,7 @@ async function computeRoute(destination: string): Promise<void> {
       useSettings.getState().setMapFollow(false);
       const bounds = new libs.LatLngBounds();
       for (const p of path) bounds.extend(p);
-      map.fitBounds(bounds, 64);
+      map.fitBounds(bounds, routePadding());
     }
     set({ status: 'ready', path, distanceMeters: r.distanceMeters ?? 0, durationMillis: r.durationMillis ?? 0, computedAt: Date.now() });
   } catch {

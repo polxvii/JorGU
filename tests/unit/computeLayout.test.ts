@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { type AppRef, defaultSettings, type LayoutSettings, type MiniPlayerSize } from '../../src/features/settings/types';
-import { CONTROL_SIZES, computeLayout, type LayoutInput, type LayoutResult, L } from '../../src/shell/computeLayout';
+import { CONTROL_SIZES, computeLayout, type LayoutInput, type LayoutResult, L, ytPaneMinHeight } from '../../src/shell/computeLayout';
 import { type Rect, bottom, intersects } from '../../src/shell/geometry';
-import { YT_MIN_HEIGHT, ytMinHeight } from '../../src/shell/splitRatio';
+import { YT_MIN_HEIGHT } from '../../src/shell/splitRatio';
 
 const NO_SAFE = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -50,7 +50,9 @@ describe('computeLayout defaults (§6.4)', () => {
 
   it('places the YouTube player below the header band, 16:9', () => {
     expect(r.youtube.mode).toBe('pane');
-    expect(r.youtube.player).toEqual({ x: 0, y: L.YT_BAND, w: 464, h: 261 });
+    // Controls in a strip on the driver side of the pane (user 2026-11-12): the player gets the rest of the width.
+    expect(r.youtube.player).toEqual({ x: 0, y: L.YT_BAND, w: 464 - 72, h: 220 });
+    expect(r.youtube).toMatchObject({ side: true, controls: { x: 464 - 72, y: L.YT_BAND, w: 72, h: 600 - L.YT_BAND } });
   });
 
   it('⛶ sits in the top corner nearest the driver', () => {
@@ -212,11 +214,17 @@ describe('§3.9 invariants across every combination', () => {
                           for (const [name, rc] of chromeRects(r)) {
                             expect(intersects(rc, player), `${name} overlaps player: ${ctx}`).toBe(false);
                           }
+                          const c = r.youtube.controls;
+                          if (c) {
+                            expect(intersects(c, player), `yt controls overlap player: ${ctx}`).toBe(false);
+                            const s = r.youtube.surface;
+                            expect(c.x >= s.x && c.y >= s.y && c.x + c.w <= s.x + s.w && c.y + c.h <= s.y + s.h, `yt controls outside pane: ${ctx}`).toBe(true);
+                          }
                         }
                         if (r.mode === 'split') {
                           for (const p of r.panes) {
                             if (p.app.kind === 'youtube') expect(p.rect.w, ctx).toBeGreaterThanOrEqual(356);
-                            if (p.app.kind === 'youtube' && r.stacked) expect(p.rect.h, ctx).toBeGreaterThanOrEqual(YT_MIN_HEIGHT);
+                            if (p.app.kind === 'youtube' && r.stacked) expect(p.rect.h, ctx).toBeGreaterThanOrEqual(ytPaneMinHeight(p.rect.w));
                             if (r.dock) expect(intersects(p.rect, r.dock), `pane under dock: ${ctx}`).toBe(false);
                           }
                           expect(intersects(r.panes[0].rect, r.panes[1].rect), `panes overlap: ${ctx}`).toBe(false);
@@ -255,11 +263,12 @@ describe('§3.9 invariants across every combination', () => {
                         for (const [name, rc] of chromeRects(r)) {
                           expect(intersects(rc, player), `${name} overlaps player: ${ctx}`).toBe(false);
                         }
+                        if (r.youtube.controls) expect(intersects(r.youtube.controls, player), `yt controls overlap player: ${ctx}`).toBe(false);
                       }
                       if (r.mode === 'split') {
                         for (const p of r.panes) {
                           if (p.app.kind === 'youtube') expect(p.rect.w, ctx).toBeGreaterThanOrEqual(356);
-                          if (p.app.kind === 'youtube' && r.stacked) expect(p.rect.h, ctx).toBeGreaterThanOrEqual(ytMinHeight(CONTROL_SIZES[dockSize].ytControls));
+                          if (p.app.kind === 'youtube' && r.stacked) expect(p.rect.h, ctx).toBeGreaterThanOrEqual(ytPaneMinHeight(p.rect.w, dockSize));
                           if (r.dock) expect(intersects(p.rect, r.dock), `pane under dock: ${ctx}`).toBe(false);
                         }
                       }

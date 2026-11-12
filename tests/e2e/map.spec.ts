@@ -82,6 +82,12 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   const cam = (await stub(page)).center!;
   expect(cam.lat).toBeGreaterThan(HERE.latitude);
   expect(cam.lng).toBeGreaterThan(HERE.longitude);
+  // The toolbar is a strip flush to the driver-side edge; the map sits beside it, not under it (user 2026-11-12).
+  const surf = await box(page, '[data-testid="map-surface"]');
+  const strip = await box(page, '[data-testid="map-strip"]');
+  const canvasBox = await box(page, '[data-testid="map-canvas"]');
+  expect(Math.round(strip.x + strip.width)).toBe(Math.round(surf.x + surf.width));
+  expect(Math.round(canvasBox.x + canvasBox.width)).toBe(Math.round(strip.x));
   // Route buttons are in the map's toolbar (user 2026-11-12), not on the route box.
   const controls = page.getByTestId('map-controls');
   for (const id of ['map-route-overview', 'map-route-navigate', 'map-route-end']) await expect(controls.getByTestId(id)).toBeVisible();
@@ -306,6 +312,33 @@ for (const vp of [{ width: 1024, height: 600 }, { width: 430, height: 860 }]) {
     }
   });
 }
+
+test('short map pane (upright phone): buttons that do not fit are under More', async ({ page }) => {
+  await withLocation(page);
+  await page.setViewportSize({ width: 430, height: 860 });
+  await openApp(page);
+  await expect.poll(async () => (await stub(page)).markers).toBe(1);
+  await page.getByTestId('map-navigate').click();
+  await page.getByTestId('map-dest-input').fill('Central World');
+  await page.getByTestId('map-dest-go').click();
+  await expect(page.getByTestId('map-route')).toHaveAttribute('data-status', 'ready');
+  await expect(page.getByTestId('map-more')).toBeVisible();
+  await expect(page.getByTestId('map-route-end')).toHaveCount(0);
+  await page.getByTestId('map-more').click();
+  await expect(page.getByTestId('map-more-menu')).toBeVisible();
+  await page.getByTestId('map-more-menu').getByTestId('map-route-end').click();
+  await expect(page.getByTestId('map-route')).toHaveCount(0);
+  await expect(page.getByTestId('map-more-menu')).toHaveCount(0);
+});
+
+test('a hidden Map surface hides the map itself too (no line of map around YouTube full screen)', async ({ page }) => {
+  await openApp(page);
+  await expect.poll(async () => (await stub(page)).maps).toBe(1);
+  await expect(page.getByTestId('map-canvas')).toBeVisible();
+  await page.getByTestId('pane-fullscreen-0').click();
+  await expect(page.locator('[data-surface="map"]')).toHaveAttribute('data-visible', '0');
+  expect(await page.getByTestId('map-canvas').evaluate((el) => getComputedStyle(el).visibility)).toBe('hidden');
+});
 
 test('map controls move away from the mini player; nothing covers it', async ({ page }) => {
   await openApp(page);

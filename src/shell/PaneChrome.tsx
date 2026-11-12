@@ -6,6 +6,7 @@ import { useSettings } from '../features/settings/settingsStore';
 import { useUi } from '../features/settings/uiStore';
 import type { PaneIndex } from '../features/settings/types';
 import { WebHeaderControls } from '../apps/web/WebHeaderControls';
+import { YouTubeHeaderTitle } from '../apps/youtube/YouTubeHeaderTitle';
 import { type MessageKey, useT } from '../i18n';
 import type { LayoutResult, PaneBox } from './computeLayout';
 import { enterFullscreen } from './fullscreen';
@@ -92,7 +93,8 @@ function PaneHeader({ pane, layout }: { pane: PaneBox; layout: LayoutResult }) {
         top: pane.header.y,
         width: pane.header.w,
         height: pane.header.h,
-        visibility: visible || drag || web ? 'visible' : 'hidden',
+        // Web and YouTube headers stay: they hold the web controls / the clip title, in a band nothing else uses.
+        visibility: visible || drag || web || pane.app.kind === 'youtube' ? 'visible' : 'hidden',
         touchAction: 'none',
         // Leave room for the ⛶ button on the driver side.
         [driverRight ? 'paddingRight' : 'paddingLeft']: 56,
@@ -102,6 +104,8 @@ function PaneHeader({ pane, layout }: { pane: PaneBox; layout: LayoutResult }) {
       {canDrag && <Icon name="grip" size={18} className="shrink-0 opacity-60" />}
       {web ? (
         <WebHeaderControls pane={pane.index} app={web} />
+      ) : pane.app.kind === 'youtube' ? (
+        <YouTubeHeaderTitle />
       ) : (
         <>
           <Icon name={pane.app.kind as IconName} size={20} className="shrink-0" />

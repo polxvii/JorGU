@@ -291,6 +291,7 @@ export const en = {
   'map.routeInfoMove': 'Tap to move it to the other corner (top / bottom)',
   'settings.routeInfoTop': 'Route box: top',
   'settings.routeInfoBottom': 'Route box: bottom',
+  'map.more': 'More',
 } as const;
 
 export type MessageKey = keyof typeof en;

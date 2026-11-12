@@ -1,18 +1,17 @@
 // YouTube app surface (spec §8.5, §6.6). The [data-player-rect] host is always the first child and is never
-// re-parented; the IFrame API iframe is created inside it once. Our controls sit below it, never on top.
+// re-parented; the IFrame API iframe is created inside it once. Our controls sit beside or below it, never on top.
 import { Fragment, type ReactNode, useCallback, useEffect } from 'react';
 import { useUi } from '../../features/settings/uiStore';
 import { useT } from '../../i18n';
 import { Icon } from '../../shell/Icon';
-import type { YtMode } from '../../shell/computeLayout';
+import { YT_ROW_GAP, YT_STRIP_PAD, type YtMode } from '../../shell/computeLayout';
 import type { Rect } from '../../shell/geometry';
 import { useAccount } from './account/accountStore';
 import { openLibrary } from './library/libraryNav';
-import { useQueue } from './queueStore';
 import { SpeedButton } from './SpeedButton';
 import { useControlSize } from '../../shell/useControlSize';
 import { MuteButton, SeekButton } from './TransportButtons';
-import { attachHost, next, playIndex, preparePlayer, previous, togglePlay, usePlayerUi } from './player';
+import { attachHost, next, preparePlayer, previous, togglePlay, usePlayerUi } from './player';
 
 function EmptyPlayer() {
   const t = useT();
@@ -52,33 +51,16 @@ function EmptyPlayer() {
  * Transport row. Everything fits from ~430 px; narrower panes (down to 356) drop the lowest-priority buttons first:
  * speed, then mute. Both stay reachable in the queue sheet, the mini handle, and full screen.
  */
-type Row = { pad: number; gap: number; button: number; wide: Record<string, number> };
 type Slot = { key: string; prio: number; el: ReactNode };
 
-function fitSlots(slots: Slot[], width: number, ROW: Row): Slot[] {
-  let used = ROW.pad;
-  const keep = new Set<string>();
-  for (const s of [...slots].sort((a, b) => a.prio - b.prio)) {
-    const add = (ROW.wide[s.key] ?? ROW.button) + (keep.size ? ROW.gap : 0);
-    if (used + add > width) continue;
-    used += add;
-    keep.add(s.key);
-  }
-  return slots.filter((s) => keep.has(s.key));
-}
-
-function Controls({ top, height, width }: { top: number; height: number; width: number }) {
+/** Transport controls: a strip beside the player, or 1–2 rows under it (layout engine decides; never over it). */
+function Controls({ rect, side }: { rect: Rect; side: boolean }) {
   const t = useT();
-  const item = useQueue((s) => s.items[s.index]);
   const status = usePlayerUi((s) => s.status);
-  const needsTap = usePlayerUi((s) => s.needsTap);
-  const pendingNext = usePlayerUi((s) => s.pendingNext);
   const openSheet = useUi((s) => s.openSheet);
   const playing = status === 'playing' || status === 'buffering';
-  const title = item ? (item.title ?? t('yt.untitled')) : t('yt.nothingPlaying');
-  // Toolbar size (Settings) scales this row too (user 2026-11-12).
+  // Toolbar size (Settings) scales these too (user 2026-11-12).
   const cs = useControlSize();
-  const row: Row = { pad: 16, gap: 2, button: cs.rowNarrow, wide: { toggle: cs.rowWide, speed: cs.rowWide } };
   const small = 'flex shrink-0 items-center justify-center rounded-full text-text';
   const sm = { width: cs.rowNarrow, height: cs.row };
   const slots: Slot[] = [
@@ -115,40 +97,30 @@ function Controls({ top, height, width }: { top: number; height: number; width: 
       el: <button type="button" data-testid="yt-library" aria-label={t('yt.library')} onClick={() => openLibrary()} className={small} style={sm}><Icon name="library" size={cs.rowIcon} /></button>,
     },
   ];
+  // What doesn't fit is still in the queue sheet (±10 s, mute, speed).
+  const fits = side ? Math.max(1, Math.floor((rect.h - 2 * YT_STRIP_PAD + YT_ROW_GAP) / (cs.row + YT_ROW_GAP))) : slots.length;
+  const keep = new Set([...slots].sort((a, b) => a.prio - b.prio).slice(0, fits).map((s) => s.key));
   return (
-    <div className="absolute inset-x-0 flex flex-col justify-center gap-1 px-2" style={{ top, height }}>
-      <div className="flex min-w-0 items-center justify-center gap-2">
-        {pendingNext ? (
-          <button
-            type="button"
-            data-testid="yt-play-next"
-            onClick={() => playIndex(useQueue.getState().index, { auto: false })}
-            className="rounded-lg bg-accent px-3 py-1 text-[15px] font-semibold text-on-accent"
-          >
-            {t('yt.playNext')}
-          </button>
-        ) : (
-          <div data-testid="yt-title" className="min-w-0 truncate text-[20px] font-semibold leading-tight">
-            {needsTap ? t('yt.tapToStart') : title}
-          </div>
-        )}
-      </div>
-      <div className="flex items-center justify-center gap-0.5" data-testid="yt-transport">
-        {fitSlots(slots, width, row).map((s) => (
+    <div
+      data-testid="yt-transport"
+      data-side={side ? '1' : '0'}
+      className={`absolute flex items-center justify-center ${side ? 'flex-col justify-start bg-surface' : 'flex-wrap content-center'}`}
+      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, padding: YT_STRIP_PAD, rowGap: YT_ROW_GAP, columnGap: side ? 0 : 2 }}
+    >
+      {slots
+        .filter((s) => keep.has(s.key))
+        .map((s) => (
           <Fragment key={s.key}>{s.el}</Fragment>
         ))}
-      </div>
     </div>
   );
 }
 
-export function YouTubeSurface({ surface, player, mode }: { surface: Rect; player: Rect | null; mode: YtMode }) {
+export function YouTubeSurface({ surface, player, mode, controls, side }: { surface: Rect; player: Rect | null; mode: YtMode; controls: Rect | null; side: boolean }) {
   const status = usePlayerUi((s) => s.status);
   const hostRef = useCallback((el: HTMLDivElement | null) => attachHost(el), []);
   useEffect(() => preparePlayer(), []);
   const rel = player ?? { x: surface.x, y: surface.y, w: 0, h: 0 };
-  const controlsTop = player ? player.y + player.h - surface.y : 0;
-  const ytControls = useControlSize().ytControls;
   return (
     <div className="relative h-full w-full bg-bg">
       <div
@@ -160,8 +132,8 @@ export function YouTubeSurface({ surface, player, mode }: { surface: Rect; playe
       >
         {(status === 'idle' || (status === 'error' && !usePlayerUi.getState().videoId)) && <EmptyPlayer />}
       </div>
-      {mode === 'pane' && player && (
-        <Controls top={controlsTop} height={Math.min(ytControls, surface.h - controlsTop)} width={surface.w} />
+      {mode === 'pane' && player && controls && (
+        <Controls rect={{ x: controls.x - surface.x, y: controls.y - surface.y, w: controls.w, h: controls.h }} side={side} />
       )}
     </div>
   );

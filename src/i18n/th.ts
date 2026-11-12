@@ -294,4 +294,5 @@ export const th: Partial<Record<MessageKey, string>> = {
   'map.routeInfoMove': 'แตะเพื่อย้ายไปมุมบน / ล่าง',
   'settings.routeInfoTop': 'กล่องเวลาเดินทาง: บน',
   'settings.routeInfoBottom': 'กล่องเวลาเดินทาง: ล่าง',
+  'map.more': 'เพิ่มเติม',
 };

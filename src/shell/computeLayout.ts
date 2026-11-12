@@ -4,7 +4,7 @@ import type { AppRef, DockSize, LayoutSettings, MiniCorner, MiniPlayerSize, Pane
 import { surfaceIdOf } from '../features/settings/types';
 import { type Rect, bottom, fit16x9, intersects, right } from './geometry';
 import { youtubePane } from './layoutActions';
-import { type RatioBounds, YT_MIN_WIDTH, ratioBounds, splitFeasible, ytMinHeight } from './splitRatio';
+import { type RatioBounds, YT_MIN_WIDTH, ratioBounds, splitFeasible } from './splitRatio';
 
 export const L = {
   DOCK: 80,
@@ -89,7 +89,8 @@ export interface LayoutResult {
   /** Length the two panes share along the split (width side by side, height stacked), without the gap. */
   splitLength: number;
   surfaces: Partial<Record<SurfaceId, SurfaceBox>>;
-  youtube: { mode: YtMode; surface: Rect; player: Rect | null; paneIndex: PaneIndex | null };
+  /** In a pane, `controls` is the control strip (side) or the rows under the player (below). */
+  youtube: { mode: YtMode; surface: Rect; player: Rect | null; paneIndex: PaneIndex | null; controls?: Rect | null; side?: boolean };
   floatingBar: { rect: Rect; rows: number; cols: number } | null;
   edgeStrip: Rect | null;
   controlColumn: Rect | null;
@@ -113,6 +114,59 @@ function ytPanePlayer(s: Rect, ytControls: number): Rect {
   return { x: s.x + Math.floor((s.w - w) / 2), y: s.y + L.YT_BAND, w, h };
 }
 
+// ---------- YouTube pane controls (user 2026-11-12) ----------
+// A strip on the driver-side edge of the pane when the player still gets ≥ 356×200 beside it; otherwise rows under
+// the player, two when one row can't hold all nine buttons. The clip title is in the pane header.
+export const YT_STRIP_PAD = 8;
+export const YT_ROW_GAP = 4;
+type Sizes = (typeof CONTROL_SIZES)[DockSize];
+export const ytStripWidth = (cs: Sizes) => cs.rowWide + 2 * YT_STRIP_PAD;
+/** prev, −10, play, +10, next, mute, speed, queue, library in one row. */
+const ytRowWidth = (cs: Sizes) => 7 * cs.rowNarrow + 2 * cs.rowWide + 8 * 2 + 2 * YT_STRIP_PAD;
+export function ytRowsBelow(width: number, cs: Sizes): number {
+  return ytRowWidth(cs) <= width ? 1 : 2;
+}
+const ytBelowHeight = (width: number, cs: Sizes) => {
+  const rows = ytRowsBelow(width, cs);
+  return rows * cs.row + (rows - 1) * YT_ROW_GAP + 2 * YT_STRIP_PAD;
+};
+
+function ytPaneLayout(s: Rect, cs: Sizes, driverRight: boolean): { player: Rect; controls: Rect; side: boolean } {
+  const sw = ytStripWidth(cs);
+  const areaW = s.w - sw;
+  const areaH = s.h - L.YT_BAND;
+  let w = areaW;
+  let h = Math.floor((w * 9) / 16);
+  if (h > areaH) {
+    h = areaH;
+    w = Math.floor((h * 16) / 9);
+  }
+  if (w >= YT_MIN_WIDTH && h >= 200) {
+    const x0 = driverRight ? s.x : s.x + sw;
+    return {
+      player: { x: x0 + Math.floor((areaW - w) / 2), y: s.y + L.YT_BAND, w, h },
+      controls: { x: driverRight ? right(s) - sw : s.x, y: s.y + L.YT_BAND, w: sw, h: areaH },
+      side: true,
+    };
+  }
+  const ch = ytBelowHeight(s.w, cs);
+  const player = ytPanePlayer(s, ch);
+  const cy = player.y + player.h;
+  return { player, controls: { x: s.x, y: cy, w: s.w, h: Math.max(0, Math.min(ch, bottom(s) - cy)) }, side: false };
+}
+
+/** Shortest stacked YouTube pane of this width that still holds a ≥ 356×200 player and its controls. */
+export function ytPaneMinHeight(width: number, dockSize: DockSize = 'normal'): number {
+  const cs = CONTROL_SIZES[dockSize];
+  return width - ytStripWidth(cs) >= 357 ? L.YT_BAND + 201 : L.YT_BAND + 201 + ytBelowHeight(width, cs);
+}
+
+/** Narrowest YouTube pane of this height that still holds a ≥ 356×200 player and its controls. */
+export function ytPaneMinWidth(height: number, dockSize: DockSize = 'normal'): number {
+  const cs = CONTROL_SIZES[dockSize];
+  return height - L.YT_BAND - ytBelowHeight(YT_MIN_WIDTH, cs) >= 201 ? YT_MIN_WIDTH : 357 + ytStripWidth(cs);
+}
+
 export const DOCK_SIZES: Record<DockSize, number> = { normal: 80, large: 96, xlarge: 112 };
 
 /**
@@ -120,6 +174,10 @@ export const DOCK_SIZES: Record<DockSize, number> = { normal: 80, large: 96, xla
  * YouTube full-screen column, the transport row under the clip title (`row`, `ytControls` = title + row), map buttons.
  * `normal` keeps the original sizes (L.FLOAT_BUTTON, L.COLUMN, L.YT_CONTROLS).
  */
+/** Map toolbar strip along the driver-side edge of the map (user 2026-11-12): button + this padding each side. */
+export const MAP_STRIP_PAD = 8;
+export const mapStripWidth = (dockSize: DockSize = 'normal') => CONTROL_SIZES[dockSize].map + 2 * MAP_STRIP_PAD;
+
 export const CONTROL_SIZES: Record<
   DockSize,
   { big: number; bigIcon: number; column: number; row: number; rowIcon: number; rowNarrow: number; rowWide: number; ytControls: number; map: number; mapIcon: number }
@@ -339,9 +397,12 @@ export function computeLayout(input: LayoutInput): LayoutResult {
         ? placeBand(content, m ? at.top : true, m ? { ...m, minH: m.h } : null)
         : placeSheet(content, awayRight, m ? { ...m, minW: m.w } : null);
     }
+    // Map full screen: the map's own toolbar is a strip on the driver-side edge; the floating bar stays clear of it.
+    const strip = fsApp.kind === 'map' && awayRight === driverRight ? mapStripWidth(input.dockSize) : 0;
+    const barArea = strip ? { ...content, x: driverRight ? content.x : content.x + strip, w: content.w - strip } : content;
     const bar = sheet
       ? null
-      : floatBar(content, awayRight, portrait, L.FLOAT_BUTTONS + (fsApp.kind === 'web' ? 1 : 0), CS.big, !!mini && at.top);
+      : floatBar(barArea, awayRight, portrait, L.FLOAT_BUTTONS + (fsApp.kind === 'web' ? 1 : 0), CS.big, !!mini && at.top);
     const toast = input.toast
       ? placeToast(content, [mini?.rect, mini?.handle, sheet, bar?.rect], [], sheet)
       : null;
@@ -389,7 +450,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
       ? { x: content.x, y: content.y, w: Math.max(0, content.w - D), h: content.h }
       : { x: content.x + D, y: content.y, w: Math.max(0, content.w - D), h: content.h };
   const splitLength = Math.max(0, (stacked ? appArea.h : appArea.w) - L.GAP);
-  const bounds = ratioBounds(splitLength, ytIdx, stacked ? ytMinHeight(CS.ytControls) : YT_MIN_WIDTH);
+  const bounds = ratioBounds(splitLength, ytIdx, stacked ? ytPaneMinHeight(appArea.w, input.dockSize) : ytPaneMinWidth(appArea.h, input.dockSize));
   let mode: 'split' | 'single' = layout.mode;
   const ytFits = splitFeasible(bounds) && (!stacked || appArea.w >= YT_MIN_WIDTH);
   if (mode === 'split' && ytIdx !== null && !ytFits) mode = 'single';
@@ -428,7 +489,8 @@ export function computeLayout(input: LayoutInput): LayoutResult {
   let mini: LayoutResult['mini'] = null;
   if (ytIdx !== null && rects[ytIdx]) {
     const s = rects[ytIdx]!;
-    yt = { mode: 'pane', surface: s, player: ytPanePlayer(s, CS.ytControls), paneIndex: ytIdx };
+    const pl = ytPaneLayout(s, CS, driverRight);
+    yt = { mode: 'pane', surface: s, player: pl.player, controls: pl.controls, side: pl.side, paneIndex: ytIdx };
   } else if (showMiniWhenOff) {
     mini = miniBox(appArea, input.youtube.miniSize, at);
     yt = { mode: 'mini', surface: mini.rect, player: mini.rect, paneIndex: ytIdx };
@@ -443,24 +505,26 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     const ytSecond = yt.mode === 'pane' && mode === 'split' && stacked && yt.paneIndex === secondIdx;
     const atBottom = miniArea ? at.top : !ytSecond;
     const avoid =
-      yt.mode === 'pane' ? { ...yt.surface, minH: ytMinHeight(CS.ytControls) } : miniArea ? { ...miniArea, minH: miniArea.h } : null;
+      yt.mode === 'pane' ? { ...yt.surface, minH: ytPaneMinHeight(yt.surface.w, input.dockSize) } : miniArea ? { ...miniArea, minH: miniArea.h } : null;
     sheet = placeBand(content, atBottom, avoid);
     if (yt.mode === 'pane' && intersects(sheet, yt.surface)) {
       const s = yt.surface;
       const clipped = atBottom ? { ...s, h: sheet.y - s.y } : { ...s, y: bottom(sheet), h: bottom(s) - bottom(sheet) };
-      yt = { ...yt, surface: clipped, player: ytPanePlayer(clipped, CS.ytControls) };
+      const pl = ytPaneLayout(clipped, CS, driverRight);
+      yt = { ...yt, surface: clipped, player: pl.player, controls: pl.controls, side: pl.side };
     }
   } else if (input.sheetOpen) {
     const ytOnDriverSide = yt.mode === 'pane' && mode === 'split' && yt.paneIndex === 1;
     let atRight = ytOnDriverSide ? !driverRight : driverRight;
     if (miniArea && at.right === atRight) atRight = !atRight;
     const avoid =
-      yt.mode === 'pane' ? { ...yt.surface, minW: YT_MIN_WIDTH } : miniArea ? { ...miniArea, minW: miniArea.w } : null;
+      yt.mode === 'pane' ? { ...yt.surface, minW: ytPaneMinWidth(yt.surface.h, input.dockSize) } : miniArea ? { ...miniArea, minW: miniArea.w } : null;
     sheet = placeSheet(content, atRight, avoid);
     if (yt.mode === 'pane' && intersects(sheet, yt.surface)) {
       const s = yt.surface;
       const clipped = atRight ? { ...s, w: sheet.x - s.x } : { ...s, x: right(sheet), w: right(s) - right(sheet) };
-      yt = { ...yt, surface: clipped, player: ytPanePlayer(clipped, CS.ytControls) };
+      const pl = ytPaneLayout(clipped, CS, driverRight);
+      yt = { ...yt, surface: clipped, player: pl.player, controls: pl.controls, side: pl.side };
     }
   }
 

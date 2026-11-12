@@ -43,7 +43,8 @@ const SurfaceContent = memo(function SurfaceContent({ id, layout }: { id: Surfac
     return <MapSurface size={{ w: r.w, h: r.h }} avoid={avoid} band={layout.mode === 'fullscreen' ? 0 : L.YT_BAND} />;
   }
   if (id === 'youtube') {
-    return <YouTubeSurface surface={layout.youtube.surface} player={layout.youtube.player} mode={layout.youtube.mode} />;
+    const y = layout.youtube;
+    return <YouTubeSurface surface={y.surface} player={y.player} mode={y.mode} controls={y.controls ?? null} side={!!y.side} />;
   }
   const web = lastWeb.get(id);
   // Full screen gives the site the whole surface; in a pane the header band sits above it.

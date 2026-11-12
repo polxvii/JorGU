@@ -18,6 +18,7 @@ export interface GMap {
   /** Vector maps: any mix of centre, zoom, heading, tilt in one step. */
   moveCamera(options: { center?: LatLngLiteral; zoom?: number; heading?: number; tilt?: number }): void;
   getHeading?(): number | undefined;
+  getRenderingType?(): string;
 }
 export interface GMarker {
   position: LatLngLiteral | null;

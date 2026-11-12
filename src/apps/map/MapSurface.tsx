@@ -1,7 +1,7 @@
 // Map app surface (spec §7): mode A (one Maps JavaScript map), mode B (Maps Embed, no charge), or a "not set up"
 // panel where Navigate still works. Our controls stay clear of the mini player and the full-screen bar (§6.6);
 // placement rules live in mapChrome.ts.
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useSettings } from '../../features/settings/settingsStore';
 import { useUi } from '../../features/settings/uiStore';
 import { useT } from '../../i18n';
@@ -10,7 +10,7 @@ import type { Rect } from '../../shell/geometry';
 import { useControlSize } from '../../shell/useControlSize';
 import { DEFAULT_CENTER, MAPS_KEY } from './config';
 import { kmh, useGeo } from './geo';
-import { attachMap, endRoute, recenter, setTraffic, showRouteOverview, useMapUi, zoomBy } from './mapController';
+import { attachMap, endRoute, recenter, refollow, setTraffic, showRouteOverview, useMapUi, zoomBy } from './mapController';
 import { mapsNavigateUrl } from './navigate';
 import { MAP_GAP, placeMapChrome } from './mapChrome';
 import { progress } from './routeMath';
@@ -145,6 +145,8 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   const containerRef = useCallback((node: HTMLDivElement | null) => {
     if (node) attachMap(node);
   }, []);
+  // Pane ↔ full screen: the car's place on screen depends on the map's height.
+  useEffect(() => refollow(), [size.w, size.h]);
 
   const live = mode === 'js' && !embedRoute;
   // Toolbar: search, locate, zoom, traffic; during a route also whole route, Google Maps, end (user 2026-11-12).

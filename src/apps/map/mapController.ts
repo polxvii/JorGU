@@ -165,23 +165,23 @@ function setArrow(travel: number | null): void {
 function glide(center: LL, heading: number, jump: boolean): void {
   if (!map) return;
   cancelAnimationFrame(anim);
+  // Raster maps can't turn (Google warns on every heading): known up front, else found out on the first try below.
+  if (canRotate === null && map.getRenderingType?.() === 'RASTER') canRotate = false;
   const target = canRotate === false ? 0 : (heading + 360) % 360;
+  const cam = (c: LL, h: number) => map?.moveCamera(canRotate === false ? { center: c } : { center: c, heading: h });
   const from = { c: camCenter ?? center, h: camHeading };
   camCenter = center;
   camHeading = target;
   const far = haversine(from.c, center) > 1000;
   if (jump || far || typeof requestAnimationFrame !== 'function') {
-    map.moveCamera({ center, heading: target });
+    cam(center, target);
   } else {
     const dh = turn(from.h, target);
     const t0 = performance.now();
     const step = (now: number) => {
       const k = Math.min(1, (now - t0) / 800);
       const e = k * (2 - k);
-      map?.moveCamera({
-        center: { lat: from.c.lat + (center.lat - from.c.lat) * e, lng: from.c.lng + (center.lng - from.c.lng) * e },
-        heading: from.h + dh * e,
-      });
+      cam({ lat: from.c.lat + (center.lat - from.c.lat) * e, lng: from.c.lng + (center.lng - from.c.lng) * e }, from.h + dh * e);
       if (k < 1) anim = requestAnimationFrame(step);
     };
     anim = requestAnimationFrame(step);
@@ -212,10 +212,16 @@ function follow(pos: Position, jump: boolean): void {
   setArrow(travel);
 }
 
+/** The map changed size (pane ↔ full screen, rotation): put the car back at its place on screen. */
+export function refollow(): void {
+  const pos = useGeo.getState().pos;
+  if (map && pos && useSettings.getState().map.follow) follow(pos, true);
+}
+
 /** Back to north up (whole-route view, route ended). */
 function northUp(): void {
   cancelAnimationFrame(anim);
-  if (map && camHeading !== 0) map.moveCamera({ heading: 0 });
+  if (map && camHeading !== 0 && canRotate !== false) map.moveCamera({ heading: 0 });
   camHeading = 0;
   setArrow(null);
 }

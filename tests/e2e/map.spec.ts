@@ -283,8 +283,12 @@ for (const vp of [{ width: 1024, height: 600 }, { width: 430, height: 860 }]) {
     await page.getByTestId('map-dest-input').fill('Central World');
     await page.getByTestId('map-dest-go').click();
     await expect(page.getByTestId('map-route')).toHaveAttribute('data-status', 'ready');
+    const before = (await stub(page)).center;
+    const paneH = (await box(page, '[data-surface="map"]')).height;
     await page.getByTestId('pane-fullscreen-1').click();
     const s = await box(page, '[data-surface="map"]');
+    // A taller map puts the camera further ahead, so the car stays 25 % below the middle.
+    if (s.height !== paneH) await expect.poll(async () => JSON.stringify((await stub(page)).center)).not.toBe(JSON.stringify(before));
     await page.mouse.click(s.x + s.width / 2, s.y + s.height / 2);
     await expect(page.getByTestId('floating-bar')).toBeVisible();
     const bar = await box(page, '[data-testid="floating-bar"]');

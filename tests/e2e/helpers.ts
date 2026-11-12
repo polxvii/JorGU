@@ -3,7 +3,7 @@ import { expect, type Page } from '@playwright/test';
 declare global {
   interface Window {
     __jorguFrameLoads?: Record<string, number>;
-    __mapsStub?: { maps: number; panTo: number; zoom: number; traffic: boolean; routes: number; lines: number; markers: number; pins: number; fitBounds: number; failRoutes: boolean; lineStyle: Record<string, unknown> | null; heading: number; cameraMoves: number; center: { lat: number; lng: number } | null; mapId: string | null; lastRoute: Record<string, unknown> | null; fire: (ev: string) => void };
+    __mapsStub?: { maps: number; panTo: number; zoom: number; traffic: boolean; routes: number; lines: number; markers: number; pins: number; fitBounds: number; failRoutes: boolean; shown: { strokeWeight: number; strokeColor: string; strokeOpacity: number; path: { lat: number; lng: number }[] }[]; heading: number; cameraMoves: number; center: { lat: number; lng: number } | null; mapId: string | null; lastRoute: Record<string, unknown> | null; fire: (ev: string) => void };
     __jorgu?: {
       setPlaying: (playing: boolean) => void;
       yt: () => { hasPlayer: boolean; state: number | null; time: number; duration: number; rate: number | null; iframeLoads: number; visibleRatio: number };
@@ -23,7 +23,7 @@ export const SEED_SETTINGS_VERSION = 3;
  * loads real Google Maps or spends a billed event. window.__mapsStub records what the app did.
  */
 export const MAPS_STUB_JS = `(function () {
-  var S = (window.__mapsStub = { maps: 0, panTo: 0, zoom: 15, traffic: false, routes: 0, lines: 0, markers: 0, pins: 0, fitBounds: 0, failRoutes: false, lineStyle: null, heading: 0, cameraMoves: 0, listeners: {}, center: null, colorScheme: null, mapId: null, lastRoute: null });
+  var S = (window.__mapsStub = { maps: 0, panTo: 0, zoom: 15, traffic: false, routes: 0, lines: 0, markers: 0, pins: 0, fitBounds: 0, failRoutes: false, shown: [], heading: 0, cameraMoves: 0, listeners: {}, center: null, colorScheme: null, mapId: null, lastRoute: null });
   function GMap(el, o) { S.maps++; S.center = o.center; S.zoom = o.zoom; S.colorScheme = o.colorScheme; S.mapId = o.mapId; el.setAttribute('data-stub-map', '1'); }
   GMap.prototype.setCenter = function (c) { S.center = c; };
   GMap.prototype.panTo = function (c) { S.center = c; S.panTo++; };
@@ -39,6 +39,17 @@ export const MAPS_STUB_JS = `(function () {
     get: function () { return this._map || null; },
     set: function (m) { if (this._pin) S.pins += (m ? 1 : 0) - (this._map ? 1 : 0); this._map = m; },
   });
+  // Route lines; S.shown = the ones on the map now (style and path).
+  var allLines = [];
+  function showLines() {
+    S.shown = allLines.filter(function (l) { return l._map; }).map(function (l) {
+      return { strokeWeight: l._o.strokeWeight, strokeColor: l._o.strokeColor, strokeOpacity: l._o.strokeOpacity, path: l._o.path || [] };
+    });
+    S.lines = S.shown.length;
+  }
+  function Line(o) { this._o = Object.assign({}, o); this._map = null; allLines.push(this); }
+  Line.prototype.setMap = function (m) { this._map = m; showLines(); };
+  Line.prototype.setPath = function (p) { this._o.path = p; showLines(); };
   function Traffic() {}
   Traffic.prototype.setMap = function (m) { S.traffic = !!m; };
   function Bounds() {}
@@ -48,14 +59,9 @@ export const MAPS_STUB_JS = `(function () {
     if (S.failRoutes) return Promise.reject(new Error('Routes API not allowed'));
     var o = req.origin;
     return Promise.resolve({ routes: [{ durationMillis: 1200000, distanceMeters: 12000,
-      path: [{ lat: o.lat, lng: o.lng }, { lat: o.lat + 0.05, lng: o.lng + 0.05 }],
-      createPolylines: function (opts) {
-        var f = opts && opts.polylineOptions;
-        S.lineStyle = typeof f === 'function' ? f({ strokeColor: '#4285F4' }) : f || null;
-        return [{ setMap: function (m) { S.lines += m ? 1 : -1; }, setOptions: function (o) { S.lineStyle = Object.assign({}, S.lineStyle, o); } }];
-      } }] });
+      path: [{ lat: o.lat, lng: o.lng }, { lat: o.lat + 0.05, lng: o.lng + 0.05 }] }] });
   } };
-  var libs = { maps: { Map: GMap, TrafficLayer: Traffic }, marker: { AdvancedMarkerElement: Marker }, routes: { Route: Route },
+  var libs = { maps: { Map: GMap, TrafficLayer: Traffic, Polyline: Line }, marker: { AdvancedMarkerElement: Marker }, routes: { Route: Route },
     core: { LatLngBounds: Bounds, ColorScheme: { LIGHT: 'LIGHT', DARK: 'DARK' } } };
   window.google = { maps: { importLibrary: function (n) { return Promise.resolve(libs[n]); } } };
   S.fire = function (ev) { (S.listeners[ev] || []).forEach(function (f) { f(); }); };

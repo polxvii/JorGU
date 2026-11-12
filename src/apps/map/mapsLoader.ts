@@ -30,18 +30,18 @@ export interface GLayer {
 }
 export interface GPolyline {
   setMap(map: GMap | null): void;
-  setOptions(options: Record<string, unknown>): void;
+  setPath(path: LatLngLiteral[]): void;
 }
 export interface GRoute {
   durationMillis?: number;
   distanceMeters?: number;
   path?: { lat: number | (() => number); lng: number | (() => number) }[];
-  createPolylines(options?: unknown): GPolyline[];
 }
 export interface MapsLibs {
   Map: new (el: HTMLElement, options: Record<string, unknown>) => GMap;
   AdvancedMarkerElement: new (options: Record<string, unknown>) => GMarker;
   TrafficLayer: new () => GLayer;
+  Polyline: new (options: Record<string, unknown>) => GPolyline;
   Route: { computeRoutes(request: Record<string, unknown>): Promise<{ routes?: GRoute[] }> };
   LatLngBounds: new () => { extend(p: LatLngLiteral): void };
   ColorScheme: Record<'LIGHT' | 'DARK', unknown>;
@@ -91,6 +91,7 @@ export function loadMaps(language: string): Promise<MapsLibs> {
     return {
       Map: maps.Map,
       TrafficLayer: maps.TrafficLayer,
+      Polyline: maps.Polyline,
       AdvancedMarkerElement: marker.AdvancedMarkerElement,
       Route: routes.Route,
       LatLngBounds: core.LatLngBounds,

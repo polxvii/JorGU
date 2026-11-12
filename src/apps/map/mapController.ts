@@ -7,6 +7,7 @@ import type { MessageKey } from '../../i18n';
 import { DEFAULT_CENTER, MAP_ID, mapsConfigured } from './config';
 import { type Position, useGeo } from './geo';
 import { type GMap, type GMarker, type GLayer, type GPolyline, type MapsLibs, loadMaps, onMapsAuthFailure } from './mapsLoader';
+import { routeEdges } from './routeEdges';
 import { RECOMPUTE_MIN_MS, type LL, aheadBearing, bearing, cameraCenter, haversine, progress, turn } from './routeMath';
 import { canSpend, useMapUsage } from './usage';
 
@@ -43,7 +44,12 @@ let creating = false;
 let marker: GMarker | null = null;
 let markerDot: HTMLElement | null = null;
 let traffic: GLayer | null = null;
-let polylines: GPolyline[] = [];
+// The route line: a solid centre line (Traffic off) or two edges with the traffic colour between them (Traffic on).
+let linePath: LL[] = [];
+let centreLine: GPolyline | null = null;
+let edgeLines: GPolyline[] = [];
+let edgeZoom = NaN;
+let lineFrame = 0;
 let destMarker: GMarker | null = null;
 
 /** Which map to show now: none without a key; Embed if chosen in Settings, or when the cost rule stops mode A. */
@@ -86,6 +92,12 @@ async function ensureMap(): Promise<void> {
       cancelAnimationFrame(anim);
       if (useSettings.getState().map.follow) useSettings.getState().setMapFollow(false);
     });
+    // The route edges are spaced in screen pixels: redraw them for the new zoom (roughly while zooming, exactly after).
+    map.addListener('zoom_changed', () => {
+      cancelAnimationFrame(lineFrame);
+      lineFrame = requestAnimationFrame(() => drawLine(0.25));
+    });
+    map.addListener('idle', () => drawLine(0.01));
     traffic = new libs.TrafficLayer();
     if (s.map.traffic) traffic.setMap(map);
     useMapUi.setState({ ready: true });
@@ -249,36 +261,49 @@ export function zoomBy(step: number): void {
 export function setTraffic(on: boolean): void {
   useSettings.getState().setMapTraffic(on);
   traffic?.setMap(on ? map : null);
-  for (const p of polylines) p.setOptions(routeLineStyle(on));
+  drawLine(0);
 }
 
 // ---------- route overview (§7.4): line, ETA, distance left; no turn instructions ----------
 
 const num = (v: number | (() => number)) => (typeof v === 'function' ? v() : v);
-// Route line (user 2026-11-12: the 50 % see-through line was too faint, yet the road's traffic colour must show).
-// Traffic on: a chain of solid arrows pointing the way, the Traffic layer's red / orange / green on the road showing
-// in the gaps. Traffic off: a solid line. A line coloured by traffic itself ("Traffic information on polylines") is
-// the Enterprise route SKU, 1,000 free a month: not used.
+// Route line (user 2026-11-12). The 50 % see-through line was too faint and a chain of arrows too busy; the user
+// picked two edges: with Traffic on, two solid blue lines either side of the route, the Traffic layer's red / orange /
+// green on the road showing between them. Traffic off: one solid line. A line coloured by traffic itself ("Traffic
+// information on polylines") is the Enterprise route SKU, 1,000 free a month: not used.
 const ROUTE_BLUE = '#1A73E8';
-const ROUTE_ARROW = {
-  // Points forward along the line (Symbol paths: -y is ahead). 21 × 18 at scale 3, inside Google's 22 px limit.
-  path: 'M 0,-3.5 3.5,2.5 0,0.8 -3.5,2.5 Z',
-  scale: 3,
-  fillColor: ROUTE_BLUE,
-  fillOpacity: 1,
-  strokeColor: '#FFFFFF',
-  strokeOpacity: 1,
-  strokeWeight: 1.5,
-};
-export function routeLineStyle(trafficOn: boolean): Record<string, unknown> {
-  return trafficOn
-    ? { strokeOpacity: 0, icons: [{ icon: ROUTE_ARROW, offset: '12px', repeat: '26px' }] }
-    : { strokeColor: ROUTE_BLUE, strokeOpacity: 1, strokeWeight: 7, icons: [] };
+export const EDGE_PX = 9;
+const LINE = { strokeColor: ROUTE_BLUE, strokeOpacity: 1, clickable: false, zIndex: 2 };
+const CENTRE_STYLE = { ...LINE, strokeWeight: 7 };
+const EDGE_STYLE = { ...LINE, strokeWeight: 4 };
+
+/** Puts the right route line on the map. Edges are recomputed when the zoom moved by `minZoomStep` or more. */
+function drawLine(minZoomStep: number): void {
+  if (!map || !libs || linePath.length < 2) return;
+  if (!useSettings.getState().map.traffic) {
+    for (const e of edgeLines) e.setMap(null);
+    centreLine ??= new libs.Polyline({ ...CENTRE_STYLE, path: linePath });
+    centreLine.setMap(map);
+    return;
+  }
+  centreLine?.setMap(null);
+  const z = map.getZoom() ?? DRIVE_ZOOM;
+  if (!edgeLines.length || !(Math.abs(z - edgeZoom) < Math.max(minZoomStep, 1e-6))) {
+    edgeZoom = z;
+    const edges = routeEdges(linePath, z, EDGE_PX);
+    if (!edgeLines.length) edgeLines = edges.map(() => new libs!.Polyline({ ...EDGE_STYLE }));
+    edges.forEach((path, i) => edgeLines[i].setPath(path));
+  }
+  for (const e of edgeLines) e.setMap(map);
 }
 
 function clearLine(): void {
-  for (const p of polylines) p.setMap(null);
-  polylines = [];
+  centreLine?.setMap(null);
+  for (const e of edgeLines) e.setMap(null);
+  centreLine = null;
+  edgeLines = [];
+  linePath = [];
+  edgeZoom = NaN;
   if (destMarker) destMarker.map = null;
   destMarker = null;
 }
@@ -339,10 +364,8 @@ async function computeRoute(destination: string): Promise<void> {
     // route keeps the view the driver has. The whole route is one tap away (route bar).
     const first = current.path.length === 0;
     clearLine();
-    const style = routeLineStyle(useSettings.getState().map.traffic);
-    polylines = r.createPolylines({ polylineOptions: (o: object) => ({ ...o, ...style }) });
-    for (const p of polylines) p.setMap(map);
     const path = r.path.map((p) => ({ lat: num(p.lat), lng: num(p.lng) }));
+    linePath = path;
     const pin = document.createElement('div');
     pin.className = 'jg-map-dest';
     destMarker = new libs.AdvancedMarkerElement({ map, position: path[path.length - 1], content: pin, title: destination });
@@ -352,6 +375,7 @@ async function computeRoute(destination: string): Promise<void> {
       map.setZoom(DRIVE_ZOOM);
       follow(useGeo.getState().pos ?? pos, true);
     }
+    drawLine(0);
   } catch {
     // e.g. Routes API not allowed for this key: still show Google's route, in the free view.
     fallBack(destination, 'map.routeFallback');
@@ -431,5 +455,5 @@ useSettings.subscribe((s, prev) => {
 
 /** Read-only hook for E2E tests. */
 export function debugMap() {
-  return { hasMap: !!map, mode: useMapUi.getState().mode, lines: polylines.length, heading: camHeading, canRotate };
+  return { hasMap: !!map, mode: useMapUi.getState().mode, lines: linePath.length ? (useSettings.getState().map.traffic ? edgeLines.length : 1) : 0, heading: camHeading, canRotate };
 }

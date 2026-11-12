@@ -324,6 +324,9 @@ test('short map pane (upright phone): buttons that do not fit are under More', a
   await expect(page.getByTestId('map-route')).toHaveAttribute('data-status', 'ready');
   await expect(page.getByTestId('map-more')).toBeVisible();
   await expect(page.getByTestId('map-route-end')).toHaveCount(0);
+  // The YouTube pane above has its controls in a side strip too; ±10 s come as a pair.
+  await expect(page.getByTestId('yt-transport')).toHaveAttribute('data-side', '1');
+  expect(await page.getByTestId('yt-back10').count()).toBe(await page.getByTestId('yt-forward10').count());
   await page.getByTestId('map-more').click();
   await expect(page.getByTestId('map-more-menu')).toBeVisible();
   await page.getByTestId('map-more-menu').getByTestId('map-route-end').click();

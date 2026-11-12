@@ -99,7 +99,12 @@ function Controls({ rect, side }: { rect: Rect; side: boolean }) {
   ];
   // What doesn't fit is still in the queue sheet (±10 s, mute, speed).
   const fits = side ? Math.max(1, Math.floor((rect.h - 2 * YT_STRIP_PAD + YT_ROW_GAP) / (cs.row + YT_ROW_GAP))) : slots.length;
-  const keep = new Set([...slots].sort((a, b) => a.prio - b.prio).slice(0, fits).map((s) => s.key));
+  // Highest priority first; ±10 s come as a pair (both or neither).
+  const keep = new Set<string>();
+  for (const s of [...slots].sort((a, b) => a.prio - b.prio)) {
+    const group = s.key === 'back' || s.key === 'fwd' ? ['back', 'fwd'] : [s.key];
+    if (!keep.has(s.key) && keep.size + group.length <= fits) for (const k of group) keep.add(k);
+  }
   return (
     <div
       data-testid="yt-transport"

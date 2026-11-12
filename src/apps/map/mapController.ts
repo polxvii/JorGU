@@ -261,7 +261,8 @@ const num = (v: number | (() => number)) => (typeof v === 'function' ? v() : v);
 // the Enterprise route SKU, 1,000 free a month: not used.
 const ROUTE_BLUE = '#1A73E8';
 const ROUTE_ARROW = {
-  path: 'M 0,-3 3,2 0,0.5 -3,2 Z', // points forward along the line (Symbol paths: -y is ahead); 18 px wide at scale 3
+  // Points forward along the line (Symbol paths: -y is ahead). 21 × 18 at scale 3, inside Google's 22 px limit.
+  path: 'M 0,-3.5 3.5,2.5 0,0.8 -3.5,2.5 Z',
   scale: 3,
   fillColor: ROUTE_BLUE,
   fillOpacity: 1,
@@ -271,7 +272,7 @@ const ROUTE_ARROW = {
 };
 export function routeLineStyle(trafficOn: boolean): Record<string, unknown> {
   return trafficOn
-    ? { strokeOpacity: 0, icons: [{ icon: ROUTE_ARROW, offset: '12px', repeat: '30px' }] }
+    ? { strokeOpacity: 0, icons: [{ icon: ROUTE_ARROW, offset: '12px', repeat: '26px' }] }
     : { strokeColor: ROUTE_BLUE, strokeOpacity: 1, strokeWeight: 7, icons: [] };
 }
 

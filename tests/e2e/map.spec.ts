@@ -73,12 +73,12 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   expect(s.lastRoute).toMatchObject({ destination: 'Central World', routingPreference: 'TRAFFIC_UNAWARE', fields: ['durationMillis', 'distanceMeters', 'path'] });
   expect(s.lastRoute).not.toHaveProperty('extraComputations'); // traffic on the line = Enterprise SKU
   // Traffic on: a chain of solid arrows, the road's traffic colour showing between them (user 2026-11-12).
-  expect(s.lineStyle).toMatchObject({ strokeOpacity: 0, icons: [{ repeat: '30px', icon: { fillOpacity: 1, fillColor: '#1A73E8' } }] });
+  expect(s.lineStyle).toMatchObject({ strokeOpacity: 0, icons: [{ repeat: '26px', icon: { fillOpacity: 1, fillColor: '#1A73E8' } }] });
   // Traffic off: nothing to see under the line, so it turns solid; on again: arrows.
   await page.getByTestId('map-traffic').click();
   expect((await stub(page)).lineStyle).toMatchObject({ strokeOpacity: 1, strokeWeight: 7, icons: [] });
   await page.getByTestId('map-traffic').click();
-  expect((await stub(page)).lineStyle).toMatchObject({ strokeOpacity: 0, icons: [{ repeat: '30px' }] });
+  expect((await stub(page)).lineStyle).toMatchObject({ strokeOpacity: 0, icons: [{ repeat: '26px' }] });
   expect(popups).toBe(0);
   // Follows the car at driving zoom, the map turned so the road ahead points up (the stub route heads north-east)
   // and the car about 25 % up from the bottom: the camera centre is ahead of the car.

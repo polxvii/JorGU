@@ -52,7 +52,7 @@ export const MAPS_STUB_JS = `(function () {
       createPolylines: function (opts) {
         var f = opts && opts.polylineOptions;
         S.lineStyle = typeof f === 'function' ? f({ strokeColor: '#4285F4' }) : f || null;
-        return [{ setMap: function (m) { S.lines += m ? 1 : -1; } }];
+        return [{ setMap: function (m) { S.lines += m ? 1 : -1; }, setOptions: function (o) { S.lineStyle = Object.assign({}, S.lineStyle, o); } }];
       } }] });
   } };
   var libs = { maps: { Map: GMap, TrafficLayer: Traffic }, marker: { AdvancedMarkerElement: Marker }, routes: { Route: Route },

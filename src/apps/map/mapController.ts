@@ -249,12 +249,31 @@ export function zoomBy(step: number): void {
 export function setTraffic(on: boolean): void {
   useSettings.getState().setMapTraffic(on);
   traffic?.setMap(on ? map : null);
+  for (const p of polylines) p.setOptions(routeLineStyle(on));
 }
 
 // ---------- route overview (§7.4): line, ETA, distance left; no turn instructions ----------
 
 const num = (v: number | (() => number)) => (typeof v === 'function' ? v() : v);
-const ROUTE_OPACITY = 0.5;
+// Route line (user 2026-11-12: the 50 % see-through line was too faint, yet the road's traffic colour must show).
+// Traffic on: a chain of solid arrows pointing the way, the Traffic layer's red / orange / green on the road showing
+// in the gaps. Traffic off: a solid line. A line coloured by traffic itself ("Traffic information on polylines") is
+// the Enterprise route SKU, 1,000 free a month: not used.
+const ROUTE_BLUE = '#1A73E8';
+const ROUTE_ARROW = {
+  path: 'M 0,-3 3,2 0,0.5 -3,2 Z', // points forward along the line (Symbol paths: -y is ahead); 18 px wide at scale 3
+  scale: 3,
+  fillColor: ROUTE_BLUE,
+  fillOpacity: 1,
+  strokeColor: '#FFFFFF',
+  strokeOpacity: 1,
+  strokeWeight: 1.5,
+};
+export function routeLineStyle(trafficOn: boolean): Record<string, unknown> {
+  return trafficOn
+    ? { strokeOpacity: 0, icons: [{ icon: ROUTE_ARROW, offset: '12px', repeat: '30px' }] }
+    : { strokeColor: ROUTE_BLUE, strokeOpacity: 1, strokeWeight: 7, icons: [] };
+}
 
 function clearLine(): void {
   for (const p of polylines) p.setMap(null);
@@ -319,9 +338,8 @@ async function computeRoute(destination: string): Promise<void> {
     // route keeps the view the driver has. The whole route is one tap away (route bar).
     const first = current.path.length === 0;
     clearLine();
-    // See-through line: the Traffic layer's colours on the road show through it. A line coloured by traffic
-    // ("Traffic information on polylines") is the Enterprise route SKU: 1,000 free a month, not used.
-    polylines = r.createPolylines({ polylineOptions: (o: object) => ({ ...o, strokeOpacity: ROUTE_OPACITY }) });
+    const style = routeLineStyle(useSettings.getState().map.traffic);
+    polylines = r.createPolylines({ polylineOptions: (o: object) => ({ ...o, ...style }) });
     for (const p of polylines) p.setMap(map);
     const path = r.path.map((p) => ({ lat: num(p.lat), lng: num(p.lng) }));
     const pin = document.createElement('div');

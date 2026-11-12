@@ -30,6 +30,7 @@ export interface GLayer {
 }
 export interface GPolyline {
   setMap(map: GMap | null): void;
+  setOptions(options: Record<string, unknown>): void;
 }
 export interface GRoute {
   durationMillis?: number;

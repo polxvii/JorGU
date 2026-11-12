@@ -75,18 +75,39 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   // See-through line over the Traffic layer, Google's own colour kept.
   expect(s.lineStyle).toEqual({ strokeColor: '#4285F4', strokeOpacity: 0.5 });
   expect(popups).toBe(0);
-  // Follows the car at driving zoom. The bar shows the whole route on request; ⌖ follows again.
+  // Follows the car at driving zoom, the map turned so the road ahead points up (the stub route heads north-east)
+  // and the car about 25 % up from the bottom: the camera centre is ahead of the car.
   await expect(page.getByTestId('map-recenter')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => Math.round((await stub(page)).heading)).toBe(44);
+  const cam = (await stub(page)).center!;
+  expect(cam.lat).toBeGreaterThan(HERE.latitude);
+  expect(cam.lng).toBeGreaterThan(HERE.longitude);
+  // Route buttons are in the map's toolbar (user 2026-11-12), not on the route box.
+  const controls = page.getByTestId('map-controls');
+  for (const id of ['map-route-overview', 'map-route-navigate', 'map-route-end']) await expect(controls.getByTestId(id)).toBeVisible();
+  // Whole route: north up, fitted; ⌖ turns back to the road ahead.
   await page.getByTestId('map-route-overview').click();
-  expect((await stub(page)).fitBounds).toBe(1);
+  expect(await stub(page)).toMatchObject({ fitBounds: 1, heading: 0 });
   await expect(page.getByTestId('map-recenter')).toHaveAttribute('aria-pressed', 'false');
   await page.getByTestId('map-recenter').click();
   await expect(page.getByTestId('map-recenter')).toHaveAttribute('aria-pressed', 'true');
-  // The slim bar sits beside the control column, not over it.
-  const bar = await box(page, '[data-testid="map-route"]');
-  const controls = await box(page, '[data-testid="map-controls"]');
-  expect(bar.x + bar.width <= controls.x || controls.x + controls.width <= bar.x).toBe(true);
-  expect(bar.height).toBeLessThanOrEqual(64);
+  await expect.poll(async () => Math.round((await stub(page)).heading)).toBe(44);
+  // Route box: time, distance, arrival only; bottom corner by default, beside the toolbar; a tap moves it to the top.
+  const routeBox = page.getByTestId('map-route');
+  await expect(routeBox).toHaveAttribute('data-at', 'bottom');
+  await expect(routeBox.locator('button, a')).toHaveCount(0);
+  const cb = await box(page, '[data-testid="map-controls"]');
+  let rb = await box(page, '[data-testid="map-route"]');
+  expect(rb.x + rb.width <= cb.x || cb.x + cb.width <= rb.x).toBe(true);
+  expect(rb.height).toBeLessThanOrEqual(64);
+  const surface = await box(page, '[data-testid="map-surface"]');
+  expect(rb.y + rb.height).toBeGreaterThan(surface.y + surface.height - 80);
+  await routeBox.click();
+  await expect(routeBox).toHaveAttribute('data-at', 'top');
+  rb = await box(page, '[data-testid="map-route"]');
+  expect(rb.y).toBeLessThan(surface.y + 80);
+  await routeBox.click();
+  await expect(routeBox).toHaveAttribute('data-at', 'bottom');
   // The Where to? sheet has the same hand-off, with its full label.
   await page.getByTestId('map-navigate').click();
   expect(new URL((await page.getByTestId('map-sheet-navigate').getAttribute('href'))!).searchParams.get('destination')).toBe('Central World');
@@ -106,7 +127,8 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   expect(popups).toBe(1);
   await page.getByTestId('map-route-end').click();
   await expect(page.getByTestId('map-route')).toHaveCount(0);
-  expect(await stub(page)).toMatchObject({ lines: 0, pins: 0, routes: 1, maps: 1 });
+  expect(await stub(page)).toMatchObject({ lines: 0, pins: 0, routes: 1, maps: 1, heading: 0 });
+  await expect(page.getByTestId('map-route-end')).toHaveCount(0);
   // Remembered as a recent destination; tapping it shows the route again.
   await page.getByTestId('map-navigate').click();
   await expect(page.getByTestId('map-recent')).toContainText('Central World');
@@ -251,13 +273,50 @@ test('Google refuses the key (gm_authFailure): falls back to mode B with a note'
   await expect(page.getByTestId('map-notice')).toContainText('refused');
 });
 
+for (const vp of [{ width: 1024, height: 600 }, { width: 430, height: 860 }]) {
+  test(`map full screen ${vp.width}x${vp.height}: the floating bar never covers the map's buttons or the route box`, async ({ page }) => {
+    await withLocation(page);
+    await page.setViewportSize(vp);
+    await openApp(page);
+    await expect.poll(async () => (await stub(page)).markers).toBe(1);
+    await page.getByTestId('map-navigate').click();
+    await page.getByTestId('map-dest-input').fill('Central World');
+    await page.getByTestId('map-dest-go').click();
+    await expect(page.getByTestId('map-route')).toHaveAttribute('data-status', 'ready');
+    await page.getByTestId('pane-fullscreen-1').click();
+    const s = await box(page, '[data-surface="map"]');
+    await page.mouse.click(s.x + s.width / 2, s.y + s.height / 2);
+    await expect(page.getByTestId('floating-bar')).toBeVisible();
+    const bar = await box(page, '[data-testid="floating-bar"]');
+    const apart = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+      a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+    expect(apart(await box(page, '[data-testid="map-controls"]'), bar)).toBe(true);
+    for (const routeAt of ['bottom', 'top']) {
+      await expect(page.getByTestId('map-route')).toHaveAttribute('data-at', routeAt);
+      expect(apart(await box(page, '[data-testid="map-route"]'), bar)).toBe(true);
+      if (routeAt === 'bottom') {
+        await page.getByTestId('map-route').click();
+        await page.mouse.click(s.x + s.width / 2, s.y + s.height / 2);
+        await expect(page.getByTestId('floating-bar')).toBeVisible();
+      }
+    }
+  });
+}
+
 test('map controls move away from the mini player; nothing covers it', async ({ page }) => {
   await openApp(page);
   await startSimulatedPlayback(page);
   await page.getByTestId('pane-fullscreen-1').click();
-  await expect(page.getByTestId('map-controls')).toHaveAttribute('data-side', 'left');
   await expectPlayerClear(page);
+  // Clear of the mini player and of the floating bar (which sits on the side away from the mini player): here the
+  // toolbar stays on the driver side, wrapped into columns above the mini player.
   const controls = await box(page, '[data-testid="map-controls"]');
   const mini = await box(page, '[data-player-rect]');
-  expect(controls.x + controls.width).toBeLessThan(mini.x);
+  expect(controls.y + controls.height <= mini.y || controls.x + controls.width <= mini.x).toBe(true);
+  const s = await box(page, '[data-surface="map"]');
+  await page.mouse.click(s.x + s.width / 3, s.y + s.height / 2);
+  await expect(page.getByTestId('floating-bar')).toBeVisible();
+  const bar = await box(page, '[data-testid="floating-bar"]');
+  expect(controls.x >= bar.x + bar.width || bar.x >= controls.x + controls.width || controls.y >= bar.y + bar.height || bar.y >= controls.y + controls.height).toBe(true);
+  await expectPlayerClear(page);
 });

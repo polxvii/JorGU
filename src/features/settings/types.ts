@@ -78,6 +78,8 @@ export interface Settings {
     /** Route options (Routes API route modifiers; Embed `avoid`). Both stay in the Essentials route SKU. */
     avoidTolls: boolean;
     avoidHighways: boolean;
+    /** Route box (time, distance, arrival): top or bottom corner of the map. Tap it to switch. */
+    routeInfoAt: 'top' | 'bottom';
     savedPlaces: SavedPlace[];
     recentDestinations: string[];
   };
@@ -113,7 +115,7 @@ export function defaultSettings(): Settings {
       fullscreenPane: null,
       driverSide: 'right',
     },
-    map: { mode: 'js', routeLine: true, follow: true, traffic: true, avoidTolls: false, avoidHighways: false, savedPlaces: [], recentDestinations: [] },
+    map: { mode: 'js', routeLine: true, follow: true, traffic: true, avoidTolls: false, avoidHighways: false, routeInfoAt: 'bottom', savedPlaces: [], recentDestinations: [] },
     web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280 },
     youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', playbackRate: 1, autoContinue: true },
     dockSize: 'normal',

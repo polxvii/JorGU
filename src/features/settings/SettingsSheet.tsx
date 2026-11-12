@@ -231,6 +231,17 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
               />
               <p className="mt-1 px-1 text-[13px] text-text-dim">{t('settings.routeLineHint')}</p>
             </div>
+            <div className="mt-3">
+              <Segmented
+                testId="setting-route-info"
+                value={s.map.routeInfoAt}
+                onChange={s.setRouteInfoAt}
+                options={[
+                  { value: 'top', label: t('settings.routeInfoTop') },
+                  { value: 'bottom', label: t('settings.routeInfoBottom') },
+                ]}
+              />
+            </div>
             <div className="mt-2 flex flex-col gap-1 rounded-xl bg-bg p-3 text-[14px]" data-testid="setting-map-usage">
               {(['map', 'route'] as const).map((sku) => (
                 <p key={sku} data-testid={`setting-map-usage-${sku}`}>

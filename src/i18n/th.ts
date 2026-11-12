@@ -248,7 +248,7 @@ export const th: Partial<Record<MessageKey, string>> = {
 
   'map.whereTo': 'ไปไหนดี',
   'map.destPlaceholder': 'สถานที่หรือที่อยู่',
-  'map.handoffHint': 'เส้นทางแสดงใน JorGu และแผนที่เลื่อนตามรถ ถ้าอยากได้เสียงนำทาง กด "นำทางด้วย Google Maps" (ที่นี่ หรือปุ่ม ↗ บนแถบเส้นทาง)',
+  'map.handoffHint': 'เส้นทางแสดงใน JorGu และแผนที่หมุนตามทางข้างหน้า ถ้าอยากได้เสียงนำทาง กด "นำทางด้วย Google Maps" (ที่นี่ หรือปุ่ม ↗ ในแถบปุ่มของแผนที่) แตะกล่องเวลาเพื่อย้ายขึ้นบน / ลงล่าง',
   'map.savedPlaces': 'สถานที่ที่บันทึก',
   'map.addPlace': 'เพิ่มสถานที่',
   'map.placeLabel': 'ชื่อ (เช่น บ้าน)',
@@ -291,4 +291,7 @@ export const th: Partial<Record<MessageKey, string>> = {
   'map.avoidTolls': 'เลี่ยงทางด่วน / ทางเสียเงิน',
   'map.avoidHighways': 'เลี่ยงทางหลวง',
   'map.avoidHint': 'แอป Google Maps (เสียงนำทาง) มีตัวเลือกเส้นทางของตัวเอง ให้เปิด "เลี่ยง" ในแอปนั้นด้วย',
+  'map.routeInfoMove': 'แตะเพื่อย้ายไปมุมบน / ล่าง',
+  'settings.routeInfoTop': 'กล่องเวลาเดินทาง: บน',
+  'settings.routeInfoBottom': 'กล่องเวลาเดินทาง: ล่าง',
 };

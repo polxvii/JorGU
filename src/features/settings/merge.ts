@@ -24,6 +24,7 @@ export function mergeSettings(persisted: unknown, current: Settings): Settings {
   if (typeof merged.map.routeLine !== 'boolean') merged.map.routeLine = true;
   if (typeof merged.map.avoidTolls !== 'boolean') merged.map.avoidTolls = false;
   if (typeof merged.map.avoidHighways !== 'boolean') merged.map.avoidHighways = false;
+  if (merged.map.routeInfoAt !== 'top' && merged.map.routeInfoAt !== 'bottom') merged.map.routeInfoAt = 'bottom';
   if (merged.map.mode !== 'js' && merged.map.mode !== 'embed') merged.map.mode = 'js';
   return merged;
 }

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { type AppRef, defaultSettings, type LayoutSettings, type MiniPlayerSize } from '../../src/features/settings/types';
-import { computeLayout, type LayoutInput, type LayoutResult, L } from '../../src/shell/computeLayout';
+import { CONTROL_SIZES, computeLayout, type LayoutInput, type LayoutResult, L } from '../../src/shell/computeLayout';
 import { type Rect, bottom, intersects } from '../../src/shell/geometry';
-import { YT_MIN_HEIGHT } from '../../src/shell/splitRatio';
+import { YT_MIN_HEIGHT, ytMinHeight } from '../../src/shell/splitRatio';
 
 const NO_SAFE = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -259,9 +259,13 @@ describe('§3.9 invariants across every combination', () => {
                       if (r.mode === 'split') {
                         for (const p of r.panes) {
                           if (p.app.kind === 'youtube') expect(p.rect.w, ctx).toBeGreaterThanOrEqual(356);
+                          if (p.app.kind === 'youtube' && r.stacked) expect(p.rect.h, ctx).toBeGreaterThanOrEqual(ytMinHeight(CONTROL_SIZES[dockSize].ytControls));
                           if (r.dock) expect(intersects(p.rect, r.dock), `pane under dock: ${ctx}`).toBe(false);
                         }
                       }
+                      // Toolbar size reaches the full-screen controls too.
+                      if (r.controlColumn) expect(Math.min(r.controlColumn.w, r.controlColumn.h) % CONTROL_SIZES[dockSize].column, ctx).toBe(0);
+                      if (r.floatingBar) expect((r.floatingBar.rect.h - L.FLOAT_GAP) % (CONTROL_SIZES[dockSize].big + L.FLOAT_GAP), ctx).toBe(0);
                       n++;
                     }
     expect(n).toBeGreaterThan(20_000);

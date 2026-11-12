@@ -9,10 +9,11 @@ import { MuteButton, SeekButton } from '../apps/youtube/TransportButtons';
 import { next, previous, togglePlay } from '../apps/youtube/player';
 import { youtubePane } from './layoutActions';
 import type { LayoutResult } from './computeLayout';
-import { L, miniCornerOf } from './computeLayout';
+import { miniCornerOf } from './computeLayout';
 import type { MiniCorner } from '../features/settings/types';
 import { exitFullscreen, switchFullscreen } from './fullscreen';
 import { Icon, type IconName } from './Icon';
+import { useControlSize } from './useControlSize';
 import type { Rect } from './geometry';
 
 const FLOAT_HIDE_MS = 4000;
@@ -25,15 +26,17 @@ function BigButton({ icon, label, onClick, testId, primary }: {
   primary?: boolean;
 }) {
   const t = useT();
+  const cs = useControlSize();
   return (
     <button
       type="button"
       data-testid={testId}
       aria-label={t(label)}
       onClick={onClick}
-      className={`flex h-16 w-16 items-center justify-center rounded-2xl ${primary ? 'bg-accent text-on-accent' : 'bg-surface text-text'}`}
+      style={{ width: cs.big, height: cs.big }}
+      className={`flex items-center justify-center rounded-2xl ${primary ? 'bg-accent text-on-accent' : 'bg-surface text-text'}`}
     >
-      <Icon name={icon} size={30} />
+      <Icon name={icon} size={cs.bigIcon} />
     </button>
   );
 }
@@ -58,6 +61,7 @@ export function FloatingControls({ layout }: { layout: LayoutResult }) {
   const nonce = useUi((s) => s.floatingNonce);
   const hide = useUi((s) => s.hideFloating);
   const a = useFullscreenActions();
+  const cs = useControlSize();
   useEffect(() => {
     if (!visible) return;
     const id = window.setTimeout(hide, FLOAT_HIDE_MS);
@@ -77,7 +81,7 @@ export function FloatingControls({ layout }: { layout: LayoutResult }) {
         top: r.y,
         width: r.w,
         height: r.h,
-        gridTemplateRows: `repeat(${bar.rows}, 64px)`,
+        gridTemplateRows: `repeat(${bar.rows}, ${cs.big}px)`,
         gridAutoFlow: 'column',
       }}
     >
@@ -100,11 +104,12 @@ export function FloatingControls({ layout }: { layout: LayoutResult }) {
 
 export function ControlColumn({ rect }: { rect: Rect }) {
   const a = useFullscreenActions();
-  // Highest priority first; keep what fits (64 px buttons, 4 px gaps). The column may hold two lines (layout engine).
+  const cs = useControlSize();
+  // Highest priority first; keep what fits (Toolbar size buttons, 4 px gaps). The column may hold two lines (layout engine).
   const row = rect.w > rect.h;
-  const step = L.FLOAT_BUTTON + 4;
+  const step = cs.big + 4;
   const along = Math.max(1, Math.floor(((row ? rect.w : rect.h) - 4) / step));
-  const lines = Math.max(1, Math.floor(((row ? rect.h : rect.w) + 4) / (L.COLUMN + 4)));
+  const lines = Math.max(1, Math.floor(((row ? rect.h : rect.w) + 4) / (cs.column + 4)));
   const fits = Math.max(3, along * lines);
   // ±10 s come as a pair: both or neither.
   const groups: ReactElement[][] = [
@@ -140,7 +145,7 @@ export function ControlColumn({ rect }: { rect: Rect }) {
         width: rect.w,
         height: rect.h,
         gridAutoFlow: row ? 'row' : 'column',
-        [row ? 'gridTemplateColumns' : 'gridTemplateRows']: `repeat(${Math.min(along, Math.ceil(buttons.length / lines))}, 64px)`,
+        [row ? 'gridTemplateColumns' : 'gridTemplateRows']: `repeat(${Math.min(along, Math.ceil(buttons.length / lines))}, ${cs.big}px)`,
       }}
     >
       {buttons}

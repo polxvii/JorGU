@@ -47,6 +47,63 @@ export function projectOnPath(p: LL, path: LL[]): { off: number; along: number }
   return best;
 }
 
+// ---------- navigation camera (user request 2026-11-12: route ahead at the top, car low on the screen) ----------
+
+const deg = (r: number) => (r * 180) / Math.PI;
+
+/** Compass bearing from a to b, 0–360°. */
+export function bearing(a: LL, b: LL): number {
+  const y = Math.sin(rad(b.lng - a.lng)) * Math.cos(rad(b.lat));
+  const x = Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) - Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(rad(b.lng - a.lng));
+  return (deg(Math.atan2(y, x)) + 360) % 360;
+}
+
+/** The point `meters` from p in direction `heading`. */
+export function offsetPoint(p: LL, heading: number, meters: number): LL {
+  const d = meters / R;
+  const h = rad(heading);
+  const lat1 = rad(p.lat);
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(h));
+  const lng2 = rad(p.lng) + Math.atan2(Math.sin(h) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+  return { lat: deg(lat2), lng: ((deg(lng2) + 540) % 360) - 180 };
+}
+
+/** The point `along` metres down the path (clamped to its ends). */
+export function pointAlong(path: LL[], along: number): LL {
+  if (path.length === 0) return { lat: 0, lng: 0 };
+  let walked = 0;
+  for (let i = 1; i < path.length; i++) {
+    const seg = haversine(path[i - 1], path[i]);
+    if (walked + seg >= along && seg > 0) {
+      const t = Math.max(0, (along - walked) / seg);
+      return { lat: path[i - 1].lat + t * (path[i].lat - path[i - 1].lat), lng: path[i - 1].lng + t * (path[i].lng - path[i - 1].lng) };
+    }
+    walked += seg;
+  }
+  return path[path.length - 1];
+}
+
+/** Direction of the road ahead: from the car's spot on the line to `ahead` m further. Null when off the line. */
+export function aheadBearing(p: LL, path: LL[], ahead = 60): number | null {
+  if (path.length < 2) return null;
+  const { off, along } = projectOnPath(p, path);
+  if (off > OFF_ROUTE_M) return null;
+  const from = pointAlong(path, along);
+  const to = pointAlong(path, along + ahead);
+  return haversine(from, to) < 5 ? null : bearing(from, to);
+}
+
+/** Metres per CSS pixel on a Google map (256-px tiles) at this latitude and zoom. */
+export const metersPerPixel = (lat: number, zoom: number) => (156543.03392 * Math.cos(rad(lat))) / 2 ** zoom;
+
+/** Map centre that shows the car `belowCenterPx` below the middle of a map rotated to `heading`. */
+export function cameraCenter(car: LL, heading: number, zoom: number, belowCenterPx: number): LL {
+  return offsetPoint(car, heading, belowCenterPx * metersPerPixel(car.lat, zoom));
+}
+
+/** Shortest turn from a to b, in degrees (-180…180). */
+export const turn = (a: number, b: number) => ((((b - a) % 360) + 540) % 360) - 180;
+
 export const OFF_ROUTE_M = 200;
 export const RECOMPUTE_MIN_MS = 60_000;
 

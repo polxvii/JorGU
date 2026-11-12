@@ -1,33 +1,36 @@
 // Map app surface (spec §7): mode A (one Maps JavaScript map), mode B (Maps Embed, no charge), or a "not set up"
-// panel where Navigate still works. Our large controls stay clear of the mini player (§6.6).
+// panel where Navigate still works. Our controls stay clear of the mini player and the full-screen bar (§6.6);
+// placement rules live in mapChrome.ts.
 import { useCallback, useMemo } from 'react';
 import { useSettings } from '../../features/settings/settingsStore';
 import { useUi } from '../../features/settings/uiStore';
 import { useT } from '../../i18n';
 import { Icon, type IconName } from '../../shell/Icon';
-import { type Rect, intersects } from '../../shell/geometry';
+import type { Rect } from '../../shell/geometry';
+import { useControlSize } from '../../shell/useControlSize';
 import { DEFAULT_CENTER, MAPS_KEY } from './config';
 import { kmh, useGeo } from './geo';
 import { attachMap, endRoute, recenter, setTraffic, showRouteOverview, useMapUi, zoomBy } from './mapController';
 import { mapsNavigateUrl } from './navigate';
+import { MAP_GAP, placeMapChrome } from './mapChrome';
 import { progress } from './routeMath';
 
-const BTN = 56;
-const GAP = 8;
+const BUTTON = 'flex items-center justify-center rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.35)]';
 
 function MapButton({ icon, label, onClick, active, testId }: { icon: IconName; label: string; onClick: () => void; active?: boolean; testId: string }) {
+  const cs = useControlSize();
   return (
     <button
       type="button"
       data-testid={testId}
       aria-label={label}
+      title={label}
       aria-pressed={active}
       onClick={onClick}
-      className={`flex h-14 w-14 items-center justify-center rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.35)] ${
-        active ? 'bg-accent text-on-accent' : 'bg-surface text-text'
-      }`}
+      style={{ width: cs.map, height: cs.map, direction: 'ltr' }}
+      className={`${BUTTON} ${active ? 'bg-accent text-on-accent' : 'bg-surface text-text'}`}
     >
-      <Icon name={icon} size={28} />
+      <Icon name={icon} size={cs.mapIcon} />
     </button>
   );
 }
@@ -63,23 +66,17 @@ function EmbedFrame() {
   );
 }
 
-function BarButton({ testId, icon, label, onClick }: { testId: string; icon: IconName; label: string; onClick: () => void }) {
-  return (
-    <button type="button" data-testid={testId} aria-label={label} title={label} onClick={onClick} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-bg">
-      <Icon name={icon} size={22} />
-    </button>
-  );
-}
-
 /**
- * Slim route bar beside the control column (user feedback 2026-11-11: the old card and its big Navigate button
- * covered the map). Time left, then distance and arrival; whole-route view; Google Maps hand-off; end.
+ * Route box: time left, distance and arrival only (user request 2026-11-12); its buttons live in the toolbar.
+ * Tap it to move it between the top and bottom corner.
  */
-function RouteBar({ top, topPx, left }: { top: boolean; topPx: number; left: boolean }) {
+function RouteBox({ rect }: { rect: Rect }) {
   const t = useT();
   const route = useMapUi((s) => s.route);
   const mode = useMapUi((s) => s.mode);
   const pos = useGeo((s) => s.pos);
+  const at = useSettings((s) => s.map.routeInfoAt);
+  const setAt = useSettings((s) => s.setRouteInfoAt);
   if (!route) return null;
   const line = mode === 'js' && !route.viaEmbed && route.path.length > 1;
   let time = '';
@@ -94,32 +91,19 @@ function RouteBar({ top, topPx, left }: { top: boolean; topPx: number; left: boo
   else if (route.note) detail = t(route.note);
   else if (route.status === 'error') detail = t('map.routeError');
   return (
-    <div
+    <button
+      type="button"
       data-testid="map-route"
       data-status={route.status}
-      title={route.destination}
-      className={`absolute flex max-w-[min(340px,calc(100%-88px))] items-center gap-1.5 rounded-2xl bg-surface/95 p-1.5 pl-3 shadow-[0_1px_4px_rgba(0,0,0,0.35)] ${left ? 'left-3' : 'right-3'}`}
-      style={top ? { top: topPx } : { bottom: 12 }}
+      data-at={at}
+      title={`${route.destination} · ${t('map.routeInfoMove')}`}
+      onClick={() => setAt(at === 'top' ? 'bottom' : 'top')}
+      className="absolute flex flex-col justify-center rounded-2xl bg-surface/95 px-3 text-left shadow-[0_1px_4px_rgba(0,0,0,0.35)]"
+      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
     >
-      <div className="min-w-0 flex-1">
-        {time && <div className="tabular text-[18px] font-bold leading-tight text-accent" data-testid="map-route-time">{time}</div>}
-        <div className="line-clamp-2 text-[13px] leading-tight text-text-dim" data-testid="map-route-detail">{detail || route.destination}</div>
-      </div>
-      {line && <BarButton testId="map-route-overview" icon="map" label={t('map.routeOverview')} onClick={showRouteOverview} />}
-      {/* Voice guidance: hands the trip to the Google Maps app, only when tapped. */}
-      <a
-        href={mapsNavigateUrl(route.destination)}
-        target="_blank"
-        rel="noopener"
-        data-testid="map-route-navigate"
-        aria-label={t('map.navigateGoogle')}
-        title={t('map.navigateGoogle')}
-        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-bg"
-      >
-        <Icon name="external" size={22} />
-      </a>
-      <BarButton testId="map-route-end" icon="close" label={t('map.endRoute')} onClick={endRoute} />
-    </div>
+      {time && <span className="tabular block text-[18px] font-bold leading-tight text-accent" data-testid="map-route-time">{time}</span>}
+      <span className="line-clamp-2 block text-[13px] leading-tight text-text-dim" data-testid="map-route-detail">{detail || route.destination}</span>
+    </button>
   );
 }
 
@@ -139,17 +123,21 @@ function NotSetUp() {
 }
 
 /**
- * `size`: the surface size; `avoid`: the mini player (+ handle) relative to the surface; `band`: top space kept for
- * the pane header and the ⛶ button (0 in full screen).
+ * `size`: the surface size; `avoid`: what to keep clear, relative to the surface (mini player + handle, full-screen
+ * floating bar); `band`: top space kept for the pane header and the ⛶ button (0 in full screen).
  */
-export function MapSurface({ size, avoid, band }: { size: { w: number; h: number }; avoid: Rect | null; band: number }) {
+export function MapSurface({ size, avoid, band }: { size: { w: number; h: number }; avoid: Rect[]; band: number }) {
   const t = useT();
+  const cs = useControlSize();
   const mode = useMapUi((s) => s.mode);
   const notice = useMapUi((s) => s.notice);
+  const route = useMapUi((s) => s.route);
   // A route in the free Embed view covers the interactive map (mode B, route line off, or fallback).
-  const embedRoute = useMapUi((s) => !!s.route?.viaEmbed);
+  const embedRoute = !!route?.viaEmbed;
+  const line = mode === 'js' && !!route && !route.viaEmbed && route.path.length > 1;
   const follow = useSettings((s) => s.map.follow);
   const trafficOn = useSettings((s) => s.map.traffic);
+  const routeInfoAt = useSettings((s) => s.map.routeInfoAt);
   const driverRight = useSettings((s) => s.layout.driverSide) === 'right';
   const openSheet = useUi((s) => s.openSheet);
   const pos = useGeo((s) => s.pos);
@@ -158,15 +146,15 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
     if (node) attachMap(node);
   }, []);
 
-  const buttons = mode === 'js' && !embedRoute ? 5 : 2;
-  const colH = buttons * BTN + (buttons - 1) * GAP;
-  const top = Math.max(GAP, band + 4);
-  const colAt = (right: boolean): Rect => ({ x: right ? size.w - GAP - BTN : GAP, y: top, w: BTN, h: colH + 80 });
-  // Controls on the driver side, unless the mini player is there.
-  const onRight = avoid && intersects(colAt(driverRight), avoid) ? !driverRight : driverRight;
-  const routeTop = !(avoid && avoid.y < size.h / 2);
-  const hasRoute = useMapUi((s) => !!s.route);
+  const live = mode === 'js' && !embedRoute;
+  // Toolbar: search, locate, zoom, traffic; during a route also whole route, Google Maps, end (user 2026-11-12).
+  // The speed badge always has a slot, so the toolbar doesn't jump when it appears.
+  const items = 2 + (live ? 3 : 0) + (route ? (line ? 3 : 2) : 0) + 1;
+  const top = Math.max(MAP_GAP, band + 4);
+  const ui = placeMapChrome({ w: size.w, h: size.h, top, btn: cs.map, items, preferRight: driverRight, avoid, routeBox: !!route, routeBoxAt: routeInfoAt });
   const speed = kmh(pos?.speed ?? null);
+  const box = ui.routeBox;
+  const noticeBottom = box && box.y > size.h / 2 ? size.h - box.y + MAP_GAP : 12;
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-bg" data-testid="map-surface" data-mode={mode}>
@@ -175,40 +163,74 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
         ref={containerRef}
         data-testid="map-canvas"
         className="absolute inset-0"
-        style={{ visibility: mode === 'js' && !embedRoute ? 'visible' : 'hidden' }}
+        style={{ visibility: live ? 'visible' : 'hidden' }}
       />
       {(mode === 'embed' || (mode === 'js' && embedRoute)) && <EmbedFrame />}
       {mode === 'none' && <NotSetUp />}
       {mode !== 'none' && (
         <>
           <div
-            className="absolute flex flex-col"
-            style={{ top, gap: GAP, [onRight ? 'right' : 'left']: GAP }}
+            className="absolute grid"
+            style={{
+              left: ui.toolbar.x,
+              top: ui.toolbar.y,
+              gap: MAP_GAP,
+              gridTemplateRows: `repeat(${ui.rows}, ${cs.map}px)`,
+              gridAutoColumns: `${cs.map}px`,
+              gridAutoFlow: 'column',
+              // The first column hugs the screen edge on either side.
+              direction: ui.right ? 'rtl' : 'ltr',
+            }}
             data-testid="map-controls"
-            data-side={onRight ? 'right' : 'left'}
+            data-side={ui.right ? 'right' : 'left'}
+            data-cols={ui.cols}
           >
             <MapButton testId="map-navigate" icon="search" label={t('map.whereTo')} onClick={() => openSheet({ kind: 'map' })} />
             <MapButton testId="map-recenter" icon="target" label={t('map.recenter')} active={follow && !!pos} onClick={recenter} />
-            {mode === 'js' && !embedRoute && (
+            {live && (
               <>
-                <MapButton testId="map-traffic" icon="traffic" label={t('map.traffic')} active={trafficOn} onClick={() => setTraffic(!trafficOn)} />
                 <MapButton testId="map-zoom-in" icon="plus" label={t('map.zoomIn')} onClick={() => zoomBy(1)} />
                 <MapButton testId="map-zoom-out" icon="minus" label={t('map.zoomOut')} onClick={() => zoomBy(-1)} />
+                <MapButton testId="map-traffic" icon="traffic" label={t('map.traffic')} active={trafficOn} onClick={() => setTraffic(!trafficOn)} />
+              </>
+            )}
+            {route && (
+              <>
+                {line && <MapButton testId="map-route-overview" icon="map" label={t('map.routeOverview')} onClick={showRouteOverview} />}
+                {/* Voice guidance: hands the trip to the Google Maps app, only when tapped. */}
+                <a
+                  href={mapsNavigateUrl(route.destination)}
+                  target="_blank"
+                  rel="noopener"
+                  data-testid="map-route-navigate"
+                  aria-label={t('map.navigateGoogle')}
+                  title={t('map.navigateGoogle')}
+                  style={{ width: cs.map, height: cs.map, direction: 'ltr' }}
+                  className={`${BUTTON} bg-surface text-text`}
+                >
+                  <Icon name="external" size={cs.mapIcon - 4} />
+                </a>
+                <MapButton testId="map-route-end" icon="close" label={t('map.endRoute')} onClick={endRoute} />
               </>
             )}
             {speed !== null && (
-              <div data-testid="map-speed" className="tabular flex h-16 w-14 flex-col items-center justify-center rounded-2xl bg-surface text-text shadow-[0_1px_4px_rgba(0,0,0,0.35)]">
+              <div
+                data-testid="map-speed"
+                style={{ width: cs.map, height: cs.map, direction: 'ltr' }}
+                className="tabular flex flex-col items-center justify-center rounded-2xl bg-surface text-text shadow-[0_1px_4px_rgba(0,0,0,0.35)]"
+              >
                 <span className="text-[22px] font-bold leading-none">{speed}</span>
                 <span className="text-[11px]">{t('map.kmh')}</span>
               </div>
             )}
           </div>
-          <RouteBar top={routeTop} topPx={top} left={onRight} />
+          {box && <RouteBox rect={box} />}
           {(notice || geoError) && (
             <div
               role="status"
               data-testid="map-notice"
-              className={`absolute max-w-[60%] rounded-xl bg-surface/95 px-3 py-2 text-[13px] text-text-dim ${onRight ? 'right-3' : 'left-3'} ${hasRoute && !routeTop ? 'bottom-[76px]' : 'bottom-3'}`}
+              className="absolute max-w-[60%] rounded-xl bg-surface/95 px-3 py-2 text-[13px] text-text-dim"
+              style={{ bottom: noticeBottom, [ui.right ? 'left' : 'right']: 12 }}
             >
               {notice ? t(notice) : t(geoError === 'denied' ? 'map.locationOff' : 'map.locationUnavailable')}
             </div>

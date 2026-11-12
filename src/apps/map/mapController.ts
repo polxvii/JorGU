@@ -7,7 +7,7 @@ import type { MessageKey } from '../../i18n';
 import { DEFAULT_CENTER, MAP_ID, mapsConfigured } from './config';
 import { type Position, useGeo } from './geo';
 import { type GMap, type GMarker, type GLayer, type GPolyline, type MapsLibs, loadMaps, onMapsAuthFailure } from './mapsLoader';
-import { RECOMPUTE_MIN_MS, type LL, progress } from './routeMath';
+import { RECOMPUTE_MIN_MS, type LL, aheadBearing, bearing, cameraCenter, haversine, progress, turn } from './routeMath';
 import { canSpend, useMapUsage } from './usage';
 
 export type MapMode = 'js' | 'embed' | 'none';
@@ -83,6 +83,7 @@ async function ensureMap(): Promise<void> {
       colorScheme: useUi.getState().isNight ? libs.ColorScheme.DARK : libs.ColorScheme.LIGHT,
     });
     map.addListener('dragstart', () => {
+      cancelAnimationFrame(anim);
       if (useSettings.getState().map.follow) useSettings.getState().setMapFollow(false);
     });
     traffic = new libs.TrafficLayer();
@@ -116,13 +117,107 @@ function updatePosition(pos: Position | null): void {
     } else {
       marker.position = here;
     }
-    if (markerDot) markerDot.style.setProperty('--jg-heading', `${pos.heading ?? 0}deg`);
-    if (useSettings.getState().map.follow) map.panTo(here);
+    if (useSettings.getState().map.follow) follow(pos, false);
+    else setArrow(travelHeading(pos));
   }
   // A route waiting for the first position starts now.
   const r = useMapUi.getState().route;
   if (r?.status === 'needsLocation') void computeRoute(r.destination);
   checkRoute(pos);
+}
+
+// ---------- camera (user request 2026-11-12) ----------
+// Following the car on a drawn route: the map turns so the road ahead points up, and the car sits about 25 % up from
+// the bottom so more of the route ahead is on screen. A display choice only: no turn instructions or voice (§7.4).
+// Otherwise north up, car in the middle.
+
+/** Car position below the middle of the map while navigating, as a share of the map height. */
+const NAV_CAR_BELOW = 0.25;
+let camHeading = 0;
+let camCenter: LL | null = null;
+let lastPos: LL | null = null;
+let lastTravel: number | null = null;
+let canRotate: boolean | null = null;
+let anim = 0;
+
+function navigating(): boolean {
+  const r = useMapUi.getState().route;
+  return !!map && useMapUi.getState().mode === 'js' && !!r && !r.viaEmbed && r.status === 'ready' && r.path.length > 1 && useSettings.getState().map.follow;
+}
+
+/** Direction of travel: the road ahead on the route line, else the GPS course when moving, else from the last fix. */
+function travelHeading(pos: Position): number | null {
+  const r = useMapUi.getState().route;
+  const onLine = r && !r.viaEmbed && r.path.length > 1 ? aheadBearing(pos, r.path) : null;
+  if (onLine !== null) return onLine;
+  if (pos.heading != null && Number.isFinite(pos.heading) && (pos.speed ?? 0) > 1.5) return pos.heading;
+  if (lastPos && haversine(lastPos, pos) > 15) return bearing(lastPos, pos);
+  return null;
+}
+
+/** The arrow on the blue dot points where the car goes, relative to the (maybe turned) map. */
+function setArrow(travel: number | null): void {
+  if (travel !== null) lastTravel = travel;
+  const t = travel ?? lastTravel ?? 0;
+  if (markerDot) markerDot.style.setProperty('--jg-heading', `${Math.round(t - camHeading)}deg`);
+}
+
+function glide(center: LL, heading: number, jump: boolean): void {
+  if (!map) return;
+  cancelAnimationFrame(anim);
+  const target = canRotate === false ? 0 : (heading + 360) % 360;
+  const from = { c: camCenter ?? center, h: camHeading };
+  camCenter = center;
+  camHeading = target;
+  const far = haversine(from.c, center) > 1000;
+  if (jump || far || typeof requestAnimationFrame !== 'function') {
+    map.moveCamera({ center, heading: target });
+  } else {
+    const dh = turn(from.h, target);
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / 800);
+      const e = k * (2 - k);
+      map?.moveCamera({
+        center: { lat: from.c.lat + (center.lat - from.c.lat) * e, lng: from.c.lng + (center.lng - from.c.lng) * e },
+        heading: from.h + dh * e,
+      });
+      if (k < 1) anim = requestAnimationFrame(step);
+    };
+    anim = requestAnimationFrame(step);
+  }
+  // Raster maps, or a Map ID without rotation, stay north up; the car still sits low on the screen.
+  if (canRotate === null && target !== 0 && jump && map.getHeading) {
+    canRotate = Math.abs(turn(map.getHeading() ?? 0, target)) < 1;
+    if (!canRotate) camHeading = 0;
+  }
+}
+
+function follow(pos: Position, jump: boolean): void {
+  if (!map) return;
+  const here = { lat: pos.lat, lng: pos.lng };
+  const travel = travelHeading(pos);
+  if (!lastPos || haversine(lastPos, here) > 15) lastPos = here;
+  if (navigating()) {
+    const heading = travel ?? lastTravel ?? camHeading;
+    const h = el?.clientHeight ?? 0;
+    glide(cameraCenter(here, heading, map.getZoom() ?? DRIVE_ZOOM, h * NAV_CAR_BELOW), heading, jump || canRotate === null);
+  } else if (camHeading !== 0) {
+    glide(here, 0, true);
+  } else {
+    cancelAnimationFrame(anim);
+    camCenter = here;
+    map.panTo(here);
+  }
+  setArrow(travel);
+}
+
+/** Back to north up (whole-route view, route ended). */
+function northUp(): void {
+  cancelAnimationFrame(anim);
+  if (map && camHeading !== 0) map.moveCamera({ heading: 0 });
+  camHeading = 0;
+  setArrow(null);
 }
 
 // ---------- controls ----------
@@ -136,7 +231,7 @@ export function recenter(): void {
   if (!pos) useGeo.getState().retry();
   // Back from the whole-route view: zoom in to driving level again.
   if (map && (useMapUi.getState().route?.path.length ?? 0) > 1 && (map.getZoom() ?? DRIVE_ZOOM) < DRIVE_ZOOM - 1) map.setZoom(DRIVE_ZOOM);
-  if (map && pos) map.panTo({ lat: pos.lat, lng: pos.lng });
+  if (map && pos) follow(pos, true);
   const ui = useMapUi.getState();
   if (ui.mode === 'embed' || ui.route?.viaEmbed) useMapUi.setState((s) => ({ embedNonce: s.embedNonce + 1 }));
 }
@@ -226,12 +321,12 @@ async function computeRoute(destination: string): Promise<void> {
     const pin = document.createElement('div');
     pin.className = 'jg-map-dest';
     destMarker = new libs.AdvancedMarkerElement({ map, position: path[path.length - 1], content: pin, title: destination });
+    set({ status: 'ready', path, distanceMeters: r.distanceMeters ?? 0, durationMillis: r.durationMillis ?? 0, computedAt: Date.now() });
     if (first) {
       useSettings.getState().setMapFollow(true);
       map.setZoom(DRIVE_ZOOM);
-      map.panTo({ lat: pos.lat, lng: pos.lng });
+      follow(useGeo.getState().pos ?? pos, true);
     }
-    set({ status: 'ready', path, distanceMeters: r.distanceMeters ?? 0, durationMillis: r.durationMillis ?? 0, computedAt: Date.now() });
   } catch {
     // e.g. Routes API not allowed for this key: still show Google's route, in the free view.
     fallBack(destination, 'map.routeFallback');
@@ -257,6 +352,7 @@ export function showRouteOverview(): void {
   const r = useMapUi.getState().route;
   if (!map || !libs || !r || r.path.length < 2) return;
   useSettings.getState().setMapFollow(false);
+  northUp();
   const bounds = new libs.LatLngBounds();
   for (const p of r.path) bounds.extend(p);
   map.fitBounds(bounds, routePadding());
@@ -273,6 +369,9 @@ export function refreshRoute(): void {
 export function endRoute(): void {
   clearLine();
   useMapUi.setState({ route: null });
+  northUp();
+  const pos = useGeo.getState().pos;
+  if (map && pos && useSettings.getState().map.follow) follow(pos, true);
 }
 
 /** > 200 m off the line: recompute, at most once a minute (§7.4). */
@@ -307,5 +406,5 @@ useSettings.subscribe((s, prev) => {
 
 /** Read-only hook for E2E tests. */
 export function debugMap() {
-  return { hasMap: !!map, mode: useMapUi.getState().mode, lines: polylines.length };
+  return { hasMap: !!map, mode: useMapUi.getState().mode, lines: polylines.length, heading: camHeading, canRotate };
 }

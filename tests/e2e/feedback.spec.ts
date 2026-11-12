@@ -66,6 +66,14 @@ test('Dock size setting: Large makes the right toolbar wider and its buttons big
   expect((await box(page, '[data-chrome="dock"]')).width).toBe(112);
   expect((await box(page, '[data-testid="dock-swap"]')).width).toBe(96);
   await expectPlayerClear(page);
+  // The same setting sizes the transport row under the clip title and the map's buttons (user 2026-11-12) …
+  expect((await box(page, '[data-testid="yt-toggle"]')).height).toBe(64);
+  expect((await box(page, '[data-testid="map-recenter"]')).width).toBe(72);
+  // … and the YouTube full-screen column; the player still never has anything over it.
+  await page.getByTestId('pane-fullscreen-0').click();
+  expect((await box(page, '[data-testid="fs-exit"]')).width).toBe(88);
+  expect((await box(page, '[data-testid="control-column"]')).width % 96).toBe(0);
+  await expectPlayerClear(page);
 });
 
 test('transport row: ±10 s and mute fit in the pane; on a narrow pane speed moves to the queue sheet', async ({ page }) => {

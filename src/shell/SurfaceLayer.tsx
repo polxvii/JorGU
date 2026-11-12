@@ -35,7 +35,11 @@ const SurfaceContent = memo(function SurfaceContent({ id, layout }: { id: Surfac
     const box = layout.surfaces.map;
     const r = box?.rect ?? layout.content;
     const m = layout.mini;
-    const avoid = m ? { x: m.handle.x - r.x, y: m.handle.y - r.y, w: m.rect.w, h: m.handle.h + m.rect.h } : null;
+    const avoid: Rect[] = [];
+    if (m) avoid.push({ x: m.handle.x - r.x, y: m.handle.y - r.y, w: m.rect.w, h: m.handle.h + m.rect.h });
+    // The full-screen floating bar comes back on every tap: the map's own buttons never sit under it.
+    const fb = layout.floatingBar?.rect;
+    if (fb) avoid.push({ x: fb.x - r.x, y: fb.y - r.y, w: fb.w, h: fb.h });
     return <MapSurface size={{ w: r.w, h: r.h }} avoid={avoid} band={layout.mode === 'fullscreen' ? 0 : L.YT_BAND} />;
   }
   if (id === 'youtube') {

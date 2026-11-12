@@ -245,7 +245,7 @@ export const en = {
 
   'map.whereTo': 'Where to?',
   'map.destPlaceholder': 'Place or address',
-  'map.handoffHint': 'The route shows here in JorGu and the map follows you. For voice guidance, tap Navigate in Google Maps (here, or the ↗ button on the route bar).',
+  'map.handoffHint': "The route shows here in JorGu and the map turns with the road ahead. For voice guidance, tap Navigate in Google Maps (here, or ↗ in the map's buttons). Tap the time box to move it top or bottom.",
   'map.savedPlaces': 'Saved places',
   'map.addPlace': 'Add a place',
   'map.placeLabel': 'Name (e.g. Home)',
@@ -288,6 +288,9 @@ export const en = {
   'map.avoidTolls': 'Avoid tolls',
   'map.avoidHighways': 'Avoid highways',
   'map.avoidHint': 'The Google Maps app (voice guidance) keeps its own route options: turn on Avoid there too.',
+  'map.routeInfoMove': 'Tap to move it to the other corner (top / bottom)',
+  'settings.routeInfoTop': 'Route box: top',
+  'settings.routeInfoBottom': 'Route box: bottom',
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -7,8 +7,9 @@ export const SPLIT_MAX = 0.7;
 export const SNAP_POINTS = [0.4, 0.5, 0.6] as const;
 export const SNAP_DISTANCE = 0.025;
 export const YT_MIN_WIDTH = 356;
-/** Stacked YouTube pane: 56 band + 201 player (→ 357 px wide at 16:9) + 88 controls. */
-export const YT_MIN_HEIGHT = 56 + 201 + 88;
+/** Stacked YouTube pane: 56 band + 201 player (→ 357 px wide at 16:9) + the controls under it (88 at normal size). */
+export const ytMinHeight = (ytControls: number) => 56 + 201 + ytControls;
+export const YT_MIN_HEIGHT = ytMinHeight(88);
 
 export interface RatioBounds {
   min: number;

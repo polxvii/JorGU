@@ -5,12 +5,12 @@ import { useUi } from '../../features/settings/uiStore';
 import { useT } from '../../i18n';
 import { Icon } from '../../shell/Icon';
 import type { YtMode } from '../../shell/computeLayout';
-import { L } from '../../shell/computeLayout';
 import type { Rect } from '../../shell/geometry';
 import { useAccount } from './account/accountStore';
 import { openLibrary } from './library/libraryNav';
 import { useQueue } from './queueStore';
 import { SpeedButton } from './SpeedButton';
+import { useControlSize } from '../../shell/useControlSize';
 import { MuteButton, SeekButton } from './TransportButtons';
 import { attachHost, next, playIndex, preparePlayer, previous, togglePlay, usePlayerUi } from './player';
 
@@ -52,10 +52,10 @@ function EmptyPlayer() {
  * Transport row. Everything fits from ~430 px; narrower panes (down to 356) drop the lowest-priority buttons first:
  * speed, then mute. Both stay reachable in the queue sheet, the mini handle, and full screen.
  */
-const ROW = { pad: 16, gap: 2, button: 44, wide: { toggle: 56, speed: 56 } as Record<string, number> };
+type Row = { pad: number; gap: number; button: number; wide: Record<string, number> };
 type Slot = { key: string; prio: number; el: ReactNode };
 
-function fitSlots(slots: Slot[], width: number): Slot[] {
+function fitSlots(slots: Slot[], width: number, ROW: Row): Slot[] {
   let used = ROW.pad;
   const keep = new Set<string>();
   for (const s of [...slots].sort((a, b) => a.prio - b.prio)) {
@@ -76,10 +76,14 @@ function Controls({ top, height, width }: { top: number; height: number; width: 
   const openSheet = useUi((s) => s.openSheet);
   const playing = status === 'playing' || status === 'buffering';
   const title = item ? (item.title ?? t('yt.untitled')) : t('yt.nothingPlaying');
-  const small = 'flex h-12 w-11 shrink-0 items-center justify-center rounded-full text-text';
+  // Toolbar size (Settings) scales this row too (user 2026-11-12).
+  const cs = useControlSize();
+  const row: Row = { pad: 16, gap: 2, button: cs.rowNarrow, wide: { toggle: cs.rowWide, speed: cs.rowWide } };
+  const small = 'flex shrink-0 items-center justify-center rounded-full text-text';
+  const sm = { width: cs.rowNarrow, height: cs.row };
   const slots: Slot[] = [
-    { key: 'prev', prio: 2, el: <button type="button" aria-label={t('yt.prev')} onClick={previous} className={small}><Icon name="prev" size={26} /></button> },
-    { key: 'back', prio: 4, el: <SeekButton seconds={-10} testId="yt-back10" /> },
+    { key: 'prev', prio: 2, el: <button type="button" aria-label={t('yt.prev')} onClick={previous} className={small} style={sm}><Icon name="prev" size={cs.rowIcon} /></button> },
+    { key: 'back', prio: 4, el: <SeekButton seconds={-10} size="row" testId="yt-back10" /> },
     {
       key: 'toggle',
       prio: 0,
@@ -89,25 +93,26 @@ function Controls({ top, height, width }: { top: number; height: number; width: 
           data-testid="yt-toggle"
           aria-label={playing ? t('yt.pause') : t('yt.play')}
           onClick={togglePlay}
-          className="flex h-12 w-14 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent"
+          style={{ width: cs.rowWide, height: cs.row }}
+          className="flex shrink-0 items-center justify-center rounded-full bg-accent text-on-accent"
         >
-          <Icon name={playing ? 'pause' : 'play'} />
+          <Icon name={playing ? 'pause' : 'play'} size={cs.rowIcon - 2} />
         </button>
       ),
     },
-    { key: 'fwd', prio: 4, el: <SeekButton seconds={10} testId="yt-forward10" /> },
-    { key: 'next', prio: 1, el: <button type="button" data-testid="yt-next" aria-label={t('yt.next')} onClick={next} className={small}><Icon name="next" size={26} /></button> },
-    { key: 'mute', prio: 5, el: <MuteButton testId="yt-mute" /> },
-    { key: 'speed', prio: 6, el: <SpeedButton /> },
+    { key: 'fwd', prio: 4, el: <SeekButton seconds={10} size="row" testId="yt-forward10" /> },
+    { key: 'next', prio: 1, el: <button type="button" data-testid="yt-next" aria-label={t('yt.next')} onClick={next} className={small} style={sm}><Icon name="next" size={cs.rowIcon} /></button> },
+    { key: 'mute', prio: 5, el: <MuteButton size="row" testId="yt-mute" /> },
+    { key: 'speed', prio: 6, el: <SpeedButton size="row" /> },
     {
       key: 'queue',
       prio: 3,
-      el: <button type="button" data-testid="yt-queue" aria-label={t('yt.queue')} onClick={() => openSheet({ kind: 'queue' })} className={small}><Icon name="queue" size={26} /></button>,
+      el: <button type="button" data-testid="yt-queue" aria-label={t('yt.queue')} onClick={() => openSheet({ kind: 'queue' })} className={small} style={sm}><Icon name="queue" size={cs.rowIcon} /></button>,
     },
     {
       key: 'library',
       prio: 3,
-      el: <button type="button" data-testid="yt-library" aria-label={t('yt.library')} onClick={() => openLibrary()} className={small}><Icon name="library" size={26} /></button>,
+      el: <button type="button" data-testid="yt-library" aria-label={t('yt.library')} onClick={() => openLibrary()} className={small} style={sm}><Icon name="library" size={cs.rowIcon} /></button>,
     },
   ];
   return (
@@ -129,7 +134,7 @@ function Controls({ top, height, width }: { top: number; height: number; width: 
         )}
       </div>
       <div className="flex items-center justify-center gap-0.5" data-testid="yt-transport">
-        {fitSlots(slots, width).map((s) => (
+        {fitSlots(slots, width, row).map((s) => (
           <Fragment key={s.key}>{s.el}</Fragment>
         ))}
       </div>
@@ -143,6 +148,7 @@ export function YouTubeSurface({ surface, player, mode }: { surface: Rect; playe
   useEffect(() => preparePlayer(), []);
   const rel = player ?? { x: surface.x, y: surface.y, w: 0, h: 0 };
   const controlsTop = player ? player.y + player.h - surface.y : 0;
+  const ytControls = useControlSize().ytControls;
   return (
     <div className="relative h-full w-full bg-bg">
       <div
@@ -155,7 +161,7 @@ export function YouTubeSurface({ surface, player, mode }: { surface: Rect; playe
         {(status === 'idle' || (status === 'error' && !usePlayerUi.getState().videoId)) && <EmptyPlayer />}
       </div>
       {mode === 'pane' && player && (
-        <Controls top={controlsTop} height={Math.min(L.YT_CONTROLS, surface.h - controlsTop)} width={surface.w} />
+        <Controls top={controlsTop} height={Math.min(ytControls, surface.h - controlsTop)} width={surface.w} />
       )}
     </div>
   );

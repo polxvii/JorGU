@@ -3,7 +3,7 @@ import { expect, type Page } from '@playwright/test';
 declare global {
   interface Window {
     __jorguFrameLoads?: Record<string, number>;
-    __mapsStub?: { maps: number; panTo: number; zoom: number; traffic: boolean; routes: number; lines: number; markers: number; pins: number; fitBounds: number; failRoutes: boolean; lineStyle: Record<string, unknown> | null; mapId: string | null; lastRoute: Record<string, unknown> | null; fire: (ev: string) => void };
+    __mapsStub?: { maps: number; panTo: number; zoom: number; traffic: boolean; routes: number; lines: number; markers: number; pins: number; fitBounds: number; failRoutes: boolean; lineStyle: Record<string, unknown> | null; heading: number; cameraMoves: number; center: { lat: number; lng: number } | null; mapId: string | null; lastRoute: Record<string, unknown> | null; fire: (ev: string) => void };
     __jorgu?: {
       setPlaying: (playing: boolean) => void;
       yt: () => { hasPlayer: boolean; state: number | null; time: number; duration: number; rate: number | null; iframeLoads: number; visibleRatio: number };
@@ -23,7 +23,7 @@ export const SEED_SETTINGS_VERSION = 3;
  * loads real Google Maps or spends a billed event. window.__mapsStub records what the app did.
  */
 export const MAPS_STUB_JS = `(function () {
-  var S = (window.__mapsStub = { maps: 0, panTo: 0, zoom: 15, traffic: false, routes: 0, lines: 0, markers: 0, pins: 0, fitBounds: 0, failRoutes: false, lineStyle: null, listeners: {}, center: null, colorScheme: null, mapId: null, lastRoute: null });
+  var S = (window.__mapsStub = { maps: 0, panTo: 0, zoom: 15, traffic: false, routes: 0, lines: 0, markers: 0, pins: 0, fitBounds: 0, failRoutes: false, lineStyle: null, heading: 0, cameraMoves: 0, listeners: {}, center: null, colorScheme: null, mapId: null, lastRoute: null });
   function GMap(el, o) { S.maps++; S.center = o.center; S.zoom = o.zoom; S.colorScheme = o.colorScheme; S.mapId = o.mapId; el.setAttribute('data-stub-map', '1'); }
   GMap.prototype.setCenter = function (c) { S.center = c; };
   GMap.prototype.panTo = function (c) { S.center = c; S.panTo++; };
@@ -31,6 +31,8 @@ export const MAPS_STUB_JS = `(function () {
   GMap.prototype.getZoom = function () { return S.zoom; };
   GMap.prototype.addListener = function (ev, fn) { (S.listeners[ev] = S.listeners[ev] || []).push(fn); return { remove: function () {} }; };
   GMap.prototype.fitBounds = function () { S.fitBounds++; };
+  GMap.prototype.moveCamera = function (o) { if (o.center) S.center = o.center; if (o.heading !== undefined) S.heading = o.heading; S.cameraMoves++; };
+  GMap.prototype.getHeading = function () { return S.heading; };
   // pins = destination pins currently on the map.
   function Marker(o) { S.markers++; this._pin = !!(o.content && o.content.className === 'jg-map-dest'); this.position = o.position; this.map = o.map; }
   Object.defineProperty(Marker.prototype, 'map', {

@@ -15,6 +15,9 @@ export interface GMap {
   getZoom(): number | undefined;
   addListener(event: string, fn: () => void): { remove(): void };
   fitBounds(bounds: unknown, padding?: number | { top: number; right: number; bottom: number; left: number }): void;
+  /** Vector maps: any mix of centre, zoom, heading, tilt in one step. */
+  moveCamera(options: { center?: LatLngLiteral; zoom?: number; heading?: number; tilt?: number }): void;
+  getHeading?(): number | undefined;
 }
 export interface GMarker {
   position: LatLngLiteral | null;

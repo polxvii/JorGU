@@ -9,7 +9,8 @@ import { MAP_STRIP_PAD } from '../../shell/computeLayout';
 import { type Rect, intersects } from '../../shell/geometry';
 
 export const MAP_GAP = 8;
-export const ROUTE_BOX = { w: 196, h: 56 };
+// Bigger (user 2026-11-13): time, distance + arrival, and the route's name, readable at a glance; still a corner.
+export const ROUTE_BOX = { w: 248, h: 84 };
 
 export interface MapChromeInput {
   w: number;
@@ -77,7 +78,7 @@ export function placeMapChrome(i: MapChromeInput): MapChrome {
 
   let routeBox: Rect | null = null;
   if (i.routeBox) {
-    const w = Math.min(ROUTE_BOX.w, Math.max(88, canvas.w - 2 * MAP_GAP));
+    const w = Math.min(ROUTE_BOX.w, Math.max(120, canvas.w - 2 * MAP_GAP));
     const H = ROUTE_BOX.h;
     // The far corner: the other side of the map from the strip.
     const x0 = right ? canvas.x + MAP_GAP : canvas.x + canvas.w - MAP_GAP - w;

@@ -11,7 +11,7 @@ import type { Rect } from '../../shell/geometry';
 import { useControlSize } from '../../shell/useControlSize';
 import { DEFAULT_CENTER, MAPS_KEY } from './config';
 import { kmh, useGeo } from './geo';
-import { attachMap, endRoute, recenter, refollow, setTraffic, showRouteOverview, useMapUi, zoomBy } from './mapController';
+import { attachMap, chooseRoute, endRoute, openChooser, recenter, refollow, setTraffic, showRouteOverview, useMapUi, zoomBy } from './mapController';
 import { mapsNavigateUrl } from './navigate';
 import { navigateInPlace } from '../web/webHistory';
 import { MAP_GAP, placeMapChrome } from './mapChrome';
@@ -96,12 +96,68 @@ function RouteBox({ rect }: { rect: Rect }) {
       data-at={at}
       title={`${route.destination} · ${t('map.routeInfoMove')}`}
       onClick={() => setAt(at === 'top' ? 'bottom' : 'top')}
-      className="absolute flex flex-col justify-center rounded-2xl bg-surface/95 px-3 text-left shadow-[0_1px_4px_rgba(0,0,0,0.35)]"
+      className="absolute flex flex-col justify-center gap-0.5 rounded-2xl bg-surface/95 px-4 text-left shadow-[0_1px_4px_rgba(0,0,0,0.35)]"
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
     >
-      {time && <span className="tabular block text-[18px] font-bold leading-tight text-accent" data-testid="map-route-time">{time}</span>}
-      <span className="line-clamp-2 block text-[13px] leading-tight text-text-dim" data-testid="map-route-detail">{detail || route.destination}</span>
+      {time && <span className="tabular block text-[28px] font-bold leading-none text-accent" data-testid="map-route-time">{time}</span>}
+      <span className="line-clamp-2 block text-[16px] font-semibold leading-tight text-text" data-testid="map-route-detail">{detail || route.destination}</span>
+      {time && route.description && (
+        <span className="block truncate text-[13px] leading-tight text-text-dim" data-testid="map-route-name">
+          {t('map.routeVia', { via: route.description })}
+        </span>
+      )}
     </button>
+  );
+}
+
+/**
+ * Route choices (user 2026-11-13): up to 3, fastest first, each with its time in traffic. Beside the route box (above
+ * it when the box is at the bottom), never over the toolbar. Tap one to drive it; ✕ keeps the one shown.
+ */
+function RouteChooser({ box, height, top }: { box: Rect; height: number; top: number }) {
+  const t = useT();
+  const route = useMapUi((s) => s.route);
+  if (!route?.choosing || route.options.length < 2) return null;
+  const below = box.y < height / 2;
+  const room = below ? height - (box.y + box.h + MAP_GAP) - MAP_GAP : box.y - MAP_GAP - top;
+  return (
+    <div
+      data-testid="map-route-chooser"
+      className="absolute flex flex-col gap-1.5 overflow-y-auto rounded-2xl bg-surface/95 p-2 shadow-[0_1px_4px_rgba(0,0,0,0.35)]"
+      style={{ left: box.x, width: box.w, maxHeight: Math.max(120, room), ...(below ? { top: box.y + box.h + MAP_GAP } : { bottom: height - box.y + MAP_GAP }) }}
+    >
+      <div className="flex items-center justify-between gap-2 px-1">
+        <span className="text-[14px] font-semibold text-text-dim">{t('map.chooseRoute')}</span>
+        <button
+          type="button"
+          data-testid="map-route-chooser-close"
+          aria-label={t('map.keepRoute')}
+          onClick={() => chooseRoute(route.chosen)}
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-bg"
+        >
+          <Icon name="close" size={20} />
+        </button>
+      </div>
+      {route.options.map((o, i) => {
+        const km = (o.distanceMeters / 1000).toFixed(o.distanceMeters < 10000 ? 1 : 0);
+        return (
+          <button
+            key={i}
+            type="button"
+            data-testid={`map-route-option-${i}`}
+            aria-pressed={i === route.chosen}
+            onClick={() => chooseRoute(i)}
+            className={`flex min-h-16 flex-col justify-center rounded-xl border-2 px-3 text-left ${i === route.chosen ? 'border-accent bg-bg' : 'border-transparent bg-bg'}`}
+          >
+            <span className="flex items-center gap-2">
+              <span className="tabular text-[22px] font-bold leading-none">{t('map.routeMin', { min: Math.max(1, Math.round(o.durationMillis / 60000)) })}</span>
+              {i === 0 && <span className="rounded-md bg-accent px-1.5 py-0.5 text-[12px] font-semibold text-on-accent">{t('map.fastest')}</span>}
+            </span>
+            <span className="truncate text-[14px] text-text-dim">{o.description ? t('map.optionDetail', { km, via: o.description }) : t('map.optionKm', { km })}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -188,6 +244,20 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   }
   if (route) {
     if (line) items.push({ key: 'overview', node: <MapButton testId="map-route-overview" icon="map" label={t('map.routeOverview')} onClick={showRouteOverview} /> });
+    if (line && route.options.length > 1) {
+      items.push({
+        key: 'alts',
+        node: (
+          <MapButton
+            testId="map-route-alts"
+            icon="routes"
+            label={t('map.routeOptions')}
+            active={route.choosing}
+            onClick={() => (route.choosing ? chooseRoute(route.chosen) : openChooser())}
+          />
+        ),
+      });
+    }
     items.push(
       { key: 'end', node: <MapButton testId="map-route-end" icon="close" label={t('map.endRoute')} onClick={endRoute} /> },
       {
@@ -269,6 +339,7 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
             }
           />
           {box && <RouteBox rect={box} />}
+          {box && <RouteChooser box={box} height={size.h} top={Math.max(MAP_GAP, band + 8)} />}
           {bar && <TrafficBar rect={bar} />}
           {(notice || geoError) && (
             <div

@@ -33,6 +33,7 @@ const PATHS = {
   back: 'M15 5l-7 7 7 7',
   forward: 'M9 5l7 7-7 7',
   up: 'M6 15l6-6 6 6',
+  routes: 'M12 21v-7M12 14 6 8V3M12 14l6-6V3M3 6l3-3 3 3M15 6l3-3 3 3',
   down: 'M6 9l6 6 6-6',
   sort: 'M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',

@@ -37,6 +37,7 @@ export interface GRoute {
   distanceMeters?: number;
   path?: { lat: number | (() => number); lng: number | (() => number) }[];
   legs?: { distanceMeters?: number; durationMillis?: number; staticDurationMillis?: number }[];
+  description?: string;
 }
 export interface MapsLibs {
   Map: new (el: HTMLElement, options: Record<string, unknown>) => GMap;

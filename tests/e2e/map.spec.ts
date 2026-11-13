@@ -77,7 +77,10 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   expect(s).toMatchObject({ maps: 1, routes: 1, pins: 1, traffic: true, fitBounds: 0, zoom: 16 });
   expect(blue(s)).toBe(1);
   await expect(page.getByTestId('map-route-time')).toContainText('min');
-  expect(s.lastRoute).toMatchObject({ destination: 'Central World', routingPreference: 'TRAFFIC_UNAWARE', fields: ['durationMillis', 'distanceMeters', 'path'] });
+  // Traffic-aware with choices: the Pro SKU (user 2026-11-13); one route here, so no chooser.
+  expect(s.lastRoute).toMatchObject({ destination: 'Central World', routingPreference: 'TRAFFIC_AWARE', computeAlternativeRoutes: true, fields: ['durationMillis', 'distanceMeters', 'path', 'description'] });
+  await expect(page.getByTestId('map-route-chooser')).toHaveCount(0);
+  await expect(page.getByTestId('map-route-name')).toHaveText('via Phahonyothin Rd');
   expect(s.lastRoute).not.toHaveProperty('extraComputations'); // traffic on the line = Enterprise SKU
   // One solid blue line (user 2026-11-13); traffic on the road ahead is the side bar.
   expect(s.shown).toEqual(
@@ -153,7 +156,9 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   const cb = await box(page, '[data-testid="map-controls"]');
   let rb = await box(page, '[data-testid="map-route"]');
   expect(rb.x + rb.width <= cb.x || cb.x + cb.width <= rb.x).toBe(true);
-  expect(rb.height).toBeLessThanOrEqual(64);
+  // Bigger (user 2026-11-13) but still a corner box.
+  expect(rb.height).toBeGreaterThanOrEqual(80);
+  expect(rb.height).toBeLessThanOrEqual(90);
   const surface = await box(page, '[data-testid="map-surface"]');
   expect(rb.y + rb.height).toBeGreaterThan(surface.y + surface.height - 80);
   await routeBox.click();
@@ -223,7 +228,9 @@ test("the line can't be drawn (Routes refused, or the daily route limit): the ro
   await page.evaluate(() => {
     const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit' }).formatToParts(Date.now());
     const month = `${p.find((x) => x.type === 'year')!.value}-${p.find((x) => x.type === 'month')!.value}`;
-    localStorage.setItem('jorgu:mapUsage', JSON.stringify({ state: { month, map: 0, route: 9920, refusedDay: null, refusedReason: null }, version: 1 }));
+    // Both route shares used up: traffic-aware (Pro) and the plain route (Essentials).
+    const used = { map: 0, route: 9900, traffic: 4950 };
+    localStorage.setItem('jorgu:mapUsage', JSON.stringify({ state: { month, used, day: '', today: { map: 0, route: 0, traffic: 0 }, refusedDay: null, refusedReason: null }, version: 2 }));
   });
   await page.reload();
   await expect.poll(async () => (await stub(page)).markers).toBe(1);
@@ -262,7 +269,7 @@ test('avoid tolls / highways: sent with the route, drawn again when changed, rem
   let s = await stub(page);
   expect(s.routes).toBe(1);
   // Plain route modifiers: still the Essentials route SKU.
-  expect(s.lastRoute).toMatchObject({ routingPreference: 'TRAFFIC_UNAWARE', routeModifiers: { avoidTolls: true, avoidHighways: false } });
+  expect(s.lastRoute).toMatchObject({ routingPreference: 'TRAFFIC_AWARE', routeModifiers: { avoidTolls: true, avoidHighways: false } });
   await page.getByTestId('map-navigate').click();
   await page.getByTestId('map-avoid-highways').click();
   await expect.poll(async () => (await stub(page)).routes).toBe(2);
@@ -430,5 +437,53 @@ test('saved places: change their order with up / down', async ({ page }) => {
   await page.reload();
   await page.getByTestId('map-navigate').click();
   expect(await order()).toEqual(['Gym', 'Home', 'Office']);
+});
+
+test('route choices: up to 3 with time in traffic, fastest first; pick one to drive it', async ({ page }) => {
+  await withLocation(page);
+  await openApp(page);
+  await expect.poll(async () => (await stub(page)).markers).toBe(1);
+  await page.evaluate(() => (window.__mapsStub!.alts = true));
+  await page.getByTestId('map-navigate').click();
+  await page.getByTestId('map-dest-input').fill('Central World');
+  await page.getByTestId('map-dest-go').click();
+  const chooser = page.getByTestId('map-route-chooser');
+  await expect(chooser).toBeVisible();
+  // Fastest first (Google's order isn't), with its time in traffic and the road it takes.
+  await expect(page.getByTestId('map-route-option-0')).toContainText('20 min');
+  await expect(page.getByTestId('map-route-option-0')).toContainText('Fastest');
+  await expect(page.getByTestId('map-route-option-0')).toContainText('via Phahonyothin Rd');
+  await expect(page.getByTestId('map-route-option-1')).toContainText('25 min');
+  await expect(page.getByTestId('map-route-option-2')).toContainText('28 min');
+  await expect(page.getByTestId('map-route-option-0')).toHaveAttribute('aria-pressed', 'true');
+  // All of them on screen, north up, the others grey; one Routes request; no traffic request while choosing.
+  let s = await stub(page);
+  expect(s).toMatchObject({ routes: 1, trafficReqs: 0, heading: 0 });
+  expect(s.fitBounds).toBeGreaterThan(0);
+  expect(s.shown.filter((l) => l.strokeColor === '#8A94A6')).toHaveLength(2);
+  await expect(page.getByTestId('map-recenter')).toHaveAttribute('aria-pressed', 'false');
+  // The chooser sits beside the route box, never over it or the toolbar.
+  const cb = await box(page, '[data-testid="map-route-chooser"]');
+  const rb = await box(page, '[data-testid="map-route"]');
+  const st = await box(page, '[data-testid="map-strip"]');
+  expect(cb.y + cb.height <= rb.y || rb.y + rb.height <= cb.y).toBe(true);
+  expect(cb.x + cb.width).toBeLessThanOrEqual(st.x);
+  // Pick the expressway: it's drawn, the others go, the car is followed, its traffic is fetched.
+  await page.getByTestId('map-route-option-1').click();
+  await expect(chooser).toHaveCount(0);
+  // (The time then follows that route's own traffic sections.)
+  await expect(page.getByTestId('map-route-name')).toHaveText('via Expressway');
+  s = await stub(page);
+  expect(s.shown.filter((l) => l.strokeColor === '#8A94A6')).toHaveLength(0);
+  expect(s.shown.find((l) => l.strokeColor === '#1A73E8')!.path).toHaveLength(3);
+  await expect(page.getByTestId('map-recenter')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => (await stub(page)).trafficReqs).toBe(1);
+  // "Other routes" in the toolbar opens the choices again; ✕ keeps the one being driven.
+  await page.getByTestId('map-route-alts').click();
+  await expect(page.getByTestId('map-route-option-1')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('map-route-chooser-close').click();
+  await expect(chooser).toHaveCount(0);
+  await expect(page.getByTestId('map-route-name')).toHaveText('via Expressway');
+  expect((await stub(page)).trafficReqs).toBe(1);
 });
 

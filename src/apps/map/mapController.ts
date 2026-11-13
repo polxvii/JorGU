@@ -26,6 +26,20 @@ export interface RouteState {
   note: MessageKey | null;
   /** Traffic per section of the road ahead (Compute Routes Pro), for the side bar and the ETA; null until known. */
   traffic: { sections: TrafficSection[]; at: number } | null;
+  /** Google's route choices (up to 3, traffic-aware), fastest first; `chosen` is the one drawn and followed. */
+  options: RouteOption[];
+  chosen: number;
+  /** The route chooser is open: the other choices show grey on the map. */
+  choosing: boolean;
+  /** The chosen route's name from Google ("via ..."), when known. */
+  description: string;
+}
+
+export interface RouteOption {
+  path: LL[];
+  distanceMeters: number;
+  durationMillis: number;
+  description: string;
 }
 
 interface MapUi {
@@ -50,6 +64,8 @@ let traffic: GLayer | null = null;
 let line: GPolyline | null = null;
 let casing: GPolyline | null = null;
 let slowLines: GPolyline[] = [];
+let altLines: GPolyline[] = [];
+let chooserTimer = 0;
 let trafficTimer = 0;
 let trafficBusy = false;
 let destMarker: GMarker | null = null;
@@ -293,6 +309,7 @@ function clearLine(): void {
   casing = null;
   for (const l of slowLines) l.setMap(null);
   slowLines = [];
+  clearAlts();
   if (destMarker) destMarker.map = null;
   destMarker = null;
   clearInterval(trafficTimer);
@@ -372,52 +389,164 @@ function fallBack(destination: string, note: MessageKey): void {
   );
 }
 
+const ALT_STYLE = { strokeColor: '#8A94A6', strokeOpacity: 1, strokeWeight: 6, clickable: false, zIndex: 0 };
+
+function clearAlts(): void {
+  for (const l of altLines) l.setMap(null);
+  altLines = [];
+  clearTimeout(chooserTimer);
+}
+
+const toOption = (r: { path?: { lat: number | (() => number); lng: number | (() => number) }[]; distanceMeters?: number; durationMillis?: number; description?: string }): RouteOption => ({
+  path: (r.path ?? []).map((p) => ({ lat: num(p.lat), lng: num(p.lng) })),
+  distanceMeters: r.distanceMeters ?? 0,
+  durationMillis: r.durationMillis ?? 0,
+  description: r.description ?? '',
+});
+
+/**
+ * Route choices (user 2026-11-13): one Compute Routes **Pro** request, traffic-aware with alternatives, gives up to 3
+ * routes with their time in traffic (live test: the fastest in traffic is often not the shortest). When the Pro
+ * share is used up or Google refuses it, one Essentials route (no traffic, no choices); past that, the free view.
+ */
+async function requestRoutes(origin: LL, destination: string): Promise<RouteOption[] | null> {
+  if (!libs) return null;
+  const routeModifiers = { avoidTolls: useSettings.getState().map.avoidTolls, avoidHighways: useSettings.getState().map.avoidHighways };
+  if (canSpend('traffic')) {
+    useMapUsage.getState().record('traffic');
+    try {
+      const { routes } = await libs.Route.computeRoutes({
+        origin,
+        destination,
+        travelMode: 'DRIVING',
+        routingPreference: 'TRAFFIC_AWARE',
+        computeAlternativeRoutes: true,
+        fields: ['durationMillis', 'distanceMeters', 'path', 'description'],
+        routeModifiers,
+      });
+      const options = (routes ?? []).map(toOption).filter((o) => o.path.length > 1);
+      if (options.length) return options.sort((a, b) => a.durationMillis - b.durationMillis);
+    } catch {
+      /* try the Essentials route below */
+    }
+  }
+  if (!canSpend('route')) return null;
+  useMapUsage.getState().record('route');
+  const { routes } = await libs.Route.computeRoutes({
+    origin,
+    destination,
+    travelMode: 'DRIVING',
+    // TRAFFIC_UNAWARE keeps it in the Essentials SKU (traffic-aware is Pro).
+    routingPreference: 'TRAFFIC_UNAWARE',
+    fields: ['durationMillis', 'distanceMeters', 'path', 'description'],
+    routeModifiers,
+  });
+  const r = routes?.[0];
+  return r?.path?.length ? [toOption(r)] : null;
+}
+
 async function computeRoute(destination: string): Promise<void> {
   const pos = useGeo.getState().pos;
   const set = (patch: Partial<RouteState>) =>
     useMapUi.setState((s) => (s.route?.destination === destination ? { route: { ...s.route, ...patch } } : s));
   if (!pos) return set({ status: 'needsLocation' });
-  if (!canSpend('route')) return fallBack(destination, 'map.routeCapped');
+  if (!canSpend('traffic') && !canSpend('route')) return fallBack(destination, 'map.routeCapped');
   if (!libs || !map) return fallBack(destination, 'map.routeFallback');
-  useMapUsage.getState().record('route');
   set({ status: 'loading', computedAt: Date.now() });
   try {
-    const { routes } = await libs.Route.computeRoutes({
-      origin: { lat: pos.lat, lng: pos.lng },
-      destination,
-      travelMode: 'DRIVING',
-      // TRAFFIC_UNAWARE keeps it in the Essentials SKU (traffic-aware is Pro).
-      routingPreference: 'TRAFFIC_UNAWARE',
-      fields: ['durationMillis', 'distanceMeters', 'path'],
-      // Avoid tolls / highways: plain route modifiers, still Essentials (not a Pro or Enterprise trigger).
-      routeModifiers: { avoidTolls: useSettings.getState().map.avoidTolls, avoidHighways: useSettings.getState().map.avoidHighways },
-    });
-    const r = routes?.[0];
-    if (!r || !r.path?.length) return fallBack(destination, 'map.routeFallback');
+    const options = await requestRoutes({ lat: pos.lat, lng: pos.lng }, destination);
+    if (!options) return fallBack(destination, canSpend('route') ? 'map.routeFallback' : 'map.routeCapped');
     const current = useMapUi.getState().route;
     if (current?.destination !== destination) return;
-    // First drawing: follow the car at driving zoom, the line ahead on screen. A recompute after leaving the
-    // route keeps the view the driver has. The whole route is one tap away (route bar).
+    // First drawing with choices: show them all and let the driver pick (the fastest is picked if they don't).
+    // A recompute after leaving the route takes the fastest without asking.
     const first = current.path.length === 0;
-    clearLine();
-    const path = r.path.map((p) => ({ lat: num(p.lat), lng: num(p.lng) }));
-    casing = new libs.Polyline({ ...CASING_STYLE, path, map });
-    line = new libs.Polyline({ ...LINE_STYLE, path, map });
-    const pin = document.createElement('div');
-    pin.className = 'jg-map-dest';
-    destMarker = new libs.AdvancedMarkerElement({ map, position: path[path.length - 1], content: pin, title: destination });
-    set({ status: 'ready', path, distanceMeters: r.distanceMeters ?? 0, durationMillis: r.durationMillis ?? 0, computedAt: Date.now(), traffic: null });
-    if (first) {
-      useSettings.getState().setMapFollow(true);
-      map.setZoom(DRIVE_ZOOM);
-      follow(useGeo.getState().pos ?? pos, true);
-    }
-    void refreshTraffic();
-    scheduleTraffic();
+    const ask = first && options.length > 1;
+    // While the driver chooses, no traffic request yet: it's made for the route they pick.
+    set({ options, computedAt: Date.now(), choosing: ask });
+    applyChoice(0);
+    if (ask) openChooser();
+    else if (first) driveView(pos);
   } catch {
     // e.g. Routes API not allowed for this key: still show Google's route, in the free view.
     fallBack(destination, 'map.routeFallback');
   }
+}
+
+/** Draws route choice `i` as the route: line, pin, ETA; its traffic comes with the next Pro request. */
+function applyChoice(i: number): void {
+  const r = useMapUi.getState().route;
+  const o = r?.options[i];
+  if (!map || !libs || !r || !o) return;
+  const keepChoosing = r.choosing;
+  clearLine();
+  casing = new libs.Polyline({ ...CASING_STYLE, path: o.path, map });
+  line = new libs.Polyline({ ...LINE_STYLE, path: o.path, map });
+  const pin = document.createElement('div');
+  pin.className = 'jg-map-dest';
+  destMarker = new libs.AdvancedMarkerElement({ map, position: o.path[o.path.length - 1], content: pin, title: r.destination });
+  useMapUi.setState((s) =>
+    s.route
+      ? {
+          route: {
+            ...s.route,
+            status: 'ready',
+            chosen: i,
+            path: o.path,
+            distanceMeters: o.distanceMeters,
+            durationMillis: o.durationMillis,
+            description: o.description,
+            traffic: null,
+            computedAt: Date.now(),
+          },
+        }
+      : s,
+  );
+  if (keepChoosing) drawAlts();
+  else {
+    void refreshTraffic();
+    scheduleTraffic();
+  }
+}
+
+/** The other choices, grey, under the chosen route. */
+function drawAlts(): void {
+  for (const l of altLines) l.setMap(null);
+  const r = useMapUi.getState().route;
+  if (!map || !libs || !r) return;
+  altLines = r.options.filter((_, i) => i !== r.chosen).map((o) => new libs!.Polyline({ ...ALT_STYLE, path: o.path, map }));
+}
+
+function driveView(pos: Position | null): void {
+  if (!map) return;
+  useSettings.getState().setMapFollow(true);
+  map.setZoom(DRIVE_ZOOM);
+  if (pos) follow(pos, true);
+}
+
+/** Show the route choices: all of them on screen, north up, the others grey. Closes by itself after 30 s. */
+export function openChooser(): void {
+  const r = useMapUi.getState().route;
+  if (!map || !libs || !r || r.options.length < 2) return;
+  useMapUi.setState((s) => (s.route ? { route: { ...s.route, choosing: true } } : s));
+  drawAlts();
+  useSettings.getState().setMapFollow(false);
+  northUp();
+  const bounds = new libs.LatLngBounds();
+  for (const o of r.options) for (const p of o.path) bounds.extend(p);
+  map.fitBounds(bounds, routePadding());
+  clearTimeout(chooserTimer);
+  chooserTimer = window.setTimeout(() => chooseRoute(useMapUi.getState().route?.chosen ?? 0), 30_000);
+}
+
+/** Pick route choice `i` (or keep the current one) and drive: the others go, the car is followed. */
+export function chooseRoute(i: number): void {
+  const r = useMapUi.getState().route;
+  if (!r) return;
+  clearAlts();
+  useMapUi.setState((s) => (s.route ? { route: { ...s.route, choosing: false } } : s));
+  if (i !== r.chosen || !r.traffic) applyChoice(i);
+  driveView(useGeo.getState().pos);
 }
 
 /**
@@ -429,7 +558,21 @@ export function startRoute(destination: string): void {
   clearLine();
   const live = useMapUi.getState().mode === 'js' && useSettings.getState().map.routeLine;
   useMapUi.setState({
-    route: { destination, status: live ? 'loading' : 'ready', path: [], distanceMeters: 0, durationMillis: 0, computedAt: 0, viaEmbed: !live, note: null, traffic: null },
+    route: {
+      destination,
+      status: live ? 'loading' : 'ready',
+      path: [],
+      distanceMeters: 0,
+      durationMillis: 0,
+      computedAt: 0,
+      viaEmbed: !live,
+      note: null,
+      traffic: null,
+      options: [],
+      chosen: 0,
+      choosing: false,
+      description: '',
+    },
   });
   if (live) void computeRoute(destination);
 }

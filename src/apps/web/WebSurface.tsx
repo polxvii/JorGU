@@ -6,6 +6,7 @@ import type { FrameCheckResult } from '../../../shared/webTypes';
 import { countFrameLoad } from '../../dev/frameLoads';
 import { useSettings } from '../../features/settings/settingsStore';
 import { useUi } from '../../features/settings/uiStore';
+import { exitFullscreen } from '../../shell/fullscreen';
 import type { AppRef, SurfaceId, WebInstanceId } from '../../features/settings/types';
 import { useT } from '../../i18n';
 import { Icon } from '../../shell/Icon';
@@ -147,6 +148,7 @@ function ScaledFrame({ id, url, src, surfaceId, band, status, place }: {
   const cs = useControlSize();
   const driverRight = useSettings((s) => s.layout.driverSide) === 'right';
   const setViewMode = useSettings((s) => s.setViewMode);
+  const fullscreen = useSettings((s) => s.layout.fullscreenPane !== null);
   const wrap = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
@@ -198,6 +200,10 @@ function ScaledFrame({ id, url, src, surfaceId, band, status, place }: {
   };
   const items: StripItem[] = [
     { key: 'site', node: <StripButton testId={`web-site-${id}`} icon="search" label={t('web.changeSite')} onClick={openSiteMenu} /> },
+    // In full screen a site takes every tap, so the way out sits in our strip (user 2026-11-13: there was no easy one).
+    ...(fullscreen
+      ? [{ key: 'exitFs', node: <StripButton testId={`web-exit-fs-${id}`} icon="close" active label={t('fs.exit')} onClick={() => exitFullscreen('button')} /> }]
+      : []),
     { key: 'back', node: <StripButton testId={`web-back-${id}`} icon="back" label={t('web.back')} onClick={() => goBack(id)} /> },
     { key: 'forward', node: <StripButton testId={`web-forward-${id}`} icon="forward" label={t('web.forward')} onClick={() => goForward(id)} /> },
     {

@@ -254,6 +254,15 @@ test('full screen: the site fills the screen, edge strip + floating Web menu; no
   await page.getByTestId('sheet-close').click();
   await page.keyboard.press('Escape');
   await expect(page.locator('#jorgu-root')).toHaveAttribute('data-mode', 'split');
+  // Not in a pane: no exit button there.
+  await expect(page.getByTestId('web-exit-fs-w1')).toHaveCount(0);
+  // In full screen the site's own strip has a plain way out (user 2026-11-13), right under 🔍.
+  await page.getByTestId('pane-fullscreen-0').click();
+  await expect(page.locator('#jorgu-root')).toHaveAttribute('data-mode', 'fullscreen');
+  const ids = await page.getByTestId('web-w1-controls').locator('button').evaluateAll((els) => els.slice(0, 2).map((e) => e.getAttribute('data-testid')));
+  expect(ids).toEqual(['web-site-w1', 'web-exit-fs-w1']);
+  await page.getByTestId('web-exit-fs-w1').click();
+  await expect(page.locator('#jorgu-root')).toHaveAttribute('data-mode', 'split');
   await page.getByTestId('dock-swap').click();
   await expectNoReloads(page, before);
 });

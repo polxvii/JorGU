@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
 import type { VideoItem } from '../../../../shared/ytTypes';
+import { useSettings } from '../../../features/settings/settingsStore';
 import { useUi } from '../../../features/settings/uiStore';
 import { type MessageKey, useT } from '../../../i18n';
 import { Icon } from '../../../shell/Icon';
 import { queueVideos } from '../playActions';
+import { formatAge } from './age';
 import type { LoadState } from './useLoad';
 
 export function formatDuration(seconds: number): string {
@@ -21,6 +23,16 @@ export function Thumb({ src }: { src: string }) {
   );
 }
 
+/** Channel · length · age; the length and age are never cut off, a long channel name is. */
+function Meta({ channel, meta }: { channel: string; meta: string }) {
+  return (
+    <span className="flex min-w-0 text-[13px] text-text-dim" data-testid="lib-meta">
+      <span className="truncate">{channel}</span>
+      {meta && <span className="shrink-0 whitespace-pre">{channel ? ` · ${meta}` : meta}</span>}
+    </span>
+  );
+}
+
 /** Tap a row = play now. "+" = add to the end of the queue. */
 export function VideoList({ items, onPlay, testId, subtitle }: {
   items: VideoItem[];
@@ -30,6 +42,8 @@ export function VideoList({ items, onPlay, testId, subtitle }: {
 }) {
   const t = useT();
   const showToast = useUi((s) => s.showToast);
+  const lang = useSettings((s) => s.language);
+  const now = Date.now();
   return (
     <ul className="flex flex-col gap-1" data-testid={testId}>
       {items.map((v, i) => (
@@ -38,9 +52,11 @@ export function VideoList({ items, onPlay, testId, subtitle }: {
             <Thumb src={v.thumb} />
             <span className="min-w-0 flex-1">
               <span className="line-clamp-2 text-[15px] font-semibold leading-snug">{v.title}</span>
-              <span className="block truncate text-[13px] text-text-dim">
-                {subtitle ? subtitle(v) : [v.channel, v.duration ? formatDuration(v.duration) : ''].filter(Boolean).join(' · ')}
-              </span>
+              {subtitle ? (
+                <span className="block truncate text-[13px] text-text-dim">{subtitle(v)}</span>
+              ) : (
+                <Meta channel={v.channel} meta={[v.duration ? formatDuration(v.duration) : '', formatAge(v.publishedAt, lang, now)].filter(Boolean).join(' · ')} />
+              )}
             </span>
           </button>
           <button

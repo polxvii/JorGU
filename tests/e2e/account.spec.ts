@@ -10,7 +10,8 @@ const VIDEO_A = 'M7lc1UVf-VE';
 const VIDEO_B = 'aqz-KE-bpKQ';
 const v = (videoId: string, title: string, channel = 'Mock Channel', duration?: number) => ({ videoId, title, channel, thumb: '', duration });
 
-const FEED = [v(VIDEO_A, 'Feed video one'), v(VIDEO_B, 'Feed video two')];
+// Feed video one is 3 days old (the lists show each clip's age, user 2026-11-13).
+const FEED = [{ ...v(VIDEO_A, 'Feed video one', 'Mock Channel', 245), publishedAt: new Date(Date.now() - 3 * 86_400_000 - 60_000).toISOString() }, v(VIDEO_B, 'Feed video two')];
 const PLAYLISTS = [
   { id: 'PLroadtrip0001', title: 'Road trip', count: 3, thumb: '' },
   { id: 'PLnews0000002', title: 'News', count: 1, thumb: '' },
@@ -373,5 +374,39 @@ test('short clips: New and Trending hide clips up to 2 min (Settings: 1 / 2 / 3 
   await expect(results).toContainText('A Short in search');
   await expect(results).toContainText('0:50');
   await expect(results).toContainText('3:45');
+});
+
+test('sheets are drawn bigger and wider (user 2026-11-13), more so with a bigger Toolbar size; clips show their age', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await mockApi(page);
+  await openApp(page);
+  await startSimulatedPlayback(page);
+  await page.getByTestId('yt-library').click();
+  await page.getByTestId('lib-tab-feed').click();
+  const sheet = page.getByTestId('library-sheet');
+  const zoom = page.getByTestId('sheet-zoom');
+  await expect(zoom).toHaveCSS('zoom', '1.25');
+  // 400 px before, now 500: the bigger content has the same room. The zoomed box fills the sheet exactly.
+  const sb = (await sheet.boundingBox())!;
+  const zb = (await zoom.boundingBox())!;
+  expect(Math.round(sb.width)).toBe(500);
+  expect(Math.abs(zb.width - sb.width)).toBeLessThan(1);
+  expect(Math.abs(zb.height - sb.height)).toBeLessThan(1);
+  // Title text 15 px drawn at 18.75 px; the thumbnail 96 px wide at 120.
+  const title = page.getByTestId('lib-feed').locator('li').first().locator('.line-clamp-2');
+  expect(Math.round((await title.boundingBox())!.height)).toBeGreaterThanOrEqual(23);
+  expect(Math.round((await page.getByTestId('lib-feed').locator('img, span.w-24').first().boundingBox())!.width)).toBe(120);
+  // Channel · length · age.
+  await expect(page.getByTestId('lib-feed').locator('[data-testid="lib-meta"]').first()).toHaveText('Mock Channel · 4:05 · 3 days ago');
+  await expectPlayerClear(page);
+
+  await page.getByTestId('sheet-close').click();
+  await page.getByTestId('dock-settings').click();
+  await page.getByTestId('setting-dock-size').locator('[data-value="xlarge"]').click();
+  await expect(zoom).toHaveCSS('zoom', '1.55');
+  await page.getByTestId('sheet-close').click();
+  await page.getByTestId('yt-queue').click();
+  await expect(page.getByTestId('queue-sheet')).toBeVisible();
+  await expectPlayerClear(page);
 });
 

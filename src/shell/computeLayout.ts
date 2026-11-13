@@ -200,6 +200,12 @@ export function ytPaneMinWidth(height: number, dockSize: DockSize = 'normal'): n
 export const DOCK_SIZES: Record<DockSize, number> = { normal: 72, large: 80, xlarge: 88 };
 
 /**
+ * Sheets (Library, Queue, Settings, Where to…) are drawn this much bigger, text, pictures and buttons alike, and get
+ * wider by the same factor (user 2026-11-13: "so small I have to squint"). Follows Toolbar size.
+ */
+export const SHEET_ZOOM: Record<DockSize, number> = { normal: 1.25, large: 1.4, xlarge: 1.55 };
+
+/**
  * Toolbar size (Settings) for every control, not only the Dock (user 2026-11-12): full-screen buttons (`big`) and the
  * YouTube full-screen column, the transport row under the clip title (`row`, `ytControls` = title + row), map buttons.
  * `normal` keeps the original sizes (L.FLOAT_BUTTON, L.COLUMN, L.YT_CONTROLS).
@@ -238,8 +244,10 @@ function miniBox(area: Rect, size: MiniPlayerSize, at: { right: boolean; top: bo
  * Places a full-height sheet at one edge of `area`. If it would cover `avoid`, it narrows so that at least
  * `avoid.minW` px of `avoid` stay uncovered (the YouTube player keeps ≥ 356 px; the mini player stays whole).
  */
-function placeSheet(area: Rect, atRight: boolean, avoid: (Rect & { minW: number }) | null): Rect {
-  let sw = Math.max(L.SHEET_MIN, Math.min(L.SHEET_MAX, Math.round(area.w * 0.45)));
+function placeSheet(area: Rect, atRight: boolean, avoid: (Rect & { minW: number }) | null, dockSize: DockSize = 'normal'): Rect {
+  // Wider by the sheet's zoom, so the bigger content has the same room as before.
+  const max = Math.round(L.SHEET_MAX * SHEET_ZOOM[dockSize]);
+  let sw = Math.max(L.SHEET_MIN, Math.min(max, Math.round(area.w * 0.45)));
   const rectFor = (w: number): Rect => ({ x: atRight ? right(area) - w : area.x, y: area.y, w, h: area.h });
   if (avoid && intersects(rectFor(sw), avoid)) {
     const limit = atRight ? right(area) - avoid.x - avoid.minW : right(avoid) - area.x - avoid.minW;
@@ -383,7 +391,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
         sheet = placeBand(area, true, { ...area, minH: 201 + L.TOAST_STRIP });
         area = { ...area, h: area.h - sheet.h };
       } else if (input.sheetOpen) {
-        sheet = placeSheet(area, driverRight, { ...area, minW: YT_MIN_WIDTH });
+        sheet = placeSheet(area, driverRight, { ...area, minW: YT_MIN_WIDTH }, input.dockSize);
         area = driverRight ? { ...area, w: area.w - sheet.w } : { ...area, x: area.x + sheet.w, w: area.w - sheet.w };
       }
       // Toasts can't go over the player, so the player area gives up a strip at the bottom while one shows.
@@ -425,7 +433,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
       const m = mini ? { ...mini.handle, h: mini.handle.h + mini.rect.h } : null;
       sheet = portrait
         ? placeBand(content, m ? at.top : true, m ? { ...m, minH: m.h } : null)
-        : placeSheet(content, awayRight, m ? { ...m, minW: m.w } : null);
+        : placeSheet(content, awayRight, m ? { ...m, minW: m.w } : null, input.dockSize);
     }
     // Map and Web full screen: their own toolbar is a strip on the driver-side edge; the floating bar stays clear of it.
     const ownStrip = fsApp.kind === 'map' || fsApp.kind === 'web' ? mapStripWidth(input.dockSize) : 0;
@@ -551,7 +559,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     if (miniArea && at.right === atRight) atRight = !atRight;
     const avoid =
       yt.mode === 'pane' ? { ...yt.surface, minW: ytPaneMinWidth(yt.surface.h, input.dockSize) } : miniArea ? { ...miniArea, minW: miniArea.w } : null;
-    sheet = placeSheet(content, atRight, avoid);
+    sheet = placeSheet(content, atRight, avoid, input.dockSize);
     if (yt.mode === 'pane' && intersects(sheet, yt.surface)) {
       const s = yt.surface;
       const clipped = atRight ? { ...s, w: sheet.x - s.x } : { ...s, x: right(sheet), w: right(s) - right(sheet) };

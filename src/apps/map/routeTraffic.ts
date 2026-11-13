@@ -92,31 +92,34 @@ export interface BarPiece {
   /** 0 = the start of the route (bottom of the bar), 1 = the destination (top). */
   from: number;
   to: number;
-  level: TrafficLevel | 'passed';
+  level: TrafficLevel;
+  /** Behind the car: same colour, faded (user 2026-11-13). */
+  passed: boolean;
 }
 
 /**
  * The whole route on the bar (user 2026-11-13): start at the bottom, destination at the top, the car's dot climbing
- * at `along / total`. Driven so far: 'passed'; ahead: the sections' traffic, so a jam stays where it is on the bar
- * while the dot moves towards it.
+ * at `along / total`. Every stretch keeps its traffic colour; behind the car it's faded, so a jam stays where it is
+ * on the bar while the dot moves towards it and past it. Before the first section (driven before the traffic was
+ * fetched): unknown.
  */
 export function barPieces(sections: TrafficSection[], along: number, total: number): BarPiece[] {
   if (total <= 0 || !sections.length) return [];
   const at = Math.max(0, Math.min(total, along));
   const out: BarPiece[] = [];
-  const push = (from: number, to: number, level: BarPiece['level']) => {
-    if (to - from < 1e-9) return;
-    const prev = out[out.length - 1];
-    if (prev && prev.level === level && Math.abs(prev.to - from) < 1e-9) prev.to = to;
-    else out.push({ from, to, level });
+  const push = (from: number, to: number, level: TrafficLevel) => {
+    // Split at the car: behind it faded, ahead full colour.
+    const parts: [number, number, boolean][] =
+      to <= at ? [[from, to, true]] : from >= at ? [[from, to, false]] : [[from, at, true], [at, to, false]];
+    for (const [f, t, passed] of parts) {
+      if (t - f < 1e-9) continue;
+      const prev = out[out.length - 1];
+      if (prev && prev.level === level && prev.passed === passed && Math.abs(prev.to - f / total) < 1e-9) prev.to = t / total;
+      else out.push({ from: f / total, to: t / total, level, passed });
+    }
   };
-  push(0, at / total, 'passed');
-  // Not covered by the sections yet (the car went back): unknown.
-  if (sections[0].from > at) push(at / total, sections[0].from / total, 'unknown');
-  for (const s of sections) {
-    if (s.to <= at) continue;
-    push(Math.max(s.from, at) / total, Math.min(1, s.to / total), trafficLevel(s.ratio));
-  }
+  if (sections[0].from > 0) push(0, Math.min(total, sections[0].from), 'unknown');
+  for (const s of sections) push(s.from, Math.min(total, s.to), trafficLevel(s.ratio));
   return out;
 }
 

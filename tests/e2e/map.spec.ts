@@ -548,11 +548,16 @@ test('traffic bar: the car dot climbs the whole route; driven part grey, jams st
   // Halfway along the (stub) route, north-east of the start.
   await page.context().setGeolocation({ latitude: HERE.latitude + 0.025, longitude: HERE.longitude + 0.025 });
   await expect(bar).toHaveAttribute('data-progress', '0.50');
-  await expect(bar.locator('[data-level="passed"]')).toHaveCount(1);
+  // Driven: the same colours, faded (user 2026-11-13); ahead: full colour.
+  await expect(bar.locator('[data-passed="1"]').first()).toBeVisible();
+  await expect(bar.locator('[data-passed="1"][data-level="jam"]')).toHaveCount(1);
   const b = await box(page, '[data-testid="map-traffic-bar"]');
   const dot = await box(page, '[data-testid="map-traffic-bar-car"]');
   expect(Math.abs(dot.y + dot.height / 2 - (b.y + b.height / 2))).toBeLessThan(6);
-  // The jam (sections 2 of 26, behind us now) didn't move on the bar; it's grey now.
-  expect((await box(page, '[data-testid="map-traffic-bar"] [data-level="passed"]')).height).toBeGreaterThan(jamBefore.height);
+  // The jam (section 2 of 26, behind us now) didn't move on the bar; it's faded now.
+  const jamAfter = await box(page, '[data-testid="map-traffic-bar"] [data-level="jam"][data-passed="1"]');
+  expect(Math.round(jamAfter.y)).toBe(Math.round(jamBefore.y));
+  expect(Math.round(jamAfter.height)).toBe(Math.round(jamBefore.height));
+  expect(await page.locator('[data-testid="map-traffic-bar"] [data-level="jam"][data-passed="1"]').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgb(229, 146, 140)');
 });
 

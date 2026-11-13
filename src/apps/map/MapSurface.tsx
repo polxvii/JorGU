@@ -164,7 +164,9 @@ function RouteChooser({ box, height, top }: { box: Rect; height: number; top: nu
   );
 }
 
-const LEVEL_COLOUR: Record<TrafficLevel | 'passed', string> = { free: '#1E8E3E', slow: '#F29900', jam: '#D93025', unknown: '#9AA0A6', passed: '#5F6368' };
+const LEVEL_COLOUR: Record<TrafficLevel, string> = { free: '#1E8E3E', slow: '#F29900', jam: '#D93025', unknown: '#9AA0A6' };
+/** Behind the car: the same colours 50 % faded (user 2026-11-13, chosen from a mock), mixed solid so the map doesn't show through. */
+const PASSED_COLOUR: Record<TrafficLevel, string> = { free: '#88C199', slow: '#F2C67A', jam: '#E5928C', unknown: '#C4C7C9' };
 export const TRAFFIC_BAR_W = 12;
 
 /**
@@ -194,7 +196,13 @@ function TrafficBar({ rect }: { rect: Rect }) {
     >
       <div className="absolute inset-x-0 overflow-hidden rounded-full border-2 border-white shadow-[0_1px_4px_rgba(0,0,0,0.45)]" style={{ top: 8, height: inner, background: LEVEL_COLOUR.unknown }}>
         {pieces.map((p, i) => (
-          <div key={i} data-level={p.level} className="absolute inset-x-0" style={{ bottom: `${p.from * 100}%`, height: `${(p.to - p.from) * 100}%`, background: LEVEL_COLOUR[p.level] }} />
+          <div
+            key={i}
+            data-level={p.level}
+            data-passed={p.passed ? '1' : '0'}
+            className="absolute inset-x-0"
+            style={{ bottom: `${p.from * 100}%`, height: `${(p.to - p.from) * 100}%`, background: (p.passed ? PASSED_COLOUR : LEVEL_COLOUR)[p.level] }}
+          />
         ))}
       </div>
       <div className="absolute left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-[#D93025] ring-2 ring-white" style={{ top: 3 }} />

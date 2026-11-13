@@ -7,6 +7,8 @@ test.describe.configure({ timeout: 60_000 });
 
 const HERE = { latitude: 13.7563, longitude: 100.5018 };
 const stub = (page: Page) => page.evaluate(() => ({ ...window.__mapsStub!, listeners: undefined, fire: undefined }));
+/** The blue route lines on the map (the route itself; its dark edge and slow / jam stretches are separate lines). */
+const blue = (s: { shown: { strokeColor: string }[] }) => s.shown.filter((l) => l.strokeColor === '#1A73E8').length;
 
 async function withLocation(page: Page) {
   await page.context().grantPermissions(['geolocation']);
@@ -72,12 +74,19 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   // One map: the route line, the destination pin, the car dot and traffic together. No Embed view on top.
   await expect(page.getByTestId('map-embed')).toHaveCount(0);
   const s = await stub(page);
-  expect(s).toMatchObject({ maps: 1, routes: 1, lines: 1, pins: 1, traffic: true, fitBounds: 0, zoom: 16 });
+  expect(s).toMatchObject({ maps: 1, routes: 1, pins: 1, traffic: true, fitBounds: 0, zoom: 16 });
+  expect(blue(s)).toBe(1);
   await expect(page.getByTestId('map-route-time')).toContainText('min');
   expect(s.lastRoute).toMatchObject({ destination: 'Central World', routingPreference: 'TRAFFIC_UNAWARE', fields: ['durationMillis', 'distanceMeters', 'path'] });
   expect(s.lastRoute).not.toHaveProperty('extraComputations'); // traffic on the line = Enterprise SKU
   // One solid blue line (user 2026-11-13); traffic on the road ahead is the side bar.
-  expect(s.shown).toMatchObject([{ strokeColor: '#1A73E8', strokeOpacity: 1, strokeWeight: 7, path: [{ lat: HERE.latitude, lng: HERE.longitude }, {}] }]);
+  expect(s.shown).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ strokeColor: '#1A73E8', strokeOpacity: 1, strokeWeight: 7, path: [{ lat: HERE.latitude, lng: HERE.longitude }, expect.anything()] }),
+      // A dark edge, so the line stands out from the Traffic layer's colours on the same road.
+      expect.objectContaining({ strokeColor: '#0B3B8C', strokeWeight: 11 }),
+    ]),
+  );
   // Traffic per section: one Compute Routes Pro request (traffic-aware, waypoints on our route with headings), never
   // "traffic on polylines" (Enterprise).
   await expect.poll(async () => (await stub(page)).trafficReqs).toBe(1);
@@ -89,6 +98,10 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   await expect(barEl).toBeVisible();
   await expect(barEl.locator('[data-level="jam"]')).toHaveCount(1);
   await expect(barEl.locator('[data-level="slow"]')).toHaveCount(1);
+  // The same sections on the route line itself (user 2026-11-13): red where jammed, orange where slow, blue elsewhere.
+  const painted = (await stub(page)).shown.filter((l) => l.strokeColor === '#D93025' || l.strokeColor === '#F29900');
+  expect(painted.map((l) => l.strokeColor).sort()).toEqual(['#D93025', '#F29900']);
+  for (const l of painted) expect(l.strokeWeight).toBe(7);
   // Beside the toolbar strip, clear of it and of the route box.
   const tb = await box(page, '[data-testid="map-traffic-bar"]');
   const st = await box(page, '[data-testid="map-strip"]');
@@ -102,6 +115,7 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   // Traffic off hides the bar (no request); on again within 5 minutes reuses what we have.
   await page.getByTestId('map-traffic').click();
   await expect(barEl).toHaveCount(0);
+  expect((await stub(page)).shown.filter((l) => l.strokeColor === '#D93025' || l.strokeColor === '#F29900')).toHaveLength(0);
   await page.getByTestId('map-traffic').click();
   await expect(barEl).toBeVisible();
   expect((await stub(page)).trafficReqs).toBe(1);
@@ -174,7 +188,8 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   await expect(page.getByTestId('map-recent')).toContainText('Central World');
   await page.getByTestId('map-recent-0').click();
   await expect(page.getByTestId('map-route')).toHaveAttribute('data-status', 'ready');
-  expect(await stub(page)).toMatchObject({ routes: 2, lines: 1, pins: 1 });
+  expect(await stub(page)).toMatchObject({ routes: 2, pins: 1 });
+  expect(blue(await stub(page))).toBe(1);
   expect(popups).toBe(1);
 });
 
@@ -189,7 +204,8 @@ test('Show route before a location fix: waits, then draws once the first positio
   await page.context().setGeolocation(HERE);
   await page.getByTestId('map-recenter').click();
   await expect(page.getByTestId('map-route')).toHaveAttribute('data-status', 'ready');
-  expect(await stub(page)).toMatchObject({ routes: 1, lines: 1, pins: 1 });
+  expect(await stub(page)).toMatchObject({ routes: 1, pins: 1 });
+  expect(blue(await stub(page))).toBe(1);
 });
 
 test("the line can't be drawn (Routes refused, or the daily route limit): the route shows in the free view with a note", async ({ page }) => {
@@ -252,7 +268,7 @@ test('avoid tolls / highways: sent with the route, drawn again when changed, rem
   await expect.poll(async () => (await stub(page)).routes).toBe(2);
   s = await stub(page);
   expect(s.lastRoute).toMatchObject({ routeModifiers: { avoidTolls: true, avoidHighways: true } });
-  expect(s.lines).toBe(1);
+  expect(blue(s)).toBe(1);
   await page.reload();
   await page.getByTestId('map-navigate').click();
   await expect(page.getByTestId('map-avoid-tolls')).toHaveAttribute('aria-pressed', 'true');

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { mapsAppSchemeUrl, mapsNavigateUrl, withRecentDestination } from '../../src/apps/map/navigate';
 import { haversine, progress, projectOnPath } from '../../src/apps/map/routeMath';
 import { MONTHLY_CAPS, allowedToday, canSpend, daysLeftInMonth, pacificDay, pacificMonth, useMapUsage, usedThisMonth } from '../../src/apps/map/usage';
-import { barPieces, sectionPlan, sectionsFromLegs, trafficLevel, trafficMillisLeft } from '../../src/apps/map/routeTraffic';
+import { barPieces, sectionPlan, sectionsFromLegs, slicePath, slowStretches, trafficLevel, trafficMillisLeft } from '../../src/apps/map/routeTraffic';
 
 const zero = () => ({ map: 0, route: 0, traffic: 0 });
 
@@ -145,6 +145,21 @@ describe('traffic on the route, per section (Compute Routes Pro legs)', () => {
       { from: 0, to: 1 / 3, level: 'jam' },
       { from: 1 / 3, to: 1, level: 'unknown' },
     ]);
+  });
+});
+
+describe('slow / jammed stretches on the route line', () => {
+  const path = [{ lat: 13.7, lng: 100.5 }, { lat: 13.709, lng: 100.5 }, { lat: 13.718, lng: 100.5 }, { lat: 13.727, lng: 100.5 }];
+  it('cuts the route exactly at the section ends and merges neighbours of the same level', () => {
+    const cut = slicePath(path, 500, 1500);
+    expect(haversine(path[0], cut[0])).toBeCloseTo(500, 0);
+    expect(haversine(path[0], cut[cut.length - 1])).toBeCloseTo(1500, 0);
+    expect(cut).toHaveLength(3); // the corner at ~1 km is kept
+    const sections = [0, 600, 1200, 1800, 2400, 3000].slice(0, -1).map((from, i) => ({ from, to: from + 600, ms: 1, ratio: [1, 3, 2.5, 1.5, 1][i] }));
+    const s = slowStretches(path, sections);
+    expect(s.map((x) => x.level)).toEqual(['jam', 'slow']);
+    expect(haversine(path[0], s[0].path[0])).toBeCloseTo(600, 0);
+    expect(haversine(path[0], s[0].path[s[0].path.length - 1])).toBeCloseTo(1800, 0);
   });
 });
 

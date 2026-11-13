@@ -179,6 +179,7 @@ export const en = {
 
   'web.newTab': 'New tab',
   'web.menu': 'Web menu',
+  'web.changeSite': 'Search or go to another site',
   'web.startTitle': 'Open a website',
   'web.urlPlaceholder': 'Search, or a web address like example.com',
   'web.go': 'Open',

@@ -107,6 +107,14 @@ test('web toolbar: Mobile / Desktop and zoom one tap away, on the driver-side ed
   const site = (await page.getByTestId('web-page-w1').boundingBox())!;
   expect(Math.round(strip.x + strip.width)).toBe(Math.round(pane.x + pane.width));
   expect(Math.round(site.x + site.width)).toBe(Math.round(strip.x));
+  // 🔍 at the top of the strip opens the Web menu to search or change site (user 2026-11-13).
+  const first = await page.getByTestId('web-w1-controls').locator('button').first().getAttribute('data-testid');
+  expect(first).toBe('web-site-w1');
+  await page.getByTestId('web-site-w1').click();
+  await expect(page.getByTestId('web-sheet')).toBeVisible();
+  await expect(page.getByTestId('web-sheet-url-input')).toBeVisible();
+  await page.getByTestId('sheet-close').click();
+  await expect(page.getByTestId('web-sheet')).toHaveCount(0);
   const view = page.getByTestId('web-frame-w1');
   await page.getByTestId('web-desktop-w1').click();
   await expect(view).toHaveAttribute('data-view', 'desktop');

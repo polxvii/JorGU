@@ -7,7 +7,7 @@ import type { MessageKey } from '../../i18n';
 import { DEFAULT_CENTER, MAP_ID, mapsConfigured } from './config';
 import { type Position, useGeo } from './geo';
 import { type GMap, type GMarker, type GLayer, type GPolyline, type MapsLibs, loadMaps, onMapsAuthFailure } from './mapsLoader';
-import { type TrafficSection, sectionPlan, sectionsFromLegs } from './routeTraffic';
+import { type TrafficSection, sectionPlan, sectionsFromLegs, slowStretches } from './routeTraffic';
 import { OFF_ROUTE_M, RECOMPUTE_MIN_MS, type LL, aheadBearing, bearing, cameraCenter, haversine, progress, projectOnPath, turn } from './routeMath';
 import { canSpend, useMapUsage } from './usage';
 
@@ -48,6 +48,8 @@ let markerDot: HTMLElement | null = null;
 let traffic: GLayer | null = null;
 // The route line: one solid line (user 2026-11-13); traffic on the route is the side bar (routeTraffic.ts).
 let line: GPolyline | null = null;
+let casing: GPolyline | null = null;
+let slowLines: GPolyline[] = [];
 let trafficTimer = 0;
 let trafficBusy = false;
 let destMarker: GMarker | null = null;
@@ -256,7 +258,8 @@ export function zoomBy(step: number): void {
 export function setTraffic(on: boolean): void {
   useSettings.getState().setMapTraffic(on);
   traffic?.setMap(on ? map : null);
-  // The traffic bar follows the Traffic button: back on, fetch it if it's stale.
+  paintTraffic();
+  // The traffic bar and colours follow the Traffic button: back on, fetch them if they're stale.
   const r = useMapUi.getState().route;
   if (on && r && (!r.traffic || Date.now() - r.traffic.at > TRAFFIC_EVERY_MS)) void refreshTraffic();
 }
@@ -267,10 +270,29 @@ const num = (v: number | (() => number)) => (typeof v === 'function' ? v() : v);
 // Route line (user 2026-11-13, after a see-through line, a chain of arrows and two edges): one solid blue line, easy to
 // see. Traffic on the road ahead is the side bar, from Compute Routes Pro (routeTraffic.ts).
 const LINE_STYLE = { strokeColor: '#1A73E8', strokeOpacity: 1, strokeWeight: 7, clickable: false, zIndex: 2 };
+// A dark edge so the line stands out from the Traffic layer's colours on the same road.
+const CASING_STYLE = { strokeColor: '#0B3B8C', strokeOpacity: 1, strokeWeight: 11, clickable: false, zIndex: 1 };
+// Slow / jammed stretches of the route (user 2026-11-13), from the same Pro data as the side bar: no extra request.
+const SLOW_COLOUR = { slow: '#F29900', jam: '#D93025' } as const;
+
+/** Paints the slow and jammed stretches over the blue line (only with Traffic on and traffic known). */
+function paintTraffic(): void {
+  for (const l of slowLines) l.setMap(null);
+  slowLines = [];
+  const r = useMapUi.getState().route;
+  if (!map || !libs || !line || !r?.traffic || !useSettings.getState().map.traffic) return;
+  slowLines = slowStretches(r.path, r.traffic.sections).map(
+    (s) => new libs!.Polyline({ ...LINE_STYLE, strokeColor: SLOW_COLOUR[s.level], zIndex: 3, path: s.path, map }),
+  );
+}
 
 function clearLine(): void {
   line?.setMap(null);
   line = null;
+  casing?.setMap(null);
+  casing = null;
+  for (const l of slowLines) l.setMap(null);
+  slowLines = [];
   if (destMarker) destMarker.map = null;
   destMarker = null;
   clearInterval(trafficTimer);
@@ -309,6 +331,7 @@ async function refreshTraffic(): Promise<void> {
     useMapUi.setState((s) =>
       s.route && s.route.computedAt === computedAt ? { route: { ...s.route, traffic: { sections: sectionsFromLegs(plan.bounds, legs), at: Date.now() } } } : s,
     );
+    paintTraffic();
   } catch {
     // No bar this time (e.g. the key doesn't allow it); the route itself is unaffected.
   } finally {
@@ -378,6 +401,7 @@ async function computeRoute(destination: string): Promise<void> {
     const first = current.path.length === 0;
     clearLine();
     const path = r.path.map((p) => ({ lat: num(p.lat), lng: num(p.lng) }));
+    casing = new libs.Polyline({ ...CASING_STYLE, path, map });
     line = new libs.Polyline({ ...LINE_STYLE, path, map });
     const pin = document.createElement('div');
     pin.className = 'jg-map-dest';

@@ -107,6 +107,35 @@ export function barPieces(sections: TrafficSection[], along: number, total: numb
   return out;
 }
 
+/** The route between two distances along it (metres), cut exactly at both ends. */
+export function slicePath(path: LL[], from: number, to: number): LL[] {
+  const out: LL[] = [pointAlong(path, from)];
+  let walked = 0;
+  for (let i = 1; i < path.length; i++) {
+    walked += haversine(path[i - 1], path[i]);
+    if (walked > from && walked < to) out.push(path[i]);
+    if (walked >= to) break;
+  }
+  out.push(pointAlong(path, to));
+  return out;
+}
+
+/**
+ * Where the route line turns orange (slow) or red (jam), Google Maps style (user 2026-11-13: "put the colours on the
+ * route"): the rest stays blue. Neighbouring sections of the same level are one stretch.
+ */
+export function slowStretches(path: LL[], sections: TrafficSection[]): { level: 'slow' | 'jam'; path: LL[] }[] {
+  const runs: { level: 'slow' | 'jam'; from: number; to: number }[] = [];
+  for (const s of sections) {
+    const level = trafficLevel(s.ratio);
+    if (level !== 'slow' && level !== 'jam') continue;
+    const prev = runs[runs.length - 1];
+    if (prev && prev.level === level && Math.abs(prev.to - s.from) < 1) prev.to = s.to;
+    else runs.push({ level, from: s.from, to: s.to });
+  }
+  return runs.map((r) => ({ level: r.level, path: slicePath(path, r.from, r.to) }));
+}
+
 /** Distance of the route (for tests and the bar): metres. */
 export const routeLength = (path: LL[]) => pathLength(path);
 export { haversine };

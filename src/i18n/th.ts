@@ -182,6 +182,7 @@ export const th: Partial<Record<MessageKey, string>> = {
 
   'web.newTab': 'แท็บใหม่',
   'web.menu': 'เมนูเว็บ',
+  'web.changeSite': 'ค้นหา หรือเปลี่ยนเว็บ',
   'web.startTitle': 'เปิดเว็บไซต์',
   'web.urlPlaceholder': 'ค้นหา หรือพิมพ์ที่อยู่เว็บ เช่น example.com',
   'web.go': 'เปิด',

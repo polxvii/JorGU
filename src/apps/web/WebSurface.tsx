@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { FrameCheckResult } from '../../../shared/webTypes';
 import { countFrameLoad } from '../../dev/frameLoads';
 import { useSettings } from '../../features/settings/settingsStore';
+import { useUi } from '../../features/settings/uiStore';
 import type { AppRef, SurfaceId, WebInstanceId } from '../../features/settings/types';
 import { useT } from '../../i18n';
 import { Icon } from '../../shell/Icon';
@@ -190,7 +191,13 @@ function ScaledFrame({ id, url, src, surfaceId, band, status, place }: {
   // Toolbar (user 2026-11-13): Mobile / Desktop layout and zoom, one tap away instead of in the Web menu. Zoom +/-
   // steps from what's on screen now; in Mobile or Desktop it goes back to Auto at that zoom.
   const scale = v?.scale ?? (mode.mode === 'auto' ? mode.zoom : 1);
+  // 🔍 first (user 2026-11-13): change site from the strip, not the header at the top of the screen.
+  const openSiteMenu = () => {
+    const pane = useSettings.getState().layout.panes.findIndex((a) => a.kind === 'web' && a.id === id);
+    if (pane === 0 || pane === 1) useUi.getState().openSheet({ kind: 'web', pane });
+  };
   const items: StripItem[] = [
+    { key: 'site', node: <StripButton testId={`web-site-${id}`} icon="search" label={t('web.changeSite')} onClick={openSiteMenu} /> },
     { key: 'back', node: <StripButton testId={`web-back-${id}`} icon="back" label={t('web.back')} onClick={() => goBack(id)} /> },
     { key: 'forward', node: <StripButton testId={`web-forward-${id}`} icon="forward" label={t('web.forward')} onClick={() => goForward(id)} /> },
     {

@@ -10,7 +10,7 @@ import { setSpeed } from '../../apps/youtube/player';
 import { SPEED_PRESETS, formatSpeed } from '../../apps/youtube/speed';
 import { AccountSection } from '../../apps/youtube/library/ConnectCard';
 import { mapsConfigured } from '../../apps/map/config';
-import { DAILY_CAP, MONTHLY_CAP, usedThisMonth, usedToday, useMapUsage } from '../../apps/map/usage';
+import { MONTHLY_CAPS, SKUS, allowedToday, daysLeftInMonth, usedThisMonth, usedToday, useMapUsage } from '../../apps/map/usage';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -53,7 +53,7 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
   const s = useSettings();
   const [confirmReset, setConfirmReset] = useState(false);
   // Re-render when the counters change.
-  useMapUsage((u) => `${u.month}${u.map}/${u.route}${u.day}${u.dayMap}/${u.dayRoute}`);
+  useMapUsage((u) => `${u.month}${JSON.stringify(u.used)}${u.day}${JSON.stringify(u.today)}`);
 
   return (
     <Sheet rect={rect} title={t('settings.title')} testId="settings-sheet">
@@ -256,18 +256,18 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
               <p className="mt-1 px-1 text-[13px] text-text-dim">{t('settings.mapColorsHint')}</p>
             </div>
             <div className="mt-2 flex flex-col gap-1 rounded-xl bg-bg p-3 text-[14px]" data-testid="setting-map-usage">
-              {(['map', 'route'] as const).map((sku) => (
+              {SKUS.map((sku) => (
                 <p key={sku} data-testid={`setting-map-usage-${sku}`}>
-                  {t(sku === 'map' ? 'settings.mapQuotaMaps' : 'settings.mapQuotaRoutes', {
-                    leftMonth: (MONTHLY_CAP - usedThisMonth(sku)).toLocaleString('en-US'),
+                  {t(sku === 'map' ? 'settings.mapQuotaMaps' : sku === 'route' ? 'settings.mapQuotaRoutes' : 'settings.mapQuotaTraffic', {
+                    leftMonth: (MONTHLY_CAPS[sku] - usedThisMonth(sku)).toLocaleString('en-US'),
                     usedMonth: usedThisMonth(sku).toLocaleString('en-US'),
-                    capMonth: MONTHLY_CAP.toLocaleString('en-US'),
+                    capMonth: MONTHLY_CAPS[sku].toLocaleString('en-US'),
                     usedDay: usedToday(sku),
-                    capDay: DAILY_CAP,
+                    capDay: allowedToday(sku),
                   })}
                 </p>
               ))}
-              <p className="text-[13px] text-text-dim">{t('settings.mapQuotaNote', { capDay: DAILY_CAP })}</p>
+              <p className="text-[13px] text-text-dim">{t('settings.mapQuotaNote', { days: daysLeftInMonth() })}</p>
             </div>
           </>
         ) : (

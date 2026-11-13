@@ -26,6 +26,29 @@ export function normalizeUrl(input: string, selfOrigin?: string): Normalized {
   return { ok: true, url: url.href };
 }
 
+export type SearchEngine = 'google' | 'bing';
+
+/** Text that isn't a web address is a search (user 2026-11-13). Google doesn't allow its results inside another
+ * site's frame (X-Frame-Options), so a Google search offers "Open in new tab" or Bing, which shows in the pane. */
+export function searchUrl(query: string, engine: SearchEngine): string {
+  const q = encodeURIComponent(query.trim()).replace(/%20/g, '+');
+  return engine === 'bing' ? `https://www.bing.com/search?q=${q}` : `https://www.google.com/search?q=${q}`;
+}
+
+/** The search text, when `url` is one of our search URLs. */
+export function searchQuery(url: string): { engine: SearchEngine; q: string } | null {
+  try {
+    const u = new URL(url);
+    const q = u.searchParams.get('q');
+    if (!q || u.pathname !== '/search') return null;
+    if (u.hostname === 'www.google.com') return { engine: 'google', q };
+    if (u.hostname === 'www.bing.com') return { engine: 'bing', q };
+  } catch {
+    /* not a URL */
+  }
+  return null;
+}
+
 /** The address the iframe loads: always https (http inside an https app is blocked as mixed content). */
 export function toHttps(url: string): string {
   return url.replace(/^http:\/\//i, 'https://');

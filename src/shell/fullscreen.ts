@@ -1,6 +1,7 @@
 // Per-pane full screen (spec §6.5): layer 1 = in-app CSS, layer 2 = browser Fullscreen API on the app root.
 // Exits: ✕ / Esc / Back / browser leaving full screen. All paths go through exitFullscreen() so states never disagree.
 import { useEffect } from 'react';
+import { webTraversing } from '../apps/web/webHistory';
 import { useSettings } from '../features/settings/settingsStore';
 import { useUi } from '../features/settings/uiStore';
 import type { PaneIndex } from '../features/settings/types';
@@ -93,6 +94,11 @@ export function useFullscreenController(): void {
     const onPop = () => {
       if (poppingOwnEntry) {
         poppingOwnEntry = false;
+        return;
+      }
+      // A Web pane's Back with nothing left in the site: stay in full screen (put our entry back).
+      if (webTraversing() && useSettings.getState().layout.fullscreenPane !== null) {
+        pushHistoryEntry();
         return;
       }
       exitFullscreen('popstate');

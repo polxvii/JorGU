@@ -1,7 +1,7 @@
 // M5 Web app (spec §9): start page, frame check card, Auto/Mobile/Desktop without reload, bookmarks → App Picker,
 // http handling, full screen. Sites and /api/frame-check are mocked (the Worker side is tested in tests/worker).
 import { expect, test, type Page } from '@playwright/test';
-import { expectNoReloads, frameLoads, mockWeb, openApp, waitForFrames } from './helpers';
+import { TEST_SITE_HTML, expectNoReloads, frameLoads, mockWeb, openApp, waitForFrames } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 test.describe.configure({ timeout: 60_000 });
@@ -59,12 +59,17 @@ test('web Back / Forward step the page in its own pane, never leave JorGu; Reloa
   const f = frame(page);
   const back = page.getByTestId('web-back-w1');
   const forward = page.getByTestId('web-forward-w1');
-  await expect(back).toBeDisabled();
-  await expect(forward).toBeDisabled();
-  // A link inside the site: a new page, so Back lights up.
+  // Always usable (user 2026-11-13: they stayed grey). Nothing to go back to: nothing changes, still JorGu.
+  await expect(back).toBeEnabled();
+  await expect(forward).toBeEnabled();
+  const token = await f.locator('#token').textContent();
+  await back.click();
+  await page.waitForTimeout(800);
+  await expect(f.locator('#token')).toHaveText(token!);
+  await expect(page.locator('#jorgu-root')).toBeVisible();
+  // A link inside the site: a new page.
   await f.locator('#next').click();
   await expect(f.locator('#page')).toHaveText('?page=2');
-  await expect(back).toBeEnabled();
   // Reload goes to the page that was opened, without a new step.
   await page.getByTestId('web-reload-0').click();
   await expect(f.locator('#page')).toHaveText('');
@@ -72,12 +77,18 @@ test('web Back / Forward step the page in its own pane, never leave JorGu; Reloa
   await expect(f.locator('#page')).toHaveText('?page=2');
   await back.click();
   await expect(f.locator('#page')).toHaveText('');
-  await expect(forward).toBeEnabled();
+  await page.waitForTimeout(800);
   await forward.click();
   await expect(f.locator('#page')).toHaveText('?page=2');
+  await page.waitForTimeout(800);
   await back.click();
+  await page.waitForTimeout(800);
   await back.click();
   await expect(f.locator('#page')).toHaveText('');
+  // Past the start of the site's history: still JorGu.
+  await page.waitForTimeout(800);
+  await back.click();
+  await page.waitForTimeout(800);
   // Still JorGu, still the same page in the pane.
   await expect(page.locator('#jorgu-root')).toBeVisible();
   expect(new URL(page.url()).pathname).toBe('/');
@@ -163,9 +174,6 @@ test('start page: type a bare domain; bad input explains; Recent; bookmark → p
   await openApp(page, webPanes(''));
   await expect(page.getByTestId('web-start-w1')).toBeVisible();
   const input = page.getByTestId('web-start-url-w1-input');
-  await input.fill('weather bangkok');
-  await page.getByTestId('web-start-url-w1-go').click();
-  await expect(page.getByTestId('web-start-url-w1-error')).toHaveText('Enter a web address like example.com');
   await input.fill('javascript:alert(1)');
   await page.getByTestId('web-start-url-w1-go').click();
   await expect(page.getByTestId('web-start-url-w1-error')).toContainText('Only web addresses');
@@ -241,3 +249,44 @@ test('full screen: the site fills the screen, edge strip + floating Web menu; no
   await page.getByTestId('dock-swap').click();
   await expectNoReloads(page, before);
 });
+
+test('search: text that is not a web address searches Google; Google can\'t show in a pane, so Bing can', async ({ page }) => {
+  await mockWeb(page, { blocked: ['www.google.com'] });
+  await page.route(/^https:\/\/www\.bing\.com\//, (r) => r.fulfill({ contentType: 'text/html', body: TEST_SITE_HTML }));
+  await openApp(page, webPanes(''));
+  await page.getByTestId('web-start-url-w1-input').fill('weather bangkok');
+  await page.getByTestId('web-start-url-w1-go').click();
+  // Google blocks framing: the card offers a new tab, or Bing in the pane.
+  await expect(page.getByTestId('web-blocked-w1')).toBeVisible();
+  await expect(page.getByTestId('web-blocked-newtab-w1')).toHaveAttribute('href', 'https://www.google.com/search?q=weather+bangkok');
+  await page.getByTestId('web-search-bing-w1').click();
+  await waitForFrames(page, ['web:w1']);
+  await expect(page.getByTestId('web-menu-0')).toContainText('bing.com');
+  // Remembered: the next search goes to Bing directly; the Web menu can switch back.
+  await openWebMenu(page);
+  await expect(page.getByTestId('web-search-engine').locator('[data-value="bing"]')).toHaveAttribute('aria-checked', 'true');
+  await page.getByTestId('web-sheet-url-input').fill('jorgu test');
+  await page.getByTestId('web-sheet-url-go').click();
+  await expect(page.getByTestId('web-menu-0')).toContainText('bing.com');
+  await expect(page.getByTestId('web-frame-w1')).toHaveAttribute('src', 'https://www.bing.com/search?q=jorgu+test');
+});
+
+test('saved pages: change their order with up / down', async ({ page }) => {
+  await mockWeb(page);
+  const bm = (id: string, title: string) => ({ id, title, url: `https://${id}.test/`, pinned: false });
+  await openApp(page, { ...webPanes(SITE), web: { bookmarks: [bm('a', 'Alpha'), bm('b', 'Bravo'), bm('c', 'Charlie')] } });
+  await waitForFrames(page, ['web:w1']);
+  await openWebMenu(page);
+  const order = () => page.getByTestId('web-bookmarks').locator(':scope > li').evaluateAll((els) => els.map((e) => (e.textContent ?? '').match(/Alpha|Bravo|Charlie/)?.[0]));
+  expect(await order()).toEqual(['Alpha', 'Bravo', 'Charlie']);
+  await page.getByTestId('web-bookmarks-reorder').click();
+  await expect(page.getByTestId('bookmark-move-a-up')).toBeDisabled();
+  await page.getByTestId('bookmark-move-c-up').click();
+  await page.getByTestId('bookmark-move-a-down').click();
+  expect(await order()).toEqual(['Charlie', 'Alpha', 'Bravo']);
+  await page.getByTestId('web-bookmarks-reorder').click();
+  await page.reload();
+  await openWebMenu(page);
+  expect(await order()).toEqual(['Charlie', 'Alpha', 'Bravo']);
+});
+

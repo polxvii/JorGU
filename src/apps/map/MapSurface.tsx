@@ -15,7 +15,9 @@ import { attachMap, endRoute, recenter, refollow, setTraffic, showRouteOverview,
 import { mapsNavigateUrl } from './navigate';
 import { navigateInPlace } from '../web/webHistory';
 import { MAP_GAP, placeMapChrome } from './mapChrome';
-import { progress } from './routeMath';
+import { pathLength, progress, projectOnPath } from './routeMath';
+import { type TrafficLevel, barPieces, trafficMillisLeft } from './routeTraffic';
+import { intersects } from '../../shell/geometry';
 
 const BUTTON = STRIP_BUTTON;
 const MapButton = StripButton;
@@ -77,6 +79,8 @@ function RouteBox({ rect }: { rect: Rect }) {
   let detail = '';
   if (route.status === 'ready' && line) {
     const p = pos ? progress(pos, route.path, route.distanceMeters, route.durationMillis) : { metersLeft: route.distanceMeters, millisLeft: route.durationMillis };
+    // With traffic per section known (Compute Routes Pro), the time left counts the traffic.
+    if (route.traffic) p.millisLeft = trafficMillisLeft(route.traffic.sections, pos ? projectOnPath(pos, route.path).along : 0) || p.millisLeft;
     const eta = new Date(Date.now() + p.millisLeft).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
     time = t('map.routeMin', { min: Math.max(1, Math.round(p.millisLeft / 60000)) });
     detail = t('map.routeKmEta', { km: (p.metersLeft / 1000).toFixed(p.metersLeft < 10000 ? 1 : 0), eta });
@@ -98,6 +102,34 @@ function RouteBox({ rect }: { rect: Rect }) {
       {time && <span className="tabular block text-[18px] font-bold leading-tight text-accent" data-testid="map-route-time">{time}</span>}
       <span className="line-clamp-2 block text-[13px] leading-tight text-text-dim" data-testid="map-route-detail">{detail || route.destination}</span>
     </button>
+  );
+}
+
+const LEVEL_COLOUR: Record<TrafficLevel, string> = { free: '#1E8E3E', slow: '#F29900', jam: '#D93025', unknown: '#9AA0A6' };
+export const TRAFFIC_BAR_W = 12;
+
+/**
+ * Traffic on the road ahead (user 2026-11-13): a bar beside the map's toolbar, the car at the bottom and the
+ * destination at the top, green / orange / red per section. The route line itself stays one solid blue line.
+ */
+function TrafficBar({ rect }: { rect: Rect }) {
+  const t = useT();
+  const route = useMapUi((s) => s.route);
+  const pos = useGeo((s) => s.pos);
+  if (!route?.traffic || route.path.length < 2) return null;
+  const along = pos ? projectOnPath(pos, route.path).along : 0;
+  const pieces = barPieces(route.traffic.sections, along, pathLength(route.path));
+  if (!pieces.length) return null;
+  const h = rect.h - 14; // room for the car dot at the bottom
+  return (
+    <div data-testid="map-traffic-bar" role="img" aria-label={t('map.trafficAhead')} className="pointer-events-none absolute" style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}>
+      <div className="absolute inset-x-0 top-0 overflow-hidden rounded-full border-2 border-white shadow-[0_1px_4px_rgba(0,0,0,0.45)]" style={{ height: h, background: LEVEL_COLOUR.unknown }}>
+        {pieces.map((p, i) => (
+          <div key={i} data-level={p.level} className="absolute inset-x-0" style={{ bottom: `${p.from * 100}%`, height: `${(p.to - p.from) * 100}%`, background: LEVEL_COLOUR[p.level] }} />
+        ))}
+      </div>
+      <div className="absolute left-1/2 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-accent shadow" style={{ bottom: 0 }} />
+    </div>
   );
 }
 
@@ -183,6 +215,19 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   const ui = placeMapChrome({ w: size.w, h: size.h, top, btn: cs.map, items: items.length, right: driverRight, avoid, routeBox: !!route, routeBoxAt: routeInfoAt });
   const speed = kmh(pos?.speed ?? null);
   const box = ui.routeBox;
+  const bar = (() => {
+    if (!line || !trafficOn || !route?.traffic) return null;
+    const x = ui.right ? ui.canvas.x + ui.canvas.w - TRAFFIC_BAR_W - 10 : ui.canvas.x + 10;
+    let top = Math.max(MAP_GAP, band + 8);
+    let bottom = size.h - MAP_GAP;
+    const col = { x: x - 2, y: 0, w: TRAFFIC_BAR_W + 4, h: size.h };
+    for (const a of [...avoid, ...(box ? [box] : [])]) {
+      if (!intersects(a, col)) continue;
+      if (a.y + a.h / 2 < size.h / 2) top = Math.max(top, a.y + a.h + MAP_GAP);
+      else bottom = Math.min(bottom, a.y - MAP_GAP);
+    }
+    return bottom - top >= 80 ? { x, y: top, w: TRAFFIC_BAR_W, h: bottom - top } : null;
+  })();
   const canvas = mode === 'none' ? { x: 0, y: 0, w: size.w, h: size.h } : ui.canvas;
   const side = ui.right ? 'right' : 'left';
 
@@ -224,6 +269,7 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
             }
           />
           {box && <RouteBox rect={box} />}
+          {bar && <TrafficBar rect={bar} />}
           {(notice || geoError) && (
             <div
               role="status"

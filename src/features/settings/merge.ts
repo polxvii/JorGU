@@ -27,6 +27,7 @@ export function mergeSettings(persisted: unknown, current: Settings): Settings {
   if (merged.map.routeInfoAt !== 'top' && merged.map.routeInfoAt !== 'bottom') merged.map.routeInfoAt = 'bottom';
   if (!['day', 'auto', 'night'].includes(merged.map.colors)) merged.map.colors = 'day';
   if (merged.map.mode !== 'js' && merged.map.mode !== 'embed') merged.map.mode = 'js';
+  if (merged.web.search !== 'google' && merged.web.search !== 'bing') merged.web.search = 'google';
   return merged;
 }
 

@@ -4,7 +4,8 @@ import { useSettings } from '../../features/settings/settingsStore';
 import type { Bookmark, WebInstanceId } from '../../features/settings/types';
 import { type MessageKey, useT } from '../../i18n';
 import { Icon } from '../../shell/Icon';
-import { hostLabel, normalizeUrl } from './normalizeUrl';
+import { hostLabel, normalizeUrl, searchUrl } from './normalizeUrl';
+import { MoveButtons, ReorderTitle } from '../../shell/Reorder';
 
 const ERROR: Record<'scheme' | 'invalid' | 'self', MessageKey> = {
   scheme: 'web.badScheme',
@@ -35,6 +36,11 @@ export function UrlForm({ id, initial = '', onOpened, testId }: {
           setError(null);
           setWebUrl(id, n.url);
           onOpened?.();
+        } else if (n.reason === 'invalid') {
+          // Not a web address: search for it (user 2026-11-13).
+          setError(null);
+          setWebUrl(id, searchUrl(text, useSettings.getState().web.search));
+          onOpened?.();
         } else if (n.reason !== 'empty') {
           setError(ERROR[n.reason]);
         }
@@ -43,8 +49,9 @@ export function UrlForm({ id, initial = '', onOpened, testId }: {
       <div className="flex gap-2">
         <input
           data-testid={`${testId}-input`}
-          type="url"
-          inputMode="url"
+          // A keyboard with a space bar: the box takes searches too.
+          type="text"
+          inputMode="search"
           enterKeyHint="go"
           autoComplete="off"
           autoCapitalize="off"
@@ -247,18 +254,25 @@ export function SiteLists({ id, manage = false, onOpened }: { id: WebInstanceId;
   const setWebUrl = useSettings((s) => s.setWebUrl);
   const togglePinUrl = useSettings((s) => s.togglePinUrl);
   const update = useSettings((s) => s.updateBookmark);
+  const move = useSettings((s) => s.moveBookmark);
+  const [ordering, setOrdering] = useState(false);
   const open = (url: string) => {
     setWebUrl(id, url);
     onOpened?.();
   };
   return (
     <div className="flex flex-col gap-2">
-      <SectionTitle>{t('web.bookmarks')}</SectionTitle>
+      <ReorderTitle title={t('web.bookmarks')} on={ordering} onToggle={() => setOrdering((o) => !o)} testId="web-bookmarks-reorder" show={bookmarks.length > 1} />
       {bookmarks.length === 0 && <p className="px-1 text-[14px] text-text-dim">{t('web.noBookmarks')}</p>}
       <ul className="flex flex-col gap-2" data-testid="web-bookmarks">
-        {bookmarks.map((b) => (
+        {bookmarks.map((b, i) => (
           <li key={b.id} className="flex">
-            {manage ? (
+            {ordering ? (
+              <div className="flex min-w-0 flex-1 gap-1">
+                <OpenRow title={b.title} subtitle={hostLabel(b.url)} onOpen={() => open(b.url)} testId={`bookmark-open-${b.id}`} />
+                <MoveButtons index={i} count={bookmarks.length} onMove={(dir) => move(b.id, dir)} testId={`bookmark-move-${b.id}`} />
+              </div>
+            ) : manage ? (
               <div className="min-w-0 flex-1">
                 <ManagedBookmark b={b} onOpen={() => open(b.url)} />
               </div>

@@ -9,13 +9,13 @@ import type { AppRef, SurfaceId, WebInstanceId } from '../../features/settings/t
 import { useT } from '../../i18n';
 import { Icon } from '../../shell/Icon';
 import { checkFrame } from './frameCheck';
-import { hostLabel, toHttps } from './normalizeUrl';
+import { hostLabel, searchQuery, searchUrl, toHttps } from './normalizeUrl';
 import { MAP_GAP, placeMapChrome } from '../map/mapChrome';
 import type { Rect } from '../../shell/geometry';
 import { SideStrip, StripButton, type StripItem } from '../../shell/SideStrip';
 import { useControlSize } from '../../shell/useControlSize';
 import { AUTO, resolveViewMode, sameView, viewBox, zoomStep } from './viewMode';
-import { canGoBack, canGoForward, frameGone, frameLoaded, goBack, goForward, installWebHistoryGuard, navigateInPlace, useWebHistory } from './webHistory';
+import { frameGone, frameLoaded, goBack, goForward, installWebHistoryGuard, navigateInPlace } from './webHistory';
 import { NewTabLink } from './WebHeaderControls';
 import { SiteLists, UrlForm } from './WebParts';
 import { useWebUi } from './webStore';
@@ -81,7 +81,9 @@ function Notice({ id, url, band, kind, onTryHttps }: {
 }) {
   const t = useT();
   const setWebUrl = useSettings((s) => s.setWebUrl);
+  const setSearch = useSettings((s) => s.setWebSearch);
   const host = hostLabel(url);
+  const search = searchQuery(url);
   return (
     <div
       className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-center gap-3 overflow-y-auto bg-bg p-6 text-center"
@@ -98,6 +100,19 @@ function Notice({ id, url, band, kind, onTryHttps }: {
           <p className="max-w-md text-[14px] text-text-dim">{t(kind === 'blocked' ? 'web.blockedBody' : 'web.insecureBody')}</p>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <NewTabLink url={url} label testId={`web-${kind}-newtab-${id}`} />
+            {kind === 'blocked' && search?.engine === 'google' && (
+              <button
+                type="button"
+                data-testid={`web-search-bing-${id}`}
+                onClick={() => {
+                  setSearch('bing');
+                  setWebUrl(id, searchUrl(search.q, 'bing'));
+                }}
+                className="min-h-14 rounded-xl bg-surface px-4 text-[16px] font-semibold"
+              >
+                {t('web.searchBingHere')}
+              </button>
+            )}
             {onTryHttps && (
               <button type="button" data-testid={`web-try-https-${id}`} onClick={onTryHttps} className="min-h-14 rounded-xl bg-surface px-4 text-[16px] font-semibold">
                 {t('web.tryHttps')}
@@ -162,8 +177,6 @@ function ScaledFrame({ id, url, src, surfaceId, band, status, place }: {
     installWebHistoryGuard();
     return () => frameGone(id);
   }, [id]);
-  const back = useWebHistory((s) => canGoBack(s, id));
-  const forward = useWebHistory((s) => canGoForward(s, id));
 
   // Some sites only pick their layout at load: after a view change, offer "Reload in this view" (§9.7).
   const loadedMode = useRef(mode);
@@ -178,8 +191,8 @@ function ScaledFrame({ id, url, src, surfaceId, band, status, place }: {
   // steps from what's on screen now; in Mobile or Desktop it goes back to Auto at that zoom.
   const scale = v?.scale ?? (mode.mode === 'auto' ? mode.zoom : 1);
   const items: StripItem[] = [
-    { key: 'back', node: <StripButton testId={`web-back-${id}`} icon="back" label={t('web.back')} disabled={!back} onClick={() => goBack(id)} /> },
-    { key: 'forward', node: <StripButton testId={`web-forward-${id}`} icon="forward" label={t('web.forward')} disabled={!forward} onClick={() => goForward(id)} /> },
+    { key: 'back', node: <StripButton testId={`web-back-${id}`} icon="back" label={t('web.back')} onClick={() => goBack(id)} /> },
+    { key: 'forward', node: <StripButton testId={`web-forward-${id}`} icon="forward" label={t('web.forward')} onClick={() => goForward(id)} /> },
     {
       key: 'mobile',
       node: (

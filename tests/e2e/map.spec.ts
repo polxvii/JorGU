@@ -27,8 +27,10 @@ test('one map for the whole session: swaps, single/split and full screen never c
   await expect(page.locator('[data-surface="map"]')).toHaveAttribute('data-visible', '1');
   expect((await stub(page)).maps).toBe(1);
   await page.getByTestId('dock-settings').click();
-  await expect(page.getByTestId('setting-map-usage-map')).toContainText('9,919 left this month (1 / 9,920) · today 1 / 320');
-  await expect(page.getByTestId('setting-map-usage-route')).toContainText('9,920 left');
+  // Monthly free use less 1 %, today's share = what's left ÷ days left (user 2026-11-13).
+  await expect(page.getByTestId('setting-map-usage-map')).toContainText('9,899 left this month (1 / 9,900) · today 1 / ');
+  await expect(page.getByTestId('setting-map-usage-route')).toContainText('9,900 left');
+  await expect(page.getByTestId('setting-map-usage-traffic')).toContainText('4,950 left this month');
 });
 
 test('follow, recenter, traffic, zoom', async ({ page }) => {
@@ -70,36 +72,39 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   // One map: the route line, the destination pin, the car dot and traffic together. No Embed view on top.
   await expect(page.getByTestId('map-embed')).toHaveCount(0);
   const s = await stub(page);
-  expect(s).toMatchObject({ maps: 1, routes: 1, lines: 2, pins: 1, traffic: true, fitBounds: 0, zoom: 16 });
+  expect(s).toMatchObject({ maps: 1, routes: 1, lines: 1, pins: 1, traffic: true, fitBounds: 0, zoom: 16 });
   await expect(page.getByTestId('map-route-time')).toContainText('min');
   expect(s.lastRoute).toMatchObject({ destination: 'Central World', routingPreference: 'TRAFFIC_UNAWARE', fields: ['durationMillis', 'distanceMeters', 'path'] });
   expect(s.lastRoute).not.toHaveProperty('extraComputations'); // traffic on the line = Enterprise SKU
-  // Traffic on: two solid blue edges, 9 px either side of the route at zoom 16 (about 21 m in Bangkok), the road's
-  // traffic colour between them (user 2026-11-12, option A).
-  const [left, right] = s.shown;
-  for (const e of s.shown) expect(e).toMatchObject({ strokeColor: '#1A73E8', strokeOpacity: 1, strokeWeight: 4 });
-  const metres = (a: { lat: number; lng: number }) =>
-    Math.hypot((a.lat - HERE.latitude) * 111_320, (a.lng - HERE.longitude) * 111_320 * Math.cos((HERE.latitude * Math.PI) / 180));
-  for (const e of [left, right]) {
-    expect(metres(e.path[0])).toBeGreaterThan(18);
-    expect(metres(e.path[0])).toBeLessThan(24);
-  }
-  // The route heads north-east: the left edge starts north-west of the car, the right edge south-east.
-  expect(left.path[0].lat).toBeGreaterThan(HERE.latitude);
-  expect(left.path[0].lng).toBeLessThan(HERE.longitude);
-  expect(right.path[0].lat).toBeLessThan(HERE.latitude);
-  expect(right.path[0].lng).toBeGreaterThan(HERE.longitude);
-  // Zoomed out, the edges are redrawn: still 9 px apart on screen, so further apart on the ground.
-  await page.getByTestId('map-zoom-out').click();
-  await page.evaluate(() => window.__mapsStub!.fire('idle'));
-  expect(metres((await stub(page)).shown[0].path[0])).toBeGreaterThan(36);
-  await page.getByTestId('map-zoom-in').click();
-  await page.evaluate(() => window.__mapsStub!.fire('idle'));
-  // Traffic off: nothing to see under the line, so it is one solid line; on again: the edges.
+  // One solid blue line (user 2026-11-13); traffic on the road ahead is the side bar.
+  expect(s.shown).toMatchObject([{ strokeColor: '#1A73E8', strokeOpacity: 1, strokeWeight: 7, path: [{ lat: HERE.latitude, lng: HERE.longitude }, {}] }]);
+  // Traffic per section: one Compute Routes Pro request (traffic-aware, waypoints on our route with headings), never
+  // "traffic on polylines" (Enterprise).
+  await expect.poll(async () => (await stub(page)).trafficReqs).toBe(1);
+  const tr = (await stub(page)).lastTraffic!;
+  expect(tr).toMatchObject({ routingPreference: 'TRAFFIC_AWARE', travelMode: 'DRIVING', fields: ['legs'], origin: { heading: 44 } }); // the road's bearing (north-east at this latitude)
+  expect(tr).not.toHaveProperty('extraComputations');
+  expect((tr.intermediates as unknown[]).length).toBe(25);
+  const barEl = page.getByTestId('map-traffic-bar');
+  await expect(barEl).toBeVisible();
+  await expect(barEl.locator('[data-level="jam"]')).toHaveCount(1);
+  await expect(barEl.locator('[data-level="slow"]')).toHaveCount(1);
+  // Beside the toolbar strip, clear of it and of the route box.
+  const tb = await box(page, '[data-testid="map-traffic-bar"]');
+  const st = await box(page, '[data-testid="map-strip"]');
+  expect(tb.x + tb.width).toBeLessThanOrEqual(st.x);
+  expect(st.x - (tb.x + tb.width)).toBeLessThan(20);
+  const rbx = await box(page, '[data-testid="map-route"]');
+  expect(tb.x + tb.width <= rbx.x || rbx.x + rbx.width <= tb.x || tb.y + tb.height <= rbx.y || rbx.y + rbx.height <= tb.y).toBe(true);
+  // The time left counts the traffic: 7.4 km at 10 m/s = ~12 min free-flowing, plus the jam and the slow section.
+  const mins = Number((await page.getByTestId('map-route-time').textContent())!.match(/\d+/)![0]);
+  expect(mins).toBeGreaterThan(12);
+  // Traffic off hides the bar (no request); on again within 5 minutes reuses what we have.
   await page.getByTestId('map-traffic').click();
-  expect((await stub(page)).shown).toMatchObject([{ strokeWeight: 7, strokeOpacity: 1, path: [{ lat: HERE.latitude, lng: HERE.longitude }, {}] }]);
+  await expect(barEl).toHaveCount(0);
   await page.getByTestId('map-traffic').click();
-  expect((await stub(page)).shown).toMatchObject([{ strokeWeight: 4 }, { strokeWeight: 4 }]);
+  await expect(barEl).toBeVisible();
+  expect((await stub(page)).trafficReqs).toBe(1);
   expect(popups).toBe(0);
   // Follows the car at driving zoom, the map turned so the road ahead points up (the stub route heads north-east)
   // and the car about 25 % up from the bottom: the camera centre is ahead of the car.
@@ -169,7 +174,7 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   await expect(page.getByTestId('map-recent')).toContainText('Central World');
   await page.getByTestId('map-recent-0').click();
   await expect(page.getByTestId('map-route')).toHaveAttribute('data-status', 'ready');
-  expect(await stub(page)).toMatchObject({ routes: 2, lines: 2, pins: 1 });
+  expect(await stub(page)).toMatchObject({ routes: 2, lines: 1, pins: 1 });
   expect(popups).toBe(1);
 });
 
@@ -184,7 +189,7 @@ test('Show route before a location fix: waits, then draws once the first positio
   await page.context().setGeolocation(HERE);
   await page.getByTestId('map-recenter').click();
   await expect(page.getByTestId('map-route')).toHaveAttribute('data-status', 'ready');
-  expect(await stub(page)).toMatchObject({ routes: 1, lines: 2, pins: 1 });
+  expect(await stub(page)).toMatchObject({ routes: 1, lines: 1, pins: 1 });
 });
 
 test("the line can't be drawn (Routes refused, or the daily route limit): the route shows in the free view with a note", async ({ page }) => {
@@ -247,7 +252,7 @@ test('avoid tolls / highways: sent with the route, drawn again when changed, rem
   await expect.poll(async () => (await stub(page)).routes).toBe(2);
   s = await stub(page);
   expect(s.lastRoute).toMatchObject({ routeModifiers: { avoidTolls: true, avoidHighways: true } });
-  expect(s.lines).toBe(2);
+  expect(s.lines).toBe(1);
   await page.reload();
   await page.getByTestId('map-navigate').click();
   await expect(page.getByTestId('map-avoid-tolls')).toHaveAttribute('aria-pressed', 'true');
@@ -391,3 +396,23 @@ test('map controls move away from the mini player; nothing covers it', async ({ 
   expect(controls.x >= bar.x + bar.width || bar.x >= controls.x + controls.width || controls.y >= bar.y + bar.height || bar.y >= controls.y + controls.height).toBe(true);
   await expectPlayerClear(page);
 });
+
+test('saved places: change their order with up / down', async ({ page }) => {
+  const place = (id: string, label: string) => ({ id, label, query: label, source: 'manual' });
+  await openApp(page, { map: { savedPlaces: [place('p1', 'Home'), place('p2', 'Office'), place('p3', 'Gym')] } });
+  await page.getByTestId('map-navigate').click();
+  const order = () => page.getByTestId('map-places').locator(':scope > li').evaluateAll((els) => els.map((e) => (e.textContent ?? '').match(/Home|Office|Gym/)?.[0]));
+  expect(await order()).toEqual(['Home', 'Office', 'Gym']);
+  await page.getByTestId('map-places-reorder').click();
+  await page.getByTestId('map-place-move-p3-up').click();
+  await page.getByTestId('map-place-move-p3-up').click();
+  expect(await order()).toEqual(['Gym', 'Home', 'Office']);
+  await expect(page.getByTestId('map-place-move-p3-up')).toBeDisabled();
+  await page.getByTestId('map-places-reorder').click();
+  // Back to normal rows: remove is there again; the order stays after a reload.
+  await expect(page.getByTestId('map-places').getByRole('button', { name: /remove/i }).first()).toBeVisible();
+  await page.reload();
+  await page.getByTestId('map-navigate').click();
+  expect(await order()).toEqual(['Gym', 'Home', 'Office']);
+});
+

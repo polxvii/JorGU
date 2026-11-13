@@ -7,8 +7,8 @@ import type { MessageKey } from '../../i18n';
 import { DEFAULT_CENTER, MAP_ID, mapsConfigured } from './config';
 import { type Position, useGeo } from './geo';
 import { type GMap, type GMarker, type GLayer, type GPolyline, type MapsLibs, loadMaps, onMapsAuthFailure } from './mapsLoader';
-import { routeEdges } from './routeEdges';
-import { RECOMPUTE_MIN_MS, type LL, aheadBearing, bearing, cameraCenter, haversine, progress, turn } from './routeMath';
+import { type TrafficSection, sectionPlan, sectionsFromLegs } from './routeTraffic';
+import { OFF_ROUTE_M, RECOMPUTE_MIN_MS, type LL, aheadBearing, bearing, cameraCenter, haversine, progress, projectOnPath, turn } from './routeMath';
 import { canSpend, useMapUsage } from './usage';
 
 export type MapMode = 'js' | 'embed' | 'none';
@@ -24,6 +24,8 @@ export interface RouteState {
   viaEmbed: boolean;
   /** Why the free view is used instead of the live line. */
   note: MessageKey | null;
+  /** Traffic per section of the road ahead (Compute Routes Pro), for the side bar and the ETA; null until known. */
+  traffic: { sections: TrafficSection[]; at: number } | null;
 }
 
 interface MapUi {
@@ -44,12 +46,10 @@ let creating = false;
 let marker: GMarker | null = null;
 let markerDot: HTMLElement | null = null;
 let traffic: GLayer | null = null;
-// The route line: a solid centre line (Traffic off) or two edges with the traffic colour between them (Traffic on).
-let linePath: LL[] = [];
-let centreLine: GPolyline | null = null;
-let edgeLines: GPolyline[] = [];
-let edgeZoom = NaN;
-let lineFrame = 0;
+// The route line: one solid line (user 2026-11-13); traffic on the route is the side bar (routeTraffic.ts).
+let line: GPolyline | null = null;
+let trafficTimer = 0;
+let trafficBusy = false;
 let destMarker: GMarker | null = null;
 
 /** Which map to show now: none without a key; Embed if chosen in Settings, or when the cost rule stops mode A. */
@@ -93,12 +93,6 @@ async function ensureMap(): Promise<void> {
       cancelAnimationFrame(anim);
       if (useSettings.getState().map.follow) useSettings.getState().setMapFollow(false);
     });
-    // The route edges are spaced in screen pixels: redraw them for the new zoom (roughly while zooming, exactly after).
-    map.addListener('zoom_changed', () => {
-      cancelAnimationFrame(lineFrame);
-      lineFrame = requestAnimationFrame(() => drawLine(0.25));
-    });
-    map.addListener('idle', () => drawLine(0.01));
     traffic = new libs.TrafficLayer();
     if (s.map.traffic) traffic.setMap(map);
     useMapUi.setState({ ready: true });
@@ -262,51 +256,69 @@ export function zoomBy(step: number): void {
 export function setTraffic(on: boolean): void {
   useSettings.getState().setMapTraffic(on);
   traffic?.setMap(on ? map : null);
-  drawLine(0);
+  // The traffic bar follows the Traffic button: back on, fetch it if it's stale.
+  const r = useMapUi.getState().route;
+  if (on && r && (!r.traffic || Date.now() - r.traffic.at > TRAFFIC_EVERY_MS)) void refreshTraffic();
 }
 
 // ---------- route overview (§7.4): line, ETA, distance left; no turn instructions ----------
 
 const num = (v: number | (() => number)) => (typeof v === 'function' ? v() : v);
-// Route line (user 2026-11-12). The 50 % see-through line was too faint and a chain of arrows too busy; the user
-// picked two edges: with Traffic on, two solid blue lines either side of the route, the Traffic layer's red / orange /
-// green on the road showing between them. Traffic off: one solid line. A line coloured by traffic itself ("Traffic
-// information on polylines") is the Enterprise route SKU, 1,000 free a month: not used.
-const ROUTE_BLUE = '#1A73E8';
-export const EDGE_PX = 9;
-const LINE = { strokeColor: ROUTE_BLUE, strokeOpacity: 1, clickable: false, zIndex: 2 };
-const CENTRE_STYLE = { ...LINE, strokeWeight: 7 };
-const EDGE_STYLE = { ...LINE, strokeWeight: 4 };
-
-/** Puts the right route line on the map. Edges are recomputed when the zoom moved by `minZoomStep` or more. */
-function drawLine(minZoomStep: number): void {
-  if (!map || !libs || linePath.length < 2) return;
-  if (!useSettings.getState().map.traffic) {
-    for (const e of edgeLines) e.setMap(null);
-    centreLine ??= new libs.Polyline({ ...CENTRE_STYLE, path: linePath });
-    centreLine.setMap(map);
-    return;
-  }
-  centreLine?.setMap(null);
-  const z = map.getZoom() ?? DRIVE_ZOOM;
-  if (!edgeLines.length || !(Math.abs(z - edgeZoom) < Math.max(minZoomStep, 1e-6))) {
-    edgeZoom = z;
-    const edges = routeEdges(linePath, z, EDGE_PX);
-    if (!edgeLines.length) edgeLines = edges.map(() => new libs!.Polyline({ ...EDGE_STYLE }));
-    edges.forEach((path, i) => edgeLines[i].setPath(path));
-  }
-  for (const e of edgeLines) e.setMap(map);
-}
+// Route line (user 2026-11-13, after a see-through line, a chain of arrows and two edges): one solid blue line, easy to
+// see. Traffic on the road ahead is the side bar, from Compute Routes Pro (routeTraffic.ts).
+const LINE_STYLE = { strokeColor: '#1A73E8', strokeOpacity: 1, strokeWeight: 7, clickable: false, zIndex: 2 };
 
 function clearLine(): void {
-  centreLine?.setMap(null);
-  for (const e of edgeLines) e.setMap(null);
-  centreLine = null;
-  edgeLines = [];
-  linePath = [];
-  edgeZoom = NaN;
+  line?.setMap(null);
+  line = null;
   if (destMarker) destMarker.map = null;
   destMarker = null;
+  clearInterval(trafficTimer);
+}
+
+/** How often the traffic bar is fetched again while a route is on (each fetch is one Pro request). */
+export const TRAFFIC_EVERY_MS = 5 * 60_000;
+
+/**
+ * Traffic per section of the road ahead: one Compute Routes Pro request (traffic-aware) with waypoints on our own
+ * route, so Google keeps the same way. Skipped when Traffic is off, the page is hidden, or today's share is used up.
+ */
+async function refreshTraffic(): Promise<void> {
+  const r = useMapUi.getState().route;
+  if (!libs || !r || r.viaEmbed || r.status !== 'ready' || r.path.length < 2 || trafficBusy) return;
+  if (!useSettings.getState().map.traffic || document.visibilityState === 'hidden' || !canSpend('traffic')) return;
+  const pos = useGeo.getState().pos;
+  const on = pos ? projectOnPath(pos, r.path) : null;
+  const plan = sectionPlan(r.path, on && on.off <= OFF_ROUTE_M ? on.along : 0);
+  if (!plan) return;
+  const computedAt = r.computedAt;
+  trafficBusy = true;
+  useMapUsage.getState().record('traffic');
+  try {
+    const { routes } = await libs.Route.computeRoutes({
+      origin: plan.origin,
+      destination: plan.destination,
+      intermediates: plan.intermediates.map((location) => ({ location })),
+      travelMode: 'DRIVING',
+      // Traffic-aware + headings: the Pro SKU (5,000 free a month). Not "traffic on polylines" (Enterprise).
+      routingPreference: 'TRAFFIC_AWARE',
+      fields: ['legs'],
+    });
+    const legs = routes?.[0]?.legs;
+    if (!legs?.length) return;
+    useMapUi.setState((s) =>
+      s.route && s.route.computedAt === computedAt ? { route: { ...s.route, traffic: { sections: sectionsFromLegs(plan.bounds, legs), at: Date.now() } } } : s,
+    );
+  } catch {
+    // No bar this time (e.g. the key doesn't allow it); the route itself is unaffected.
+  } finally {
+    trafficBusy = false;
+  }
+}
+
+function scheduleTraffic(): void {
+  clearInterval(trafficTimer);
+  trafficTimer = window.setInterval(() => void refreshTraffic(), TRAFFIC_EVERY_MS);
 }
 
 /** Room around the whole-route view so the route bar and the control column don't cover its ends. */
@@ -366,17 +378,18 @@ async function computeRoute(destination: string): Promise<void> {
     const first = current.path.length === 0;
     clearLine();
     const path = r.path.map((p) => ({ lat: num(p.lat), lng: num(p.lng) }));
-    linePath = path;
+    line = new libs.Polyline({ ...LINE_STYLE, path, map });
     const pin = document.createElement('div');
     pin.className = 'jg-map-dest';
     destMarker = new libs.AdvancedMarkerElement({ map, position: path[path.length - 1], content: pin, title: destination });
-    set({ status: 'ready', path, distanceMeters: r.distanceMeters ?? 0, durationMillis: r.durationMillis ?? 0, computedAt: Date.now() });
+    set({ status: 'ready', path, distanceMeters: r.distanceMeters ?? 0, durationMillis: r.durationMillis ?? 0, computedAt: Date.now(), traffic: null });
     if (first) {
       useSettings.getState().setMapFollow(true);
       map.setZoom(DRIVE_ZOOM);
       follow(useGeo.getState().pos ?? pos, true);
     }
-    drawLine(0);
+    void refreshTraffic();
+    scheduleTraffic();
   } catch {
     // e.g. Routes API not allowed for this key: still show Google's route, in the free view.
     fallBack(destination, 'map.routeFallback');
@@ -390,11 +403,11 @@ async function computeRoute(destination: string): Promise<void> {
  */
 export function startRoute(destination: string): void {
   clearLine();
-  const line = useMapUi.getState().mode === 'js' && useSettings.getState().map.routeLine;
+  const live = useMapUi.getState().mode === 'js' && useSettings.getState().map.routeLine;
   useMapUi.setState({
-    route: { destination, status: line ? 'loading' : 'ready', path: [], distanceMeters: 0, durationMillis: 0, computedAt: 0, viaEmbed: !line, note: null },
+    route: { destination, status: live ? 'loading' : 'ready', path: [], distanceMeters: 0, durationMillis: 0, computedAt: 0, viaEmbed: !live, note: null, traffic: null },
   });
-  if (line) void computeRoute(destination);
+  if (live) void computeRoute(destination);
 }
 
 /** Route bar: the whole route on screen; follow pauses until ⌖. */
@@ -456,5 +469,5 @@ useSettings.subscribe((s, prev) => {
 
 /** Read-only hook for E2E tests. */
 export function debugMap() {
-  return { hasMap: !!map, mode: useMapUi.getState().mode, lines: linePath.length ? (useSettings.getState().map.traffic ? edgeLines.length : 1) : 0, heading: camHeading, canRotate };
+  return { hasMap: !!map, mode: useMapUi.getState().mode, lines: line ? 1 : 0, heading: camHeading, canRotate };
 }

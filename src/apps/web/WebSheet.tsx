@@ -56,6 +56,25 @@ function Choice<T extends string | number>({ options, value, onPick, label, test
   );
 }
 
+/** Where searches from the address box go (user 2026-11-13). Google can't show inside a pane. */
+function SearchChoice() {
+  const t = useT();
+  const engine = useSettings((s) => s.web.search);
+  const setEngine = useSettings((s) => s.setWebSearch);
+  return (
+    <Choice
+      testId="web-search-engine"
+      label={t('web.searchWith')}
+      value={engine}
+      onPick={setEngine}
+      options={[
+        { v: 'google', label: t('web.searchGoogle') },
+        { v: 'bing', label: t('web.searchBing') },
+      ]}
+    />
+  );
+}
+
 function ViewSection({ url, id }: { url: string; id: WebInstanceId }) {
   const t = useT();
   const mode = useSettings((s) => resolveViewMode(url, s.web.bookmarks, s.web.viewModes));
@@ -129,6 +148,7 @@ export function WebSheet({ rect, pane }: { rect: Rect; pane: PaneIndex }) {
     <Sheet rect={rect} title={url ? hostLabel(url) : t('apps.web')} testId="web-sheet">
       <div className="flex flex-col gap-3 pt-1">
         <UrlForm key={url} id={app.id} initial={url} onOpened={close} testId="web-sheet-url" />
+        <SearchChoice />
         {url && (
           <div className="flex gap-2">
             <Action

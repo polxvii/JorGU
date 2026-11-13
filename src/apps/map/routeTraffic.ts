@@ -1,0 +1,112 @@
+// Traffic on the route, per section (user 2026-11-13): the route line stays one solid line and a bar beside the map
+// shows the road ahead green / orange / red. Source: one Compute Routes **Pro** request (traffic-aware, up to 25
+// waypoints placed on our own route with the road's heading, so Google keeps the same route): each leg comes back
+// with its time in traffic and its time without traffic. Their ratio is the section's traffic. No colours are read
+// from the map (Terms §3.2.3(a)/(c)). Pure, so unit-tested.
+import { type LL, bearing, haversine, pathLength, pointAlong } from './routeMath';
+
+export const MAX_SECTIONS = 26; // 25 intermediate waypoints
+export const MIN_SECTION_M = 150;
+
+export interface DirectionalPoint extends LL {
+  heading: number;
+}
+
+export interface SectionPlan {
+  origin: DirectionalPoint;
+  intermediates: DirectionalPoint[];
+  destination: LL;
+  /** Section edges, metres along the route: bounds[i]..bounds[i+1] is section i. */
+  bounds: number[];
+}
+
+export interface TrafficSection {
+  from: number;
+  to: number;
+  /** Time in traffic / time without traffic; NaN when the leg doesn't match our section (unknown). */
+  ratio: number;
+  ms: number;
+}
+
+export type TrafficLevel = 'free' | 'slow' | 'jam' | 'unknown';
+
+export function trafficLevel(ratio: number): TrafficLevel {
+  if (!Number.isFinite(ratio)) return 'unknown';
+  if (ratio < 1.3) return 'free';
+  if (ratio < 2) return 'slow';
+  return 'jam';
+}
+
+/** The road's heading at `along` metres (a few metres ahead, so a waypoint snaps to the right carriageway). */
+function headingAt(path: LL[], along: number): number {
+  return Math.round(bearing(pointAlong(path, along), pointAlong(path, along + 15)));
+}
+
+/** Waypoints splitting the rest of the route (from `along`) into equal sections; null when too short to bother. */
+export function sectionPlan(path: LL[], along: number): SectionPlan | null {
+  if (path.length < 2) return null;
+  const total = pathLength(path);
+  const left = total - along;
+  if (left < MIN_SECTION_M) return null;
+  const n = Math.max(1, Math.min(MAX_SECTIONS, Math.floor(left / MIN_SECTION_M)));
+  const bounds = Array.from({ length: n + 1 }, (_, i) => along + (left * i) / n);
+  const at = (m: number): DirectionalPoint => ({ ...pointAlong(path, m), heading: headingAt(path, m) });
+  return { origin: at(along), intermediates: bounds.slice(1, -1).map(at), destination: path[path.length - 1], bounds };
+}
+
+/** Sections from the legs Google returned (one per section, in order). */
+export function sectionsFromLegs(
+  bounds: number[],
+  legs: { distanceMeters?: number; durationMillis?: number; staticDurationMillis?: number }[],
+): TrafficSection[] {
+  const out: TrafficSection[] = [];
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const leg = legs[i];
+    const expect = bounds[i + 1] - bounds[i];
+    const ms = leg?.durationMillis ?? NaN;
+    const st = leg?.staticDurationMillis ?? NaN;
+    // A leg much longer or shorter than our section took another way (a detour to a waypoint): don't colour it.
+    const fits = !!leg?.distanceMeters && Math.abs(leg.distanceMeters - expect) <= Math.max(60, expect * 0.35);
+    out.push({ from: bounds[i], to: bounds[i + 1], ratio: fits && st > 0 ? ms / st : NaN, ms: Number.isFinite(ms) ? ms : 0 });
+  }
+  return out;
+}
+
+/** Time left in traffic from `along` to the end (the current section counted in part). */
+export function trafficMillisLeft(sections: TrafficSection[], along: number): number {
+  let ms = 0;
+  for (const s of sections) {
+    if (s.to <= along) continue;
+    const share = s.from >= along ? 1 : (s.to - along) / (s.to - s.from || 1);
+    ms += s.ms * share;
+  }
+  return ms;
+}
+
+export interface BarPiece {
+  /** 0 = the car (bottom of the bar), 1 = the destination (top). */
+  from: number;
+  to: number;
+  level: TrafficLevel;
+}
+
+/** The road ahead for the bar: sections from the car to the destination, scaled to 0..1. */
+export function barPieces(sections: TrafficSection[], along: number, total: number): BarPiece[] {
+  const left = total - along;
+  if (left <= 0 || !sections.length) return [];
+  const out: BarPiece[] = [];
+  for (const s of sections) {
+    if (s.to <= along) continue;
+    const from = Math.max(0, (Math.max(s.from, along) - along) / left);
+    const to = Math.min(1, (s.to - along) / left);
+    const level = trafficLevel(s.ratio);
+    const prev = out[out.length - 1];
+    if (prev && prev.level === level && Math.abs(prev.to - from) < 1e-9) prev.to = to;
+    else out.push({ from, to, level });
+  }
+  return out;
+}
+
+/** Distance of the route (for tests and the bar): metres. */
+export const routeLength = (path: LL[]) => pathLength(path);
+export { haversine };

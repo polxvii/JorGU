@@ -11,6 +11,7 @@ import { Sheet } from '../../shell/Sheet';
 import type { Rect } from '../../shell/geometry';
 import { endRoute, startRoute, useMapUi } from './mapController';
 import { mapsNavigateUrl } from './navigate';
+import { MoveButtons, ReorderTitle } from '../../shell/Reorder';
 
 function useShowRoute() {
   const addRecent = useSettings((s) => s.addRecentDestination);
@@ -118,6 +119,8 @@ export function MapSheet({ rect }: { rect: Rect }) {
   const places = useSettings((s) => s.map.savedPlaces);
   const recent = useSettings((s) => s.map.recentDestinations);
   const removePlace = useSettings((s) => s.removeSavedPlace);
+  const movePlace = useSettings((s) => s.moveSavedPlace);
+  const [ordering, setOrdering] = useState(false);
   const route = useMapUi((s) => s.route);
   const avoidAny = useSettings((s) => s.map.avoidTolls || s.map.avoidHighways);
   const [text, setText] = useState('');
@@ -179,9 +182,9 @@ export function MapSheet({ rect }: { rect: Rect }) {
         <p className="px-1 text-[13px] text-text-dim">{t('map.handoffHint')}</p>
         {avoidAny && <p className="px-1 text-[13px] text-text-dim">{t('map.avoidHint')}</p>}
 
-        <SectionTitle>{t('map.savedPlaces')}</SectionTitle>
+        <ReorderTitle title={t('map.savedPlaces')} on={ordering} onToggle={() => setOrdering((o) => !o)} testId="map-places-reorder" show={places.length > 1} />
         <ul className="flex flex-col gap-2" data-testid="map-places">
-          {places.map((p) => (
+          {places.map((p, i) => (
             <li key={p.id} className="flex gap-1">
               <Row testId={`map-place-${p.id}`} onClick={() => show(p.query)}>
                 <Icon name="star" size={20} className="shrink-0 text-accent" />
@@ -190,9 +193,13 @@ export function MapSheet({ rect }: { rect: Rect }) {
                   <span className="truncate text-[13px] font-normal text-text-dim">{p.query}</span>
                 </span>
               </Row>
-              <button type="button" aria-label={t('map.removePlace')} onClick={() => removePlace(p.id)} className="flex h-14 w-12 shrink-0 items-center justify-center rounded-xl bg-bg">
-                <Icon name="trash" size={20} />
-              </button>
+              {ordering ? (
+                <MoveButtons index={i} count={places.length} onMove={(dir) => movePlace(p.id, dir)} testId={`map-place-move-${p.id}`} />
+              ) : (
+                <button type="button" aria-label={t('map.removePlace')} onClick={() => removePlace(p.id)} className="flex h-14 w-12 shrink-0 items-center justify-center rounded-xl bg-bg">
+                  <Icon name="trash" size={20} />
+                </button>
+              )}
             </li>
           ))}
         </ul>

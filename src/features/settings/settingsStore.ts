@@ -8,6 +8,7 @@ import type {
   AppPick, Bookmark, DockSize, DriverSide, Language, MiniCorner, MiniPlayerSize, PaneIndex, Settings, SplitDirection, ThemeId, WebInstanceId, WebViewMode,
 } from './types';
 import { defaultSettings } from './types';
+import { moveById } from './reorder';
 
 export const SETTINGS_KEY = 'jorgu:settings';
 /** 2: traffic on by default; 3: route on the live map by default (user requests 2026-11-11). */
@@ -47,6 +48,10 @@ export interface SettingsActions {
   addBookmark: (url: string, title?: string) => void;
   updateBookmark: (id: string, patch: Partial<Pick<Bookmark, 'title' | 'pinned'>>) => void;
   removeBookmark: (id: string) => void;
+  setWebSearch: (engine: 'google' | 'bing') => void;
+  /** Reorder (user 2026-11-13): one place up (-1) or down (+1). */
+  moveBookmark: (id: string, dir: -1 | 1) => void;
+  moveSavedPlace: (id: string, dir: -1 | 1) => void;
   togglePinUrl: (url: string) => void;
   setViewMode: (url: string, mode: WebViewMode) => void;
   setDesktopWidth: (width: Settings['web']['desktopWidth']) => void;
@@ -122,6 +127,9 @@ export const useSettings = create<SettingsState>()(
         set((s) => ({ web: W.addBookmark(s.web, url, title) })),
       updateBookmark: (id, patch) => set((s) => ({ web: W.updateBookmark(s.web, id, patch) })),
       removeBookmark: (id) => set((s) => ({ web: W.removeBookmark(s.web, id) })),
+      setWebSearch: (search) => set((s) => ({ web: { ...s.web, search } })),
+      moveBookmark: (id, dir) => set((s) => ({ web: { ...s.web, bookmarks: moveById(s.web.bookmarks, id, dir) } })),
+      moveSavedPlace: (id, dir) => set((s) => ({ map: { ...s.map, savedPlaces: moveById(s.map.savedPlaces, id, dir) } })),
       togglePinUrl: (url) => set((s) => ({ web: W.togglePinUrl(s.web, url) })),
       setViewMode: (url, mode) => set((s) => ({ web: W.setViewModeFor(s.web, url, mode) })),
       setDesktopWidth: (desktopWidth) => set((s) => ({ web: { ...s.web, desktopWidth } })),

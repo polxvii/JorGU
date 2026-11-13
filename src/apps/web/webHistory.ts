@@ -51,15 +51,29 @@ function traverse(id: WebInstanceId, dir: -1 | 1): void {
   else history.forward();
 }
 
+// Always usable (user 2026-11-13: they stayed grey on sites that change page without loading one, which our count
+// can't see; the browser's history still has those steps). With nothing to go back to, the guard entry takes the
+// step and nothing changes; with nothing ahead, Forward does nothing. One step at a time, so a double tap can't run
+// past the guard.
+let lockUntil = 0;
+const locked = () => {
+  if (Date.now() < lockUntil) return true;
+  lockUntil = Date.now() + 700;
+  return false;
+};
+
+/** True just after our own Back / Forward: the full-screen Back handling leaves those steps alone. */
+export const webTraversing = () => Date.now() - lastTraverse < 1500;
+
 export function goBack(id: WebInstanceId): void {
-  if (!canGoBack(useWebHistory.getState(), id)) return;
-  useWebHistory.setState((s) => ({ back: s.back.slice(0, -1), forward: [...s.forward, id] }));
+  if (locked()) return;
+  if (canGoBack(useWebHistory.getState(), id)) useWebHistory.setState((s) => ({ back: s.back.slice(0, -1), forward: [...s.forward, id] }));
   traverse(id, -1);
 }
 
 export function goForward(id: WebInstanceId): void {
-  if (!canGoForward(useWebHistory.getState(), id)) return;
-  useWebHistory.setState((s) => ({ forward: s.forward.slice(0, -1), back: [...s.back, id] }));
+  if (locked()) return;
+  if (canGoForward(useWebHistory.getState(), id)) useWebHistory.setState((s) => ({ forward: s.forward.slice(0, -1), back: [...s.back, id] }));
   traverse(id, 1);
 }
 

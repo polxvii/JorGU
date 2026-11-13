@@ -89,6 +89,8 @@ export interface Settings {
     bookmarks: Bookmark[];
     recent: string[];
     viewModes: Record<string, WebViewMode>;
+    /** Searches from the address box (user 2026-11-13). */
+    search: 'google' | 'bing';
     desktopWidth: 1024 | 1280 | 1440;
   };
   youtube: {
@@ -118,7 +120,7 @@ export function defaultSettings(): Settings {
       driverSide: 'right',
     },
     map: { mode: 'js', routeLine: true, follow: true, traffic: true, avoidTolls: false, avoidHighways: false, routeInfoAt: 'bottom', colors: 'day', savedPlaces: [], recentDestinations: [] },
-    web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280 },
+    web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280, search: 'google' },
     youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', playbackRate: 1, autoContinue: true },
     dockSize: 'normal',
     library: { feedChannelLimit: 50 },

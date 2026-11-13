@@ -3,7 +3,7 @@ import { expect, type Page } from '@playwright/test';
 declare global {
   interface Window {
     __jorguFrameLoads?: Record<string, number>;
-    __mapsStub?: { maps: number; panTo: number; zoom: number; traffic: boolean; routes: number; lines: number; markers: number; pins: number; fitBounds: number; failRoutes: boolean; shown: { strokeWeight: number; strokeColor: string; strokeOpacity: number; path: { lat: number; lng: number }[] }[]; heading: number; cameraMoves: number; colorScheme: string | null; center: { lat: number; lng: number } | null; mapId: string | null; lastRoute: Record<string, unknown> | null; fire: (ev: string) => void };
+    __mapsStub?: { maps: number; panTo: number; zoom: number; traffic: boolean; routes: number; lines: number; markers: number; pins: number; fitBounds: number; failRoutes: boolean; shown: { strokeWeight: number; strokeColor: string; strokeOpacity: number; path: { lat: number; lng: number }[] }[]; heading: number; cameraMoves: number; colorScheme: string | null; center: { lat: number; lng: number } | null; mapId: string | null; lastRoute: Record<string, unknown> | null; trafficReqs: number; lastTraffic: Record<string, unknown> | null; fire: (ev: string) => void };
     __jorgu?: {
       setPlaying: (playing: boolean) => void;
       yt: () => { hasPlayer: boolean; state: number | null; time: number; duration: number; rate: number | null; iframeLoads: number; visibleRatio: number };
@@ -23,7 +23,7 @@ export const SEED_SETTINGS_VERSION = 3;
  * loads real Google Maps or spends a billed event. window.__mapsStub records what the app did.
  */
 export const MAPS_STUB_JS = `(function () {
-  var S = (window.__mapsStub = { maps: 0, panTo: 0, zoom: 15, traffic: false, routes: 0, lines: 0, markers: 0, pins: 0, fitBounds: 0, failRoutes: false, shown: [], heading: 0, cameraMoves: 0, listeners: {}, center: null, colorScheme: null, mapId: null, lastRoute: null });
+  var S = (window.__mapsStub = { maps: 0, panTo: 0, zoom: 15, traffic: false, routes: 0, lines: 0, markers: 0, pins: 0, fitBounds: 0, failRoutes: false, shown: [], trafficReqs: 0, lastTraffic: null, heading: 0, cameraMoves: 0, listeners: {}, center: null, colorScheme: null, mapId: null, lastRoute: null });
   function GMap(el, o) { S.maps++; S.center = o.center; S.zoom = o.zoom; S.colorScheme = o.colorScheme; S.mapId = o.mapId; el.setAttribute('data-stub-map', '1'); }
   GMap.prototype.setCenter = function (c) { S.center = c; };
   GMap.prototype.panTo = function (c) { S.center = c; S.panTo++; };
@@ -47,14 +47,26 @@ export const MAPS_STUB_JS = `(function () {
     });
     S.lines = S.shown.length;
   }
-  function Line(o) { this._o = Object.assign({}, o); this._map = null; allLines.push(this); }
+  function Line(o) { this._o = Object.assign({}, o); this._map = o.map || null; delete this._o.map; allLines.push(this); showLines(); }
   Line.prototype.setMap = function (m) { this._map = m; showLines(); };
   Line.prototype.setPath = function (p) { this._o.path = p; showLines(); };
   function Traffic() {}
   Traffic.prototype.setMap = function (m) { S.traffic = !!m; };
   function Bounds() {}
   Bounds.prototype.extend = function () {};
+  // Traffic per section (Compute Routes Pro): legs between the waypoints; section 2 is jammed (3x), section 3 slow.
+  function dist(a, b) { var k = 111320, x = (b.lng - a.lng) * k * Math.cos(a.lat * Math.PI / 180), y = (b.lat - a.lat) * k; return Math.sqrt(x * x + y * y); }
   var Route = { computeRoutes: function (req) {
+    if (req.intermediates) {
+      S.trafficReqs++; S.lastTraffic = req;
+      var pts = [req.origin].concat(req.intermediates.map(function (w) { return w.location; }), [req.destination]);
+      var legs = [];
+      for (var i = 1; i < pts.length; i++) {
+        var d = dist(pts[i - 1], pts[i]), st = d / 10 * 1000, f = i === 2 ? 3 : i === 3 ? 1.5 : 1;
+        legs.push({ distanceMeters: Math.round(d), staticDurationMillis: st, durationMillis: st * f });
+      }
+      return Promise.resolve({ routes: [{ legs: legs }] });
+    }
     S.routes++; S.lastRoute = req;
     if (S.failRoutes) return Promise.reject(new Error('Routes API not allowed'));
     var o = req.origin;

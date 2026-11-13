@@ -487,3 +487,45 @@ test('route choices: up to 3 with time in traffic, fastest first; pick one to dr
   expect((await stub(page)).trafficReqs).toBe(1);
 });
 
+test('speed (km/h) beside the route box, in its corner without a route (user 2026-11-13)', async ({ page }) => {
+  // Browsers under test give no speed: add 12.5 m/s (45 km/h) to every fix.
+  await page.addInitScript(() => {
+    const g = navigator.geolocation;
+    const watch = g.watchPosition.bind(g);
+    g.watchPosition = (ok, err, o) =>
+      watch(
+        (p) =>
+          ok({
+            timestamp: p.timestamp,
+            coords: { latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy, altitude: null, altitudeAccuracy: null, heading: null, speed: 12.5 },
+          } as GeolocationPosition),
+        err,
+        o,
+      );
+  });
+  await withLocation(page);
+  await openApp(page);
+  const speed = page.getByTestId('map-speed');
+  await expect(speed).toContainText('45');
+  await expect(speed).toContainText('km/h');
+  // No route: in the route box's corner (bottom, far from the toolbar strip).
+  const surf = await box(page, '[data-testid="map-surface"]');
+  let sp = await box(page, '[data-testid="map-speed"]');
+  const strip = await box(page, '[data-testid="map-strip"]');
+  expect(sp.x).toBeLessThan(surf.x + 20);
+  expect(sp.y + sp.height).toBeGreaterThan(surf.y + surf.height - 20);
+  expect(sp.x + sp.width).toBeLessThan(strip.x);
+  // With a route: right beside the route box, same height, not in the toolbar.
+  await page.getByTestId('map-navigate').click();
+  await page.getByTestId('map-dest-input').fill('Central World');
+  await page.getByTestId('map-dest-go').click();
+  await expect(page.getByTestId('map-route')).toHaveAttribute('data-status', 'ready');
+  const rb = await box(page, '[data-testid="map-route"]');
+  sp = await box(page, '[data-testid="map-speed"]');
+  expect(sp.x).toBeGreaterThanOrEqual(rb.x + rb.width);
+  expect(sp.x - (rb.x + rb.width)).toBeLessThanOrEqual(10);
+  expect(Math.round(sp.y)).toBe(Math.round(rb.y));
+  expect(Math.round(sp.height)).toBe(Math.round(rb.height));
+  await expect(page.getByTestId('map-controls').getByTestId('map-speed')).toHaveCount(0);
+});
+

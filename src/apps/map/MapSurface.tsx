@@ -285,9 +285,10 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   }
 
   const top = Math.max(MAP_GAP, band + 4);
-  const ui = placeMapChrome({ w: size.w, h: size.h, top, btn: cs.map, items: items.length, right: driverRight, avoid, routeBox: !!route, routeBoxAt: routeInfoAt });
+  // The route box's corner is worked out even without a route: the speed sits there then (user 2026-11-13).
+  const ui = placeMapChrome({ w: size.w, h: size.h, top, btn: cs.map, items: items.length, right: driverRight, avoid, routeBox: true, routeBoxAt: routeInfoAt });
   const speed = kmh(pos?.speed ?? null);
-  const box = ui.routeBox;
+  const box = route ? ui.routeBox : null;
   const bar = (() => {
     if (!line || !trafficOn || !route?.traffic) return null;
     const x = ui.right ? ui.canvas.x + ui.canvas.w - TRAFFIC_BAR_W - 10 : ui.canvas.x + 10;
@@ -300,6 +301,22 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
       else bottom = Math.min(bottom, a.y - MAP_GAP);
     }
     return bottom - top >= 80 ? { x, y: top, w: TRAFFIC_BAR_W, h: bottom - top } : null;
+  })();
+  // Speed beside the route box (user 2026-11-13), in its corner without a route; above / below it when there's no
+  // room beside; never over the mini player, the full-screen bar or the traffic bar.
+  const speedBox = (() => {
+    const c = ui.routeBox;
+    if (speed === null || mode === 'none' || !c) return null;
+    const W = 76;
+    const fits = (r: Rect) =>
+      r.x >= ui.canvas.x && r.x + r.w <= ui.canvas.x + ui.canvas.w && r.y >= 0 && r.y + r.h <= size.h && !avoid.some((a) => intersects(a, r)) && !(bar && intersects(bar, r));
+    const atCorner = { x: ui.right ? c.x : c.x + c.w - W, y: c.y, w: W, h: c.h };
+    if (!box) return fits(atCorner) ? atCorner : null;
+    const beside = { x: ui.right ? c.x + c.w + MAP_GAP : c.x - MAP_GAP - W, y: c.y, w: W, h: c.h };
+    if (fits(beside)) return beside;
+    if (route?.choosing) return null; // the chooser opens beside the box
+    const stacked = { ...atCorner, y: c.y > size.h / 2 ? c.y - MAP_GAP - c.h : c.y + c.h + MAP_GAP };
+    return fits(stacked) ? stacked : null;
   })();
   const canvas = mode === 'none' ? { x: 0, y: 0, w: size.w, h: size.h } : ui.canvas;
   const side = ui.right ? 'right' : 'left';
@@ -328,19 +345,17 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
             items={items}
             height={size.h}
             moreLabel={t('map.more')}
-            extra={
-              speed !== null && (
-                <div
-                  data-testid="map-speed"
-                  style={{ width: cs.map, height: cs.map }}
-                  className="tabular flex flex-col items-center justify-center rounded-2xl bg-bg text-text"
-                >
-                  <span className="text-[22px] font-bold leading-none">{speed}</span>
-                  <span className="text-[11px]">{t('map.kmh')}</span>
-                </div>
-              )
-            }
           />
+          {speedBox && speed !== null && (
+            <div
+              data-testid="map-speed"
+              className="tabular absolute flex flex-col items-center justify-center rounded-2xl bg-surface/95 text-text shadow-[0_1px_4px_rgba(0,0,0,0.35)]"
+              style={{ left: speedBox.x, top: speedBox.y, width: speedBox.w, height: speedBox.h }}
+            >
+              <span className="text-[30px] font-bold leading-none">{speed}</span>
+              <span className="text-[12px] font-semibold text-text-dim">{t('map.kmh')}</span>
+            </div>
+          )}
           {box && <RouteBox rect={box} />}
           {box && <RouteChooser box={box} height={size.h} top={Math.max(MAP_GAP, band + 8)} />}
           {bar && <TrafficBar rect={bar} />}

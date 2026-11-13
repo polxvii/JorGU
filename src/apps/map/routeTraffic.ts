@@ -89,25 +89,33 @@ export function trafficMillisLeft(sections: TrafficSection[], along: number, pac
 }
 
 export interface BarPiece {
-  /** 0 = the car (bottom of the bar), 1 = the destination (top). */
+  /** 0 = the start of the route (bottom of the bar), 1 = the destination (top). */
   from: number;
   to: number;
-  level: TrafficLevel;
+  level: TrafficLevel | 'passed';
 }
 
-/** The road ahead for the bar: sections from the car to the destination, scaled to 0..1. */
+/**
+ * The whole route on the bar (user 2026-11-13): start at the bottom, destination at the top, the car's dot climbing
+ * at `along / total`. Driven so far: 'passed'; ahead: the sections' traffic, so a jam stays where it is on the bar
+ * while the dot moves towards it.
+ */
 export function barPieces(sections: TrafficSection[], along: number, total: number): BarPiece[] {
-  const left = total - along;
-  if (left <= 0 || !sections.length) return [];
+  if (total <= 0 || !sections.length) return [];
+  const at = Math.max(0, Math.min(total, along));
   const out: BarPiece[] = [];
-  for (const s of sections) {
-    if (s.to <= along) continue;
-    const from = Math.max(0, (Math.max(s.from, along) - along) / left);
-    const to = Math.min(1, (s.to - along) / left);
-    const level = trafficLevel(s.ratio);
+  const push = (from: number, to: number, level: BarPiece['level']) => {
+    if (to - from < 1e-9) return;
     const prev = out[out.length - 1];
     if (prev && prev.level === level && Math.abs(prev.to - from) < 1e-9) prev.to = to;
     else out.push({ from, to, level });
+  };
+  push(0, at / total, 'passed');
+  // Not covered by the sections yet (the car went back): unknown.
+  if (sections[0].from > at) push(at / total, sections[0].from / total, 'unknown');
+  for (const s of sections) {
+    if (s.to <= at) continue;
+    push(Math.max(s.from, at) / total, Math.min(1, s.to / total), trafficLevel(s.ratio));
   }
   return out;
 }

@@ -321,6 +321,6 @@ export const th: Partial<Record<MessageKey, string>> = {
   'settings.mapColorsAuto': 'แผนที่: ตามโหมดกลางคืน',
   'settings.mapColorsNight': 'แผนที่: กลางคืน',
   'settings.mapColorsHint': 'มีผลตอนเปิด JorGu ครั้งถัดไป (กดโหลดหน้าใหม่) เพราะเปลี่ยนทันทีต้องโหลดแผนที่ใหม่อีกครั้ง',
-  'map.trafficAhead': 'รถติดบนเส้นทางข้างหน้า: ล่างคือรถเรา บนคือปลายทาง',
+  'map.trafficAhead': 'รถติดตลอดเส้นทาง: ล่างคือจุดเริ่ม บนคือปลายทาง จุดสีน้ำเงินคือรถเรา',
   'map.more': 'เพิ่มเติม',
 };

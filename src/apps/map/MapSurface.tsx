@@ -164,7 +164,7 @@ function RouteChooser({ box, height, top }: { box: Rect; height: number; top: nu
   );
 }
 
-const LEVEL_COLOUR: Record<TrafficLevel, string> = { free: '#1E8E3E', slow: '#F29900', jam: '#D93025', unknown: '#9AA0A6' };
+const LEVEL_COLOUR: Record<TrafficLevel | 'passed', string> = { free: '#1E8E3E', slow: '#F29900', jam: '#D93025', unknown: '#9AA0A6', passed: '#5F6368' };
 export const TRAFFIC_BAR_W = 12;
 
 /**
@@ -176,18 +176,33 @@ function TrafficBar({ rect }: { rect: Rect }) {
   const route = useMapUi((s) => s.route);
   const pos = useGeo((s) => s.pos);
   if (!route?.traffic || route.path.length < 2) return null;
-  const along = pos ? projectOnPath(pos, route.path).along : 0;
-  const pieces = barPieces(route.traffic.sections, along, pathLength(route.path));
-  if (!pieces.length) return null;
-  const h = rect.h - 14; // room for the car dot at the bottom
+  const total = pathLength(route.path);
+  const along = pos ? Math.min(total, projectOnPath(pos, route.path).along) : 0;
+  const pieces = barPieces(route.traffic.sections, along, total);
+  if (!pieces.length || total <= 0) return null;
+  const progress = along / total;
+  // The bar sits 8 px inside the box at both ends, so the car's dot fits at the start and at the destination.
+  const inner = rect.h - 16;
   return (
-    <div data-testid="map-traffic-bar" role="img" aria-label={t('map.trafficAhead')} className="pointer-events-none absolute" style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}>
-      <div className="absolute inset-x-0 top-0 overflow-hidden rounded-full border-2 border-white shadow-[0_1px_4px_rgba(0,0,0,0.45)]" style={{ height: h, background: LEVEL_COLOUR.unknown }}>
+    <div
+      data-testid="map-traffic-bar"
+      data-progress={progress.toFixed(2)}
+      role="img"
+      aria-label={t('map.trafficAhead')}
+      className="pointer-events-none absolute"
+      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+    >
+      <div className="absolute inset-x-0 overflow-hidden rounded-full border-2 border-white shadow-[0_1px_4px_rgba(0,0,0,0.45)]" style={{ top: 8, height: inner, background: LEVEL_COLOUR.unknown }}>
         {pieces.map((p, i) => (
           <div key={i} data-level={p.level} className="absolute inset-x-0" style={{ bottom: `${p.from * 100}%`, height: `${(p.to - p.from) * 100}%`, background: LEVEL_COLOUR[p.level] }} />
         ))}
       </div>
-      <div className="absolute left-1/2 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-accent shadow" style={{ bottom: 0 }} />
+      <div className="absolute left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-[#D93025] ring-2 ring-white" style={{ top: 3 }} />
+      <div
+        data-testid="map-traffic-bar-car"
+        className="absolute left-1/2 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-accent shadow"
+        style={{ bottom: 8 + progress * inner - 8 }}
+      />
     </div>
   );
 }

@@ -142,11 +142,14 @@ describe('traffic on the route, per section (Compute Routes Pro legs)', () => {
     expect(trafficMillisLeft(s, 1500)).toBe(150_000 + 90_000);
     // A section that took another way counts at the route's own pace, not its detour's time.
     expect(trafficMillisLeft(s, 1500, 60)).toBe(150_000 + 1000 * 60);
-    // The bar: car at the bottom (0), destination at the top (1); same colours merge.
+    // The bar is the whole route (user 2026-11-13): start at the bottom (0), destination at the top (1); driven so far
+    // is 'passed', the rest keeps its place, so the car's dot climbs towards a jam that stays put.
     expect(barPieces(s, 1500, 3000)).toEqual([
-      { from: 0, to: 1 / 3, level: 'jam' },
-      { from: 1 / 3, to: 1, level: 'unknown' },
+      { from: 0, to: 0.5, level: 'passed' },
+      { from: 0.5, to: 2 / 3, level: 'jam' },
+      { from: 2 / 3, to: 1, level: 'unknown' },
     ]);
+    expect(barPieces(s, 0, 3000).map((p) => p.level)).toEqual(['free', 'jam', 'unknown']);
   });
 });
 

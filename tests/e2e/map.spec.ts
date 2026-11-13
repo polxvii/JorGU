@@ -101,6 +101,11 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   await expect(barEl).toBeVisible();
   await expect(barEl.locator('[data-level="jam"]')).toHaveCount(1);
   await expect(barEl.locator('[data-level="slow"]')).toHaveCount(1);
+  // The whole route: the car's dot at the start (bottom), the destination at the top.
+  await expect(barEl).toHaveAttribute('data-progress', '0.00');
+  const dot = await box(page, '[data-testid="map-traffic-bar-car"]');
+  const barBox = await box(page, '[data-testid="map-traffic-bar"]');
+  expect(dot.y + dot.height).toBeGreaterThan(barBox.y + barBox.height - 12);
   // The same sections on the route line itself (user 2026-11-13): red where jammed, orange where slow, blue elsewhere.
   const painted = (await stub(page)).shown.filter((l) => l.strokeColor === '#D93025' || l.strokeColor === '#F29900');
   expect(painted.map((l) => l.strokeColor).sort()).toEqual(['#D93025', '#F29900']);
@@ -527,5 +532,27 @@ test('speed (km/h) beside the route box, in its corner without a route (user 202
   expect(Math.round(sp.y)).toBe(Math.round(rb.y));
   expect(Math.round(sp.height)).toBe(Math.round(rb.height));
   await expect(page.getByTestId('map-controls').getByTestId('map-speed')).toHaveCount(0);
+});
+
+test('traffic bar: the car dot climbs the whole route; driven part grey, jams stay where they are', async ({ page }) => {
+  await withLocation(page);
+  await openApp(page);
+  await expect.poll(async () => (await stub(page)).markers).toBe(1);
+  await page.getByTestId('map-navigate').click();
+  await page.getByTestId('map-dest-input').fill('Central World');
+  await page.getByTestId('map-dest-go').click();
+  const bar = page.getByTestId('map-traffic-bar');
+  await expect(bar).toBeVisible();
+  await expect(bar).toHaveAttribute('data-progress', '0.00');
+  const jamBefore = await box(page, '[data-testid="map-traffic-bar"] [data-level="jam"]');
+  // Halfway along the (stub) route, north-east of the start.
+  await page.context().setGeolocation({ latitude: HERE.latitude + 0.025, longitude: HERE.longitude + 0.025 });
+  await expect(bar).toHaveAttribute('data-progress', '0.50');
+  await expect(bar.locator('[data-level="passed"]')).toHaveCount(1);
+  const b = await box(page, '[data-testid="map-traffic-bar"]');
+  const dot = await box(page, '[data-testid="map-traffic-bar-car"]');
+  expect(Math.abs(dot.y + dot.height / 2 - (b.y + b.height / 2))).toBeLessThan(6);
+  // The jam (sections 2 of 26, behind us now) didn't move on the bar; it's grey now.
+  expect((await box(page, '[data-testid="map-traffic-bar"] [data-level="passed"]')).height).toBeGreaterThan(jamBefore.height);
 });
 

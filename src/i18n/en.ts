@@ -318,7 +318,7 @@ export const en = {
   'settings.mapColorsAuto': 'Map: with night mode',
   'settings.mapColorsNight': 'Map: night',
   'settings.mapColorsHint': 'Applies the next time JorGu opens (reload the page). Changing it on the spot would need a new map load.',
-  'map.trafficAhead': 'Traffic on the road ahead: the car at the bottom, the destination at the top',
+  'map.trafficAhead': 'Traffic along the route: the start at the bottom, the destination at the top, the blue dot is you',
   'map.more': 'More',
 } as const;
 

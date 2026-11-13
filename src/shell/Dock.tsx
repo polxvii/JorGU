@@ -4,10 +4,11 @@ import { type MessageKey, useT } from '../i18n';
 import { Icon, type IconName } from './Icon';
 import type { Rect } from './geometry';
 
+// The Dock is as wide as the toolbar strips (DOCK_SIZES); buttons leave 4 px each side.
 const SIZES = {
   normal: { box: 'min-h-16 w-16 text-[11px]', icon: 28 },
-  large: { box: 'min-h-20 w-20 text-[12px]', icon: 34 },
-  xlarge: { box: 'min-h-24 w-24 text-[14px]', icon: 40 },
+  large: { box: 'min-h-[72px] w-[72px] text-[12px]', icon: 32 },
+  xlarge: { box: 'min-h-20 w-20 text-[13px]', icon: 36 },
 } as const;
 
 function DockButton({ icon, label, onClick, testId, active }: {

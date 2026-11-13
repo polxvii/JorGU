@@ -85,8 +85,9 @@ async function ensureMap(): Promise<void> {
       disableDefaultUI: true,
       gestureHandling: 'greedy',
       clickableIcons: false,
-      // Fixed for this load: changing it means a new map (another billed load).
-      colorScheme: useUi.getState().isNight ? libs.ColorScheme.DARK : libs.ColorScheme.LIGHT,
+      // Fixed for this load: changing it means a new map (another billed load). Day by default (user 2026-11-13).
+      colorScheme:
+        s.map.colors === 'night' || (s.map.colors === 'auto' && useUi.getState().isNight) ? libs.ColorScheme.DARK : libs.ColorScheme.LIGHT,
     });
     map.addListener('dragstart', () => {
       cancelAnimationFrame(anim);

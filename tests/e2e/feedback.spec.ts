@@ -59,12 +59,12 @@ test('mini player: bottom corner on the driver side; the grip moves it; nothing 
 test('Dock size setting: Large makes the right toolbar wider and its buttons bigger', async ({ page }) => {
   await openApp(page);
   const before = await box(page, '[data-chrome="dock"]');
-  expect(before.width).toBe(80);
+  expect(before.width).toBe(72); // as wide as the toolbar strips (user 2026-11-13)
   await page.getByTestId('dock-settings').click();
   await page.getByTestId('setting-dock-size').locator('[data-value="xlarge"]').click();
   await page.getByTestId('sheet-close').click();
-  expect((await box(page, '[data-chrome="dock"]')).width).toBe(112);
-  expect((await box(page, '[data-testid="dock-swap"]')).width).toBe(96);
+  expect((await box(page, '[data-chrome="dock"]')).width).toBe(88);
+  expect((await box(page, '[data-testid="dock-swap"]')).width).toBe(80);
   await expectPlayerClear(page);
   // The same setting sizes the transport row under the clip title and the map's buttons (user 2026-11-12) …
   expect((await box(page, '[data-testid="yt-toggle"]')).height).toBe(64);

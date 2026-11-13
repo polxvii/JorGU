@@ -30,17 +30,21 @@ function surfaceStyle(rect: Rect, visible: boolean, z: number): CSSProperties {
   };
 }
 
+/** What a surface's own toolbar must stay clear of (relative to the surface): the mini player and the full-screen bar. */
+function avoidFor(r: Rect, layout: LayoutResult): Rect[] {
+  const m = layout.mini;
+  const avoid: Rect[] = [];
+  if (m) avoid.push({ x: m.handle.x - r.x, y: m.handle.y - r.y, w: m.rect.w, h: m.handle.h + m.rect.h });
+  // The full-screen floating bar comes back on every tap: a surface's own buttons never sit under it.
+  const fb = layout.floatingBar?.rect;
+  if (fb) avoid.push({ x: fb.x - r.x, y: fb.y - r.y, w: fb.w, h: fb.h });
+  return avoid;
+}
+
 const SurfaceContent = memo(function SurfaceContent({ id, layout }: { id: SurfaceId; layout: LayoutResult }) {
   if (id === 'map') {
-    const box = layout.surfaces.map;
-    const r = box?.rect ?? layout.content;
-    const m = layout.mini;
-    const avoid: Rect[] = [];
-    if (m) avoid.push({ x: m.handle.x - r.x, y: m.handle.y - r.y, w: m.rect.w, h: m.handle.h + m.rect.h });
-    // The full-screen floating bar comes back on every tap: the map's own buttons never sit under it.
-    const fb = layout.floatingBar?.rect;
-    if (fb) avoid.push({ x: fb.x - r.x, y: fb.y - r.y, w: fb.w, h: fb.h });
-    return <MapSurface size={{ w: r.w, h: r.h }} avoid={avoid} band={layout.mode === 'fullscreen' ? 0 : L.YT_BAND} />;
+    const r = layout.surfaces.map?.rect ?? layout.content;
+    return <MapSurface size={{ w: r.w, h: r.h }} avoid={avoidFor(r, layout)} band={layout.mode === 'fullscreen' ? 0 : L.YT_BAND} />;
   }
   if (id === 'youtube') {
     const y = layout.youtube;
@@ -48,7 +52,9 @@ const SurfaceContent = memo(function SurfaceContent({ id, layout }: { id: Surfac
   }
   const web = lastWeb.get(id);
   // Full screen gives the site the whole surface; in a pane the header band sits above it.
-  return web ? <WebSurface app={web} surfaceId={id} band={layout.mode === 'fullscreen' ? 0 : L.WEB_BAND} /> : null;
+  if (!web) return null;
+  const r = layout.surfaces[id]?.rect ?? layout.content;
+  return <WebSurface app={web} surfaceId={id} band={layout.mode === 'fullscreen' ? 0 : L.WEB_BAND} size={{ w: r.w, h: r.h }} avoid={avoidFor(r, layout)} />;
 });
 
 export function SurfaceLayer({ layout }: { layout: LayoutResult }) {

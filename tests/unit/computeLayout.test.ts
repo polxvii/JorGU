@@ -40,29 +40,37 @@ describe('computeLayout defaults (§6.4)', () => {
 
   it('split 50/50, YouTube left, Map right, Dock on the right edge', () => {
     expect(r.mode).toBe('split');
-    expect(r.dock).toEqual({ x: 944, y: 0, w: 80, h: 600 });
+    // The Dock is as wide as the toolbar strips (user 2026-11-13).
+    expect(r.dock).toEqual({ x: 952, y: 0, w: 72, h: 600 });
     const [yt, map] = [r.panes.find((p) => p.index === 0)!, r.panes.find((p) => p.index === 1)!];
     expect(yt.app.kind).toBe('youtube');
-    expect(yt.rect).toEqual({ x: 0, y: 0, w: 464, h: 600 });
-    expect(map.rect).toEqual({ x: 480, y: 0, w: 464, h: 600 });
-    expect(r.divider!.line).toEqual({ x: 464, y: 0, w: L.GAP, h: 600 });
+    expect(yt.rect).toEqual({ x: 0, y: 0, w: 468, h: 600 });
+    expect(map.rect).toEqual({ x: 484, y: 0, w: 468, h: 600 });
+    expect(r.divider!.line).toEqual({ x: 468, y: 0, w: L.GAP, h: 600 });
   });
 
   it('places the YouTube player below the header band, 16:9', () => {
     expect(r.youtube.mode).toBe('pane');
-    // Controls in a strip on the driver side of the pane (user 2026-11-12): the player gets the rest of the width.
-    expect(r.youtube.player).toEqual({ x: 0, y: L.YT_BAND, w: 464 - 72, h: 220 });
-    expect(r.youtube).toMatchObject({ side: true, controls: { x: 464 - 72, y: L.YT_BAND, w: 72, h: 600 - L.YT_BAND } });
+    // A tall pane: the controls go in a row under the player, which keeps the pane's full width (user 2026-11-13:
+    // the side strip made the video small in two panes).
+    expect(r.youtube.player).toEqual({ x: 0, y: L.YT_BAND, w: 468, h: 263 });
+    expect(r.youtube).toMatchObject({ side: false, controls: { x: 0, y: L.YT_BAND + 263, w: 468 } });
+  });
+
+  it('a wide YouTube pane keeps the side strip: rows below would not make the video clearly bigger', () => {
+    const one = computeLayout(input({ layout: { mode: 'single', focusedPane: 0 } }));
+    expect(one.youtube).toMatchObject({ side: true });
+    expect(one.youtube.player!.w).toBeGreaterThan(800);
   });
 
   it('⛶ sits in the top corner nearest the driver', () => {
     const map = r.panes.find((p) => p.index === 1)!;
-    expect(map.fsButton.x + map.fsButton.w).toBe(944 - L.FS_MARGIN);
+    expect(map.fsButton.x + map.fsButton.w).toBe(952 - L.FS_MARGIN);
     expect(map.fsButton.y).toBe(L.FS_MARGIN);
   });
 
   it('divider touch target never extends into the YouTube pane', () => {
-    expect(r.divider!.hit.x).toBe(464);
+    expect(r.divider!.hit.x).toBe(468);
   });
 });
 
@@ -108,7 +116,7 @@ describe('full screen (§6.5)', () => {
   });
 
   it('Dock size setting widens the Dock and narrows the panes', () => {
-    for (const [size, w] of [['normal', 80], ['large', 96], ['xlarge', 112]] as const) {
+    for (const [size, w] of [['normal', 72], ['large', 80], ['xlarge', 88]] as const) {
       const r = computeLayout(input({ dockSize: size }));
       expect(r.dock).toEqual({ x: 1024 - w, y: 0, w, h: 600 });
       expect(r.appArea.w).toBe(1024 - w);
@@ -136,7 +144,8 @@ describe('full screen (§6.5)', () => {
   it('edge strip only over Web surfaces', () => {
     const web: AppRef = { kind: 'web', id: 'w1', url: '' };
     const r = computeLayout(input({ layout: { panes: [{ kind: 'youtube' }, web], fullscreenPane: 1 } }));
-    expect(r.edgeStrip).toEqual({ x: 1024 - L.EDGE, y: 0, w: L.EDGE, h: 600 });
+    // Just inside the site's own toolbar strip (72 px, user 2026-11-13), so the strip's buttons get their taps.
+    expect(r.edgeStrip).toEqual({ x: 1024 - 72 - L.EDGE, y: 0, w: L.EDGE, h: 600 });
     expect(computeLayout(input({ layout: { fullscreenPane: 1 } })).edgeStrip).toBeNull();
   });
 

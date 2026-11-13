@@ -17,6 +17,8 @@ test('one map for the whole session: swaps, single/split and full screen never c
   await openApp(page);
   await expect.poll(async () => (await stub(page)).maps).toBe(1);
   expect((await stub(page)).mapId).toBe('e2e-map-id');
+  // Day colours by default (user 2026-11-13), whatever the app's night mode.
+  expect((await stub(page)).colorScheme).toBe('LIGHT');
   await page.getByTestId('dock-swap').click();
   await page.getByTestId('dock-layout').click();
   await page.getByTestId('dock-layout').click();
@@ -115,6 +117,9 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   // Route buttons are in the map's toolbar (user 2026-11-12), not on the route box.
   const controls = page.getByTestId('map-controls');
   for (const id of ['map-route-overview', 'map-route-navigate', 'map-route-end']) await expect(controls.getByTestId(id)).toBeVisible();
+  // Order (user 2026-11-13): traffic right after my location, Google Maps last.
+  const order = await controls.locator('[data-testid^="map-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+  expect(order).toEqual(['map-navigate', 'map-recenter', 'map-traffic', 'map-zoom-in', 'map-zoom-out', 'map-route-overview', 'map-route-end', 'map-route-navigate']);
   // Whole route: north up, fitted; ⌖ turns back to the road ahead.
   await page.getByTestId('map-route-overview').click();
   expect(await stub(page)).toMatchObject({ fitBounds: 1, heading: 0 });
@@ -348,8 +353,10 @@ test('short map pane (upright phone): buttons that do not fit are under More', a
   await expect(page.getByTestId('map-route')).toHaveAttribute('data-status', 'ready');
   await expect(page.getByTestId('map-more')).toBeVisible();
   await expect(page.getByTestId('map-route-end')).toHaveCount(0);
-  // The YouTube pane above has its controls in a side strip too; ±10 s come as a pair.
-  await expect(page.getByTestId('yt-transport')).toHaveAttribute('data-side', '1');
+  // The YouTube pane above has its controls in rows under the video: a bigger video than beside a side strip
+  // (430 - 72 = 358 px wide) (user 2026-11-13); ±10 s come as a pair.
+  await expect(page.getByTestId('yt-transport')).toHaveAttribute('data-side', '0');
+  expect((await box(page, '[data-player-rect]')).width).toBeGreaterThan(370);
   expect(await page.getByTestId('yt-back10').count()).toBe(await page.getByTestId('yt-forward10').count());
   await page.getByTestId('map-more').click();
   await expect(page.getByTestId('map-more-menu')).toBeVisible();

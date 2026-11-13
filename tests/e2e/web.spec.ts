@@ -52,6 +52,45 @@ test('allowed site: Mobile ↔ Desktop switches the layout without reloading, an
   await expect(frame(page).locator('body')).toHaveAttribute('data-width', '400');
 });
 
+test('web toolbar: Mobile / Desktop and zoom one tap away, on the driver-side edge, without reloading', async ({ page }) => {
+  await mockWeb(page);
+  await openApp(page, webPanes(SITE));
+  await waitForFrames(page, ['web:w1']);
+  const f = frame(page);
+  const token = await f.locator('#token').textContent();
+  const before = await frameLoads(page);
+  // A strip on the pane's right edge (driver side), the site beside it.
+  const pane = (await page.locator('[data-chrome="pane-header"][data-pane="0"]').boundingBox())!;
+  const strip = (await page.getByTestId('web-w1-strip').boundingBox())!;
+  const site = (await page.getByTestId('web-page-w1').boundingBox())!;
+  expect(Math.round(strip.x + strip.width)).toBe(Math.round(pane.x + pane.width));
+  expect(Math.round(site.x + site.width)).toBe(Math.round(strip.x));
+  const view = page.getByTestId('web-frame-w1');
+  await page.getByTestId('web-desktop-w1').click();
+  await expect(view).toHaveAttribute('data-view', 'desktop');
+  await expect(page.getByTestId('web-desktop-w1')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('web-mobile-w1').click();
+  await expect(view).toHaveAttribute('data-view', 'mobile');
+  await expect(f.locator('body')).toHaveAttribute('data-width', '400');
+  // Tapping the lit button again goes back to Auto.
+  await page.getByTestId('web-mobile-w1').click();
+  await expect(view).toHaveAttribute('data-view', 'auto');
+  await expect(page.getByTestId('web-zoom-reset-w1')).toHaveText('100%');
+  // Zoom steps like a browser's; the % button shows it and puts it back to 100 %.
+  await page.getByTestId('web-zoom-in-w1').click();
+  await expect(page.getByTestId('web-zoom-reset-w1')).toHaveText('110%');
+  await expect(view).toHaveAttribute('data-scale', '1.100');
+  await page.getByTestId('web-zoom-in-w1').click();
+  await expect(page.getByTestId('web-zoom-reset-w1')).toHaveText('125%');
+  await page.getByTestId('web-zoom-reset-w1').click();
+  await expect(view).toHaveAttribute('data-scale', '1.000');
+  await page.getByTestId('web-zoom-out-w1').click();
+  await expect(page.getByTestId('web-zoom-reset-w1')).toHaveText('90%');
+  // Same page all along.
+  await expect(f.locator('#token')).toHaveText(token!);
+  await expectNoReloads(page, before);
+});
+
 test('"Reload in this view" reloads the page in place', async ({ page }) => {
   await mockWeb(page);
   await openApp(page, webPanes(SITE));
@@ -152,8 +191,11 @@ test('full screen: the site fills the screen, edge strip + floating Web menu; no
   await page.getByTestId('pane-fullscreen-0').click();
   await expect(page.locator('#jorgu-root')).toHaveAttribute('data-mode', 'fullscreen');
   const vp = page.viewportSize()!;
+  // The site fills the screen beside its toolbar strip (Mobile / Desktop / zoom, user 2026-11-13) on the driver side.
   const fr = (await page.getByTestId('web-page-w1').boundingBox())!;
-  expect(fr).toMatchObject({ x: 0, y: 0, width: vp.width, height: vp.height });
+  const strip = (await page.getByTestId('web-w1-strip').boundingBox())!;
+  expect(fr).toMatchObject({ x: 0, y: 0, width: vp.width - strip.width, height: vp.height });
+  expect(strip.x + strip.width).toBe(vp.width);
   await page.getByTestId('edge-strip').dispatchEvent('pointerdown');
   await page.getByTestId('fs-web-menu').click();
   await expect(page.getByTestId('web-sheet')).toBeVisible();

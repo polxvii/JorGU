@@ -7,7 +7,7 @@ import { youtubePane } from './layoutActions';
 import { type RatioBounds, YT_MIN_WIDTH, ratioBounds, splitFeasible } from './splitRatio';
 
 export const L = {
-  DOCK: 80,
+  DOCK: 72,
   HEADER: 40,
   /** Reserved band above the YouTube player for the pane header and ⛶ (nothing may overlap the player). */
   YT_BAND: 56,
@@ -115,8 +115,10 @@ function ytPanePlayer(s: Rect, ytControls: number): Rect {
 }
 
 // ---------- YouTube pane controls (user 2026-11-12) ----------
-// A strip on the driver-side edge of the pane when the player still gets ≥ 356×200 beside it; otherwise rows under
-// the player, two when one row can't hold all nine buttons. The clip title is in the pane header.
+// A strip on the driver-side edge of the pane, or rows under the player (two when one row can't hold all nine
+// buttons): whichever gives the bigger video, the strip when they're about the same (user 2026-11-12 wanted it on the
+// side; 2026-11-13: in two panes the strip made the video small, rows below leave it the pane's full width). The
+// player is never under 356×200 either way. The clip title is in the pane header.
 export const YT_STRIP_PAD = 8;
 export const YT_ROW_GAP = 4;
 type Sizes = (typeof CONTROL_SIZES)[DockSize];
@@ -141,7 +143,10 @@ function ytPaneLayout(s: Rect, cs: Sizes, driverRight: boolean): { player: Rect;
     h = areaH;
     w = Math.floor((h * 16) / 9);
   }
-  if (w >= YT_MIN_WIDTH && h >= 200) {
+  const ch = ytBelowHeight(s.w, cs);
+  const player = ytPanePlayer(s, ch);
+  const belowOk = player.w >= YT_MIN_WIDTH && player.h >= 200;
+  if (w >= YT_MIN_WIDTH && h >= 200 && !(belowOk && player.w * player.h > 1.1 * w * h)) {
     const x0 = driverRight ? s.x : s.x + sw;
     return {
       player: { x: x0 + Math.floor((areaW - w) / 2), y: s.y + L.YT_BAND, w, h },
@@ -149,8 +154,6 @@ function ytPaneLayout(s: Rect, cs: Sizes, driverRight: boolean): { player: Rect;
       side: true,
     };
   }
-  const ch = ytBelowHeight(s.w, cs);
-  const player = ytPanePlayer(s, ch);
   const cy = player.y + player.h;
   return { player, controls: { x: s.x, y: cy, w: s.w, h: Math.max(0, Math.min(ch, bottom(s) - cy)) }, side: false };
 }
@@ -167,7 +170,8 @@ export function ytPaneMinWidth(height: number, dockSize: DockSize = 'normal'): n
   return height - L.YT_BAND - ytBelowHeight(YT_MIN_WIDTH, cs) >= 201 ? YT_MIN_WIDTH : 357 + ytStripWidth(cs);
 }
 
-export const DOCK_SIZES: Record<DockSize, number> = { normal: 80, large: 96, xlarge: 112 };
+/** As wide as the map and YouTube button strips (user 2026-11-13: the Dock was wider and took room). */
+export const DOCK_SIZES: Record<DockSize, number> = { normal: 72, large: 80, xlarge: 88 };
 
 /**
  * Toolbar size (Settings) for every control, not only the Dock (user 2026-11-12): full-screen buttons (`big`) and the
@@ -397,8 +401,9 @@ export function computeLayout(input: LayoutInput): LayoutResult {
         ? placeBand(content, m ? at.top : true, m ? { ...m, minH: m.h } : null)
         : placeSheet(content, awayRight, m ? { ...m, minW: m.w } : null);
     }
-    // Map full screen: the map's own toolbar is a strip on the driver-side edge; the floating bar stays clear of it.
-    const strip = fsApp.kind === 'map' && awayRight === driverRight ? mapStripWidth(input.dockSize) : 0;
+    // Map and Web full screen: their own toolbar is a strip on the driver-side edge; the floating bar stays clear of it.
+    const ownStrip = fsApp.kind === 'map' || fsApp.kind === 'web' ? mapStripWidth(input.dockSize) : 0;
+    const strip = awayRight === driverRight ? ownStrip : 0;
     const barArea = strip ? { ...content, x: driverRight ? content.x : content.x + strip, w: content.w - strip } : content;
     const bar = sheet
       ? null
@@ -406,8 +411,9 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     const toast = input.toast
       ? placeToast(content, [mini?.rect, mini?.handle, sheet, bar?.rect], [], sheet)
       : null;
-    // Web: a strip along the driver edge brings the controls back; it stops above the mini player on narrow screens.
-    let edge: Rect = { x: driverRight ? right(content) - L.EDGE : content.x, y: content.y, w: L.EDGE, h: content.h };
+    // Web: a strip along the driver edge (just inside the site's toolbar) brings the controls back; it stops above the
+    // mini player on narrow screens.
+    let edge: Rect = { x: driverRight ? right(content) - ownStrip - L.EDGE : content.x + ownStrip, y: content.y, w: L.EDGE, h: content.h };
     if (mini && (intersects(edge, mini.handle) || intersects(edge, mini.rect))) {
       if (at.top) {
         const from = bottom(mini.rect) + 4;

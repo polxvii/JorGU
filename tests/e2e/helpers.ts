@@ -3,7 +3,7 @@ import { expect, type Page } from '@playwright/test';
 declare global {
   interface Window {
     __jorguFrameLoads?: Record<string, number>;
-    __mapsStub?: { maps: number; panTo: number; zoom: number; traffic: boolean; routes: number; lines: number; markers: number; pins: number; fitBounds: number; failRoutes: boolean; shown: { strokeWeight: number; strokeColor: string; strokeOpacity: number; path: { lat: number; lng: number }[] }[]; heading: number; cameraMoves: number; center: { lat: number; lng: number } | null; mapId: string | null; lastRoute: Record<string, unknown> | null; fire: (ev: string) => void };
+    __mapsStub?: { maps: number; panTo: number; zoom: number; traffic: boolean; routes: number; lines: number; markers: number; pins: number; fitBounds: number; failRoutes: boolean; shown: { strokeWeight: number; strokeColor: string; strokeOpacity: number; path: { lat: number; lng: number }[] }[]; heading: number; cameraMoves: number; colorScheme: string | null; center: { lat: number; lng: number } | null; mapId: string | null; lastRoute: Record<string, unknown> | null; fire: (ev: string) => void };
     __jorgu?: {
       setPlaying: (playing: boolean) => void;
       yt: () => { hasPlayer: boolean; state: number | null; time: number; duration: number; rate: number | null; iframeLoads: number; visibleRatio: number };
@@ -177,7 +177,8 @@ export async function revealHeaders(page: Page): Promise<void> {
   const dock = page.locator('[data-chrome="dock"]');
   if (await dock.count()) {
     const b = (await dock.boundingBox())!;
-    await page.mouse.click(b.x + b.width / 2, b.y + b.height - 6);
+    // An empty corner of the Dock (its buttons nearly fill it now it's as slim as the toolbars).
+    await page.mouse.click(b.x + 3, b.y + b.height - 3);
   }
 }
 

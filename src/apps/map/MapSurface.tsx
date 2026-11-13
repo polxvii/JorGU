@@ -1,11 +1,12 @@
 // Map app surface (spec §7): mode A (one Maps JavaScript map), mode B (Maps Embed, no charge), or a "not set up"
 // panel where Navigate still works. Our controls stay clear of the mini player and the full-screen bar (§6.6);
 // placement rules live in mapChrome.ts.
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useSettings } from '../../features/settings/settingsStore';
 import { useUi } from '../../features/settings/uiStore';
 import { useT } from '../../i18n';
-import { Icon, type IconName } from '../../shell/Icon';
+import { Icon } from '../../shell/Icon';
+import { STRIP_BUTTON, SideStrip, StripButton, type StripItem } from '../../shell/SideStrip';
 import type { Rect } from '../../shell/geometry';
 import { useControlSize } from '../../shell/useControlSize';
 import { DEFAULT_CENTER, MAPS_KEY } from './config';
@@ -15,25 +16,8 @@ import { mapsNavigateUrl } from './navigate';
 import { MAP_GAP, placeMapChrome } from './mapChrome';
 import { progress } from './routeMath';
 
-const BUTTON = 'flex items-center justify-center rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.35)]';
-
-function MapButton({ icon, label, onClick, active, testId }: { icon: IconName; label: string; onClick: () => void; active?: boolean; testId: string }) {
-  const cs = useControlSize();
-  return (
-    <button
-      type="button"
-      data-testid={testId}
-      aria-label={label}
-      title={label}
-      aria-pressed={active}
-      onClick={onClick}
-      style={{ width: cs.map, height: cs.map, direction: 'ltr' }}
-      className={`${BUTTON} ${active ? 'bg-accent text-on-accent' : 'bg-surface text-text'}`}
-    >
-      <Icon name={icon} size={cs.mapIcon} />
-    </button>
-  );
-}
+const BUTTON = STRIP_BUTTON;
+const MapButton = StripButton;
 
 function EmbedFrame({ rect }: { rect: Rect }) {
   const t = useT();
@@ -143,19 +127,20 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   const openSheet = useUi((s) => s.openSheet);
   const pos = useGeo((s) => s.pos);
   const geoError = useGeo((s) => s.error);
-  const [moreOpen, setMoreOpen] = useState(false);
   const containerRef = useCallback((node: HTMLDivElement | null) => {
     if (node) attachMap(node);
   }, []);
 
   const live = mode === 'js' && !embedRoute;
-  // Toolbar, most needed first: what doesn't fit the strip goes under More (user 2026-11-12).
-  const items: { key: string; node: ReactNode }[] = [
+  // Toolbar, most needed first: what doesn't fit the strip goes under More (user 2026-11-12). Order (user
+  // 2026-11-13): search, my location, traffic, zoom, the route's buttons, and Google Maps last (rarely used).
+  const items: StripItem[] = [
     { key: 'search', node: <MapButton testId="map-navigate" icon="search" label={t('map.whereTo')} onClick={() => openSheet({ kind: 'map' })} /> },
     { key: 'recenter', node: <MapButton testId="map-recenter" icon="target" label={t('map.recenter')} active={follow && !!pos} onClick={recenter} /> },
   ];
   if (live) {
     items.push(
+      { key: 'traffic', node: <MapButton testId="map-traffic" icon="traffic" label={t('map.traffic')} active={trafficOn} onClick={() => setTraffic(!trafficOn)} /> },
       { key: 'zoomIn', node: <MapButton testId="map-zoom-in" icon="plus" label={t('map.zoomIn')} onClick={() => zoomBy(1)} /> },
       { key: 'zoomOut', node: <MapButton testId="map-zoom-out" icon="minus" label={t('map.zoomOut')} onClick={() => zoomBy(-1)} /> },
     );
@@ -163,6 +148,7 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   if (route) {
     if (line) items.push({ key: 'overview', node: <MapButton testId="map-route-overview" icon="map" label={t('map.routeOverview')} onClick={showRouteOverview} /> });
     items.push(
+      { key: 'end', node: <MapButton testId="map-route-end" icon="close" label={t('map.endRoute')} onClick={endRoute} /> },
       {
         key: 'google',
         // Voice guidance: hands the trip to the Google Maps app, only when tapped.
@@ -181,18 +167,11 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
           </a>
         ),
       },
-      { key: 'end', node: <MapButton testId="map-route-end" icon="close" label={t('map.endRoute')} onClick={endRoute} /> },
     );
   }
-  if (live) items.push({ key: 'traffic', node: <MapButton testId="map-traffic" icon="traffic" label={t('map.traffic')} active={trafficOn} onClick={() => setTraffic(!trafficOn)} /> });
 
   const top = Math.max(MAP_GAP, band + 4);
   const ui = placeMapChrome({ w: size.w, h: size.h, top, btn: cs.map, items: items.length, right: driverRight, avoid, routeBox: !!route, routeBoxAt: routeInfoAt });
-  const shown = items.slice(0, ui.shown);
-  const hidden = items.slice(ui.shown);
-  const step = cs.map + MAP_GAP;
-  const menuH = hidden.length * step - MAP_GAP;
-  const menuTop = Math.max(MAP_GAP, Math.min(size.h - MAP_GAP - menuH, ui.buttons.y + ui.shown * step + cs.map - menuH));
   const speed = kmh(pos?.speed ?? null);
   const box = ui.routeBox;
   const canvas = mode === 'none' ? { x: 0, y: 0, w: size.w, h: size.h } : ui.canvas;
@@ -216,41 +195,25 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
       {mode === 'none' && <NotSetUp />}
       {mode !== 'none' && (
         <>
-          <div data-testid="map-strip" className="absolute bg-surface" style={{ left: ui.strip.x, top: 0, width: ui.strip.w, height: size.h }} />
-          <div
-            className="absolute flex flex-col"
-            style={{ left: ui.buttons.x, top: ui.buttons.y, gap: MAP_GAP }}
-            data-testid="map-controls"
-            data-side={side}
-          >
-            {shown.map((i) => (
-              <Fragment key={i.key}>{i.node}</Fragment>
-            ))}
-            {ui.more && <MapButton testId="map-more" icon="more" label={t('map.more')} active={moreOpen} onClick={() => setMoreOpen((o) => !o)} />}
-            {ui.speed && speed !== null && (
-              <div
-                data-testid="map-speed"
-                style={{ width: cs.map, height: cs.map }}
-                className="tabular flex flex-col items-center justify-center rounded-2xl bg-bg text-text"
-              >
-                <span className="text-[22px] font-bold leading-none">{speed}</span>
-                <span className="text-[11px]">{t('map.kmh')}</span>
-              </div>
-            )}
-          </div>
-          {ui.more && moreOpen && (
-            // Opens over the map beside the strip; any choice closes it.
-            <div
-              data-testid="map-more-menu"
-              className="absolute flex flex-col"
-              style={{ top: menuTop, [side]: ui.strip.w + MAP_GAP, gap: MAP_GAP }}
-              onClick={() => setMoreOpen(false)}
-            >
-              {hidden.map((i) => (
-                <Fragment key={i.key}>{i.node}</Fragment>
-              ))}
-            </div>
-          )}
+          <SideStrip
+            prefix="map"
+            ui={ui}
+            items={items}
+            height={size.h}
+            moreLabel={t('map.more')}
+            extra={
+              speed !== null && (
+                <div
+                  data-testid="map-speed"
+                  style={{ width: cs.map, height: cs.map }}
+                  className="tabular flex flex-col items-center justify-center rounded-2xl bg-bg text-text"
+                >
+                  <span className="text-[22px] font-bold leading-none">{speed}</span>
+                  <span className="text-[11px]">{t('map.kmh')}</span>
+                </div>
+              )
+            }
+          />
           {box && <RouteBox rect={box} />}
           {(notice || geoError) && (
             <div

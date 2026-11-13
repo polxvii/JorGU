@@ -27,7 +27,7 @@ export type MiniCorner = 'auto' | 'tl' | 'tr' | 'bl' | 'br';
 export type DockSize = 'normal' | 'large' | 'xlarge';
 
 export type WebViewMode =
-  | { mode: 'auto'; zoom: 0.75 | 1 | 1.25 | 1.5 }
+  | { mode: 'auto'; zoom: number } // 0.5–2 (viewMode.ts ZOOM_STEPS; the Web menu offers ZOOMS)
   | { mode: 'mobile' }
   | { mode: 'desktop' };
 
@@ -80,6 +80,8 @@ export interface Settings {
     avoidHighways: boolean;
     /** Route box (time, distance, arrival): top or bottom corner of the map. Tap it to switch. */
     routeInfoAt: 'top' | 'bottom';
+    /** Map colours (user 2026-11-13: the day map may read better). Fixed for each map load. */
+    colors: 'day' | 'auto' | 'night';
     savedPlaces: SavedPlace[];
     recentDestinations: string[];
   };
@@ -115,7 +117,7 @@ export function defaultSettings(): Settings {
       fullscreenPane: null,
       driverSide: 'right',
     },
-    map: { mode: 'js', routeLine: true, follow: true, traffic: true, avoidTolls: false, avoidHighways: false, routeInfoAt: 'bottom', savedPlaces: [], recentDestinations: [] },
+    map: { mode: 'js', routeLine: true, follow: true, traffic: true, avoidTolls: false, avoidHighways: false, routeInfoAt: 'bottom', colors: 'day', savedPlaces: [], recentDestinations: [] },
     web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280 },
     youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', playbackRate: 1, autoContinue: true },
     dockSize: 'normal',

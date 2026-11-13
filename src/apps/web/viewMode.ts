@@ -7,6 +7,14 @@ export const MOBILE_MAX_SCALE = 2;
 export const ZOOMS = [0.75, 1, 1.25, 1.5] as const;
 export const DESKTOP_WIDTHS = [1024, 1280, 1440] as const;
 export const AUTO: WebViewMode = { mode: 'auto', zoom: 1 };
+/** Steps for the toolbar's zoom +/- (user 2026-11-13), like a browser's. */
+export const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2] as const;
+
+/** The next zoom step in or out from the page's current scale. */
+export function zoomStep(current: number, dir: 1 | -1): number {
+  if (dir > 0) return ZOOM_STEPS.find((z) => z > current + 0.005) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1];
+  return [...ZOOM_STEPS].reverse().find((z) => z < current - 0.005) ?? ZOOM_STEPS[0];
+}
 
 export interface ViewBox {
   /** Layout width/height the site sees (iframe CSS size before scaling). */

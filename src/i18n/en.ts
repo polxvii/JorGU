@@ -211,6 +211,10 @@ export const en = {
   'web.viewMobile': 'Mobile',
   'web.viewDesktop': 'Desktop',
   'web.zoom': 'Zoom',
+  'web.zoomIn': 'Zoom in',
+  'web.zoomOut': 'Zoom out',
+  'web.zoomReset': 'Zoom: tap for Auto 100%',
+  'web.more': 'More',
   'web.desktopWidth': 'Desktop width',
   'web.viewHelp': "If the layout doesn't change, this site chooses it by device type.",
   'fs.webMenu': 'Web menu',
@@ -291,6 +295,10 @@ export const en = {
   'map.routeInfoMove': 'Tap to move it to the other corner (top / bottom)',
   'settings.routeInfoTop': 'Route box: top',
   'settings.routeInfoBottom': 'Route box: bottom',
+  'settings.mapColorsDay': 'Map: day',
+  'settings.mapColorsAuto': 'Map: with night mode',
+  'settings.mapColorsNight': 'Map: night',
+  'settings.mapColorsHint': 'Applies the next time JorGu opens (reload the page). Changing it on the spot would need a new map load.',
   'map.more': 'More',
 } as const;
 

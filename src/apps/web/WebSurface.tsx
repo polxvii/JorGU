@@ -10,7 +10,11 @@ import { useT } from '../../i18n';
 import { Icon } from '../../shell/Icon';
 import { checkFrame } from './frameCheck';
 import { hostLabel, toHttps } from './normalizeUrl';
-import { resolveViewMode, sameView, viewBox } from './viewMode';
+import { MAP_GAP, placeMapChrome } from '../map/mapChrome';
+import type { Rect } from '../../shell/geometry';
+import { SideStrip, StripButton, type StripItem } from '../../shell/SideStrip';
+import { useControlSize } from '../../shell/useControlSize';
+import { AUTO, resolveViewMode, sameView, viewBox, zoomStep } from './viewMode';
 import { NewTabLink } from './WebHeaderControls';
 import { SiteLists, UrlForm } from './WebParts';
 import { useWebUi } from './webStore';
@@ -21,10 +25,16 @@ type WebRef = Extract<AppRef, { kind: 'web' }>;
 const SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation';
 const ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture';
 
-export function WebSurface({ app, surfaceId, band }: { app: WebRef; surfaceId: SurfaceId; band: number }) {
+/** `size` and `avoid` (mini player, full-screen bar; relative to the surface) place the page's toolbar strip. */
+interface Place {
+  size: { w: number; h: number };
+  avoid: Rect[];
+}
+
+export function WebSurface({ app, surfaceId, band, size, avoid }: { app: WebRef; surfaceId: SurfaceId; band: number } & Place) {
   if (!app.url) return <StartPage id={app.id} band={band} />;
   // A new URL is a new page: remount (and reload) only then.
-  return <WebPage key={app.url} app={app} surfaceId={surfaceId} band={band} />;
+  return <WebPage key={app.url} app={app} surfaceId={surfaceId} band={band} size={size} avoid={avoid} />;
 }
 
 function StartPage({ id, band }: { id: WebInstanceId; band: number }) {
@@ -40,7 +50,7 @@ function StartPage({ id, band }: { id: WebInstanceId; band: number }) {
   );
 }
 
-function WebPage({ app, surfaceId, band }: { app: WebRef; surfaceId: SurfaceId; band: number }) {
+function WebPage({ app, surfaceId, band, size, avoid }: { app: WebRef; surfaceId: SurfaceId; band: number } & Place) {
   const embed = toHttps(app.url);
   const typedHttp = embed !== app.url;
   const [check, setCheck] = useState<FrameCheckResult | null>(null);
@@ -58,7 +68,7 @@ function WebPage({ app, surfaceId, band }: { app: WebRef; surfaceId: SurfaceId; 
   if (check.status === 'unknown' && typedHttp && !tryHttps) {
     return <Notice band={band} id={app.id} kind="insecure" url={app.url} onTryHttps={() => setTryHttps(true)} />;
   }
-  return <ScaledFrame id={app.id} url={app.url} src={embed} surfaceId={surfaceId} band={band} status={check.status} />;
+  return <ScaledFrame id={app.id} url={app.url} src={embed} surfaceId={surfaceId} band={band} status={check.status} place={{ size, avoid }} />;
 }
 
 function Notice({ id, url, band, kind, onTryHttps }: {
@@ -107,14 +117,19 @@ function Notice({ id, url, band, kind, onTryHttps }: {
   );
 }
 
-function ScaledFrame({ id, url, src, surfaceId, band, status }: {
+function ScaledFrame({ id, url, src, surfaceId, band, status, place }: {
   id: WebInstanceId;
   url: string;
   src: string;
   surfaceId: SurfaceId;
   band: number;
   status: FrameCheckResult['status'];
+  place: Place;
 }) {
+  const t = useT();
+  const cs = useControlSize();
+  const driverRight = useSettings((s) => s.layout.driverSide) === 'right';
+  const setViewMode = useSettings((s) => s.setViewMode);
   const wrap = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
@@ -147,8 +162,69 @@ function ScaledFrame({ id, url, src, surfaceId, band, status }: {
   useEffect(() => () => setViewPending(id, false), [id, setViewPending]);
 
   const v = size ? viewBox(mode, size.w, size.h, desktopWidth) : null;
+
+  // Toolbar (user 2026-11-13): Mobile / Desktop layout and zoom, one tap away instead of in the Web menu. Zoom +/-
+  // steps from what's on screen now; in Mobile or Desktop it goes back to Auto at that zoom.
+  const scale = v?.scale ?? (mode.mode === 'auto' ? mode.zoom : 1);
+  const items: StripItem[] = [
+    {
+      key: 'mobile',
+      node: (
+        <StripButton
+          testId={`web-mobile-${id}`}
+          icon="phone"
+          label={t('web.viewMobile')}
+          active={mode.mode === 'mobile'}
+          onClick={() => setViewMode(url, mode.mode === 'mobile' ? AUTO : { mode: 'mobile' })}
+        />
+      ),
+    },
+    {
+      key: 'desktop',
+      node: (
+        <StripButton
+          testId={`web-desktop-${id}`}
+          icon="desktop"
+          label={t('web.viewDesktop')}
+          active={mode.mode === 'desktop'}
+          onClick={() => setViewMode(url, mode.mode === 'desktop' ? AUTO : { mode: 'desktop' })}
+        />
+      ),
+    },
+    {
+      key: 'zoomIn',
+      node: <StripButton testId={`web-zoom-in-${id}`} icon="plus" label={t('web.zoomIn')} onClick={() => setViewMode(url, { mode: 'auto', zoom: zoomStep(scale, 1) })} />,
+    },
+    {
+      key: 'zoom',
+      node: <StripButton testId={`web-zoom-reset-${id}`} text={`${Math.round(scale * 100)}%`} label={t('web.zoomReset')} onClick={() => setViewMode(url, AUTO)} />,
+    },
+    {
+      key: 'zoomOut',
+      node: <StripButton testId={`web-zoom-out-${id}`} icon="minus" label={t('web.zoomOut')} onClick={() => setViewMode(url, { mode: 'auto', zoom: zoomStep(scale, -1) })} />,
+    },
+  ];
+  const ui = placeMapChrome({
+    w: place.size.w,
+    h: place.size.h,
+    top: Math.max(MAP_GAP, band + 4),
+    btn: cs.map,
+    items: items.length,
+    right: driverRight,
+    avoid: place.avoid,
+    routeBox: false,
+    routeBoxAt: 'bottom',
+  });
   return (
-    <div ref={wrap} className="absolute inset-x-0 bottom-0 overflow-hidden bg-bg" style={{ top: band }} data-testid={`web-page-${id}`} data-check={status}>
+    <>
+      <SideStrip prefix={`web-${id}`} ui={ui} items={items} height={place.size.h} moreLabel={t('web.more')} />
+      <div
+        ref={wrap}
+        className="absolute bottom-0 overflow-hidden bg-bg"
+        style={{ top: band, left: ui.canvas.x, width: ui.canvas.w }}
+        data-testid={`web-page-${id}`}
+        data-check={status}
+      >
       {v && (
         <iframe
           ref={frame}
@@ -175,6 +251,7 @@ function ScaledFrame({ id, url, src, surfaceId, band, status }: {
           }}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }

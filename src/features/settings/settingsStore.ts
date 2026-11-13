@@ -29,6 +29,7 @@ export interface SettingsActions {
   setMapTraffic: (on: boolean) => void;
   setMapAvoid: (what: 'avoidTolls' | 'avoidHighways', on: boolean) => void;
   setRouteInfoAt: (at: 'top' | 'bottom') => void;
+  setMapColors: (colors: 'day' | 'auto' | 'night') => void;
   addSavedPlace: (label: string, query: string) => void;
   removeSavedPlace: (id: string) => void;
   addRecentDestination: (destination: string) => void;
@@ -86,6 +87,7 @@ export const useSettings = create<SettingsState>()(
       setMapTraffic: (traffic) => set((s) => ({ map: { ...s.map, traffic } })),
       setMapAvoid: (what, on) => set((s) => ({ map: { ...s.map, [what]: on } })),
       setRouteInfoAt: (routeInfoAt) => set((s) => ({ map: { ...s.map, routeInfoAt } })),
+      setMapColors: (colors) => set((s) => ({ map: { ...s.map, colors } })),
       addSavedPlace: (label, query) =>
         set((s) => ({
           map: {

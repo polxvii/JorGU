@@ -125,16 +125,20 @@ type Sizes = (typeof CONTROL_SIZES)[DockSize];
 export const ytStripWidth = (cs: Sizes) => cs.rowWide + 2 * YT_STRIP_PAD;
 /** prev, −10, play, +10, next, mute, speed, queue, library in one row. */
 const ytRowWidth = (cs: Sizes) => 7 * cs.rowNarrow + 2 * cs.rowWide + 8 * 2 + 2 * YT_STRIP_PAD;
+/** Largest the row's buttons grow to fill the pane's width. */
+export const YT_MAX_SCALE = 1.75;
+
 /**
- * Rows under the player: one row, its buttons shrunk to fit (user 2026-11-13: not two rows in two panes), down to
- * 36 px wide buttons; narrower than that, two rows at full size. `k` scales the buttons.
+ * Rows under the player: one row whose buttons fill the pane's width (user 2026-11-13, car photo: small buttons with
+ * empty space either side), growing as far as `freeH` (height left under the player) allows, up to 1.75×; shrunk to
+ * fit when the pane is narrow, down to 36 px wide buttons; narrower than that, two rows at full size. `k` scales them.
  */
-export function ytBelowFit(width: number, cs: Sizes): { rows: 1 | 2; k: number } {
+export function ytBelowFit(width: number, cs: Sizes, freeH = 0): { rows: 1 | 2; k: number } {
   const full = ytRowWidth(cs);
-  if (full <= width) return { rows: 1, k: 1 };
   const fixed = 8 * 2 + 2 * YT_STRIP_PAD;
-  const k = Math.floor(((width - fixed) / (full - fixed)) * 100) / 100;
-  return k >= Math.max(0.6, 36 / cs.rowNarrow) ? { rows: 1, k } : { rows: 2, k: 1 };
+  const fit = Math.floor(((width - fixed) / (full - fixed)) * 100) / 100;
+  if (fit >= 1) return { rows: 1, k: Math.max(1, Math.floor(Math.min(fit, 1 + Math.max(0, freeH) / cs.row, YT_MAX_SCALE) * 100) / 100) };
+  return fit >= Math.max(0.6, 36 / cs.rowNarrow) ? { rows: 1, k: fit } : { rows: 2, k: 1 };
 }
 export function ytRowsBelow(width: number, cs: Sizes): number {
   return ytBelowFit(width, cs).rows;
@@ -167,13 +171,16 @@ function ytPaneLayout(s: Rect, cs: Sizes, driverRight: boolean): { player: Rect;
       scale: 1,
     };
   }
-  const centred = { ...player, y: player.y + Math.max(0, Math.floor((areaH - player.h - ch) / 2)) };
+  // The player keeps its size; the row grows into the height left under it.
+  const fit = ytBelowFit(s.w, cs, areaH - player.h - ch);
+  const rowH = fit.rows * Math.round(cs.row * fit.k) + (fit.rows - 1) * YT_ROW_GAP + 2 * YT_STRIP_PAD;
+  const centred = { ...player, y: player.y + Math.max(0, Math.floor((areaH - player.h - rowH) / 2)) };
   const cy = centred.y + centred.h;
   return {
     player: centred,
-    controls: { x: s.x, y: cy, w: s.w, h: Math.max(0, Math.min(ch, bottom(s) - cy)) },
+    controls: { x: s.x, y: cy, w: s.w, h: Math.max(0, Math.min(rowH, bottom(s) - cy)) },
     side: false,
-    scale: ytBelowFit(s.w, cs).k,
+    scale: fit.k,
   };
 }
 

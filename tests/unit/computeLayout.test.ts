@@ -55,7 +55,15 @@ describe('computeLayout defaults (§6.4)', () => {
     // the side strip made the video small in two panes).
     // Player and row centred up and down below the header band (user 2026-11-13): (544 - 263 - 64) / 2 = 108.
     expect(r.youtube.player).toEqual({ x: 0, y: L.YT_BAND + 108, w: 468, h: 263 });
-    expect(r.youtube).toMatchObject({ side: false, controlsScale: 1, controls: { x: 0, y: L.YT_BAND + 108 + 263, w: 468, h: 64 } });
+    // The row's buttons grow to fill the pane's width (user 2026-11-13): 468 px holds 1.03× here.
+    expect(r.youtube).toMatchObject({ side: false, controlsScale: 1.03, controls: { x: 0, y: L.YT_BAND + 108 + 263, w: 468, h: 65 } });
+    // A wider pane: bigger buttons, as far as the room under the player allows, at most 1.75×.
+    const wide = computeLayout(input({ viewport: { width: 1280, height: 800 } }));
+    expect(wide.youtube.controlsScale).toBeCloseTo(1.34, 2);
+    expect(wide.youtube.controls!.h).toBe(Math.round(48 * 1.34) + 16);
+    expect(intersects(wide.youtube.controls!, wide.youtube.player!)).toBe(false);
+    expect(ytBelowFit(2000, CONTROL_SIZES.normal, 1000).k).toBe(1.75);
+    expect(ytBelowFit(2000, CONTROL_SIZES.normal, 12).k).toBe(1.25);
   });
 
   it('a row that would wrap shrinks to one line first (down to 36 px buttons), then wraps', () => {

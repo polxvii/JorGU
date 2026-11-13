@@ -13,11 +13,12 @@ export interface StripItem {
   node: ReactNode;
 }
 
-export function StripButton({ icon, label, onClick, active, testId, text }: {
+export function StripButton({ icon, label, onClick, active, testId, text, disabled }: {
   icon?: IconName;
   label: string;
   onClick: () => void;
   active?: boolean;
+  disabled?: boolean;
   testId: string;
   /** Short text instead of an icon (e.g. "125%"). */
   text?: string;
@@ -30,9 +31,10 @@ export function StripButton({ icon, label, onClick, active, testId, text }: {
       aria-label={label}
       title={label}
       aria-pressed={active}
+      disabled={disabled}
       onClick={onClick}
       style={{ width: cs.map, height: cs.map, direction: 'ltr' }}
-      className={`${STRIP_BUTTON} ${active ? 'bg-accent text-on-accent' : 'bg-surface text-text'}`}
+      className={`${STRIP_BUTTON} ${active ? 'bg-accent text-on-accent' : 'bg-surface text-text'} disabled:opacity-35`}
     >
       {text ? <span className="tabular text-[15px] font-bold">{text}</span> : icon && <Icon name={icon} size={cs.mapIcon} />}
     </button>

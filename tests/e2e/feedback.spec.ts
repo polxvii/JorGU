@@ -67,7 +67,11 @@ test('Dock size setting: Large makes the right toolbar wider and its buttons big
   expect((await box(page, '[data-testid="dock-swap"]')).width).toBe(80);
   await expectPlayerClear(page);
   // The same setting sizes the transport row under the clip title and the map's buttons (user 2026-11-12) …
-  expect((await box(page, '[data-testid="yt-toggle"]')).height).toBe(64);
+  // (In two panes the row under the player shrinks to stay on one line, user 2026-11-13: 64 px × its scale.)
+  const k = Number(await page.getByTestId('yt-transport').getAttribute('data-scale'));
+  expect(k).toBeGreaterThan(0.6);
+  expect((await box(page, '[data-testid="yt-toggle"]')).height).toBe(Math.round(64 * k));
+  expect((await box(page, '[data-testid="yt-transport"]')).height).toBeLessThan(2 * 64);
   expect((await box(page, '[data-testid="map-recenter"]')).width).toBe(72);
   // … and the YouTube full-screen column; the player still never has anything over it.
   await page.getByTestId('pane-fullscreen-0').click();

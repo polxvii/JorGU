@@ -212,6 +212,8 @@ export const en = {
   'web.viewDesktop': 'Desktop',
   'web.zoom': 'Zoom',
   'web.zoomIn': 'Zoom in',
+  'web.back': 'Back',
+  'web.forward': 'Forward',
   'web.zoomOut': 'Zoom out',
   'web.zoomReset': 'Zoom: tap for Auto 100%',
   'web.more': 'More',

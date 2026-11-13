@@ -1,5 +1,6 @@
 // Small YouTube controls shared by the transport row, full-screen column, mini handle and queue sheet:
 // back/ahead 10 s and mute (user requests 2026-11-11).
+import { createContext, useContext } from 'react';
 import { useT } from '../../i18n';
 import { Icon } from '../../shell/Icon';
 import { useControlSize } from '../../shell/useControlSize';
@@ -7,11 +8,16 @@ import { seekBy, toggleMute, usePlayerUi } from './player';
 
 type Size = 'md' | 'row' | 'lg';
 
+/** Shrinks the pane's transport row to fit one line (computeLayout `controlsScale`, user 2026-11-13). */
+export const RowScale = createContext(1);
+
 /** md: fixed (mini handle, queue sheet); row: transport row under the title; lg: full screen. row and lg follow Toolbar size. */
 function useDims(size: Size) {
   const cs = useControlSize();
+  const k = useContext(RowScale);
   if (size === 'lg') return { style: { width: cs.big, height: cs.big }, box: 'rounded-2xl bg-surface', icon: cs.bigIcon - 4, text: 'text-[13px]' };
-  if (size === 'row') return { style: { width: cs.rowNarrow, height: cs.row }, box: 'rounded-full', icon: Math.round(cs.rowIcon * 0.77), text: 'text-[11px]' };
+  if (size === 'row')
+    return { style: { width: Math.round(cs.rowNarrow * k), height: Math.round(cs.row * k) }, box: 'rounded-full', icon: Math.round(cs.rowIcon * 0.77 * k), text: 'text-[11px]' };
   return { style: { width: 44, height: 48 }, box: 'rounded-full', icon: 20, text: 'text-[11px]' };
 }
 

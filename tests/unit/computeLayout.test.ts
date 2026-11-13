@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type AppRef, defaultSettings, type LayoutSettings, type MiniPlayerSize } from '../../src/features/settings/types';
-import { CONTROL_SIZES, computeLayout, type LayoutInput, type LayoutResult, L, ytPaneMinHeight } from '../../src/shell/computeLayout';
+import { CONTROL_SIZES, computeLayout, type LayoutInput, type LayoutResult, L, ytBelowFit, ytPaneMinHeight } from '../../src/shell/computeLayout';
 import { type Rect, bottom, intersects } from '../../src/shell/geometry';
 import { YT_MIN_HEIGHT } from '../../src/shell/splitRatio';
 
@@ -53,8 +53,22 @@ describe('computeLayout defaults (§6.4)', () => {
     expect(r.youtube.mode).toBe('pane');
     // A tall pane: the controls go in a row under the player, which keeps the pane's full width (user 2026-11-13:
     // the side strip made the video small in two panes).
-    expect(r.youtube.player).toEqual({ x: 0, y: L.YT_BAND, w: 468, h: 263 });
-    expect(r.youtube).toMatchObject({ side: false, controls: { x: 0, y: L.YT_BAND + 263, w: 468 } });
+    // Player and row centred up and down below the header band (user 2026-11-13): (544 - 263 - 64) / 2 = 108.
+    expect(r.youtube.player).toEqual({ x: 0, y: L.YT_BAND + 108, w: 468, h: 263 });
+    expect(r.youtube).toMatchObject({ side: false, controlsScale: 1, controls: { x: 0, y: L.YT_BAND + 108 + 263, w: 468, h: 64 } });
+  });
+
+  it('a row that would wrap shrinks to one line first (down to 36 px buttons), then wraps', () => {
+    const cs = CONTROL_SIZES.normal;
+    expect(ytBelowFit(452, cs)).toEqual({ rows: 1, k: 1 });
+    expect(ytBelowFit(400, cs)).toEqual({ rows: 1, k: 0.87 });
+    expect(ytBelowFit(330, cs).rows).toBe(2);
+    expect(ytBelowFit(400, CONTROL_SIZES.xlarge).rows).toBe(1);
+    // In a split, the row under the player never wraps when it can shrink.
+    const narrow = computeLayout(input({ viewport: { width: 900, height: 600 } }));
+    expect(narrow.youtube).toMatchObject({ side: false });
+    expect(narrow.youtube.controls!.h).toBeLessThan(80);
+    expect(narrow.youtube.controlsScale).toBeLessThan(1);
   });
 
   it('a wide YouTube pane keeps the side strip: rows below would not make the video clearly bigger', () => {

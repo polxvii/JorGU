@@ -15,6 +15,7 @@ import type { Rect } from '../../shell/geometry';
 import { SideStrip, StripButton, type StripItem } from '../../shell/SideStrip';
 import { useControlSize } from '../../shell/useControlSize';
 import { AUTO, resolveViewMode, sameView, viewBox, zoomStep } from './viewMode';
+import { canGoBack, canGoForward, frameGone, frameLoaded, goBack, goForward, installWebHistoryGuard, navigateInPlace, useWebHistory } from './webHistory';
 import { NewTabLink } from './WebHeaderControls';
 import { SiteLists, UrlForm } from './WebParts';
 import { useWebUi } from './webStore';
@@ -148,11 +149,21 @@ function ScaledFrame({ id, url, src, surfaceId, band, status, place }: {
     return () => ro.disconnect();
   }, []);
 
-  // Reload = navigate the same iframe to the page that was opened (a parent can't read a cross-origin frame's URL).
+  // Reload = navigate the same iframe to the page that was opened (a parent can't read a cross-origin frame's URL),
+  // without adding a Back step.
   const firstNonce = useRef(nonce);
   useEffect(() => {
-    if (nonce !== firstNonce.current && frame.current) frame.current.src = src;
-  }, [nonce, src]);
+    if (nonce !== firstNonce.current) navigateInPlace(frame.current, src, id);
+  }, [nonce, src, id]);
+
+  // Back / Forward (user 2026-11-13): steps of this frame, counted from its loads (webHistory.ts).
+  const loads = useRef(0);
+  useEffect(() => {
+    installWebHistoryGuard();
+    return () => frameGone(id);
+  }, [id]);
+  const back = useWebHistory((s) => canGoBack(s, id));
+  const forward = useWebHistory((s) => canGoForward(s, id));
 
   // Some sites only pick their layout at load: after a view change, offer "Reload in this view" (§9.7).
   const loadedMode = useRef(mode);
@@ -167,6 +178,8 @@ function ScaledFrame({ id, url, src, surfaceId, band, status, place }: {
   // steps from what's on screen now; in Mobile or Desktop it goes back to Auto at that zoom.
   const scale = v?.scale ?? (mode.mode === 'auto' ? mode.zoom : 1);
   const items: StripItem[] = [
+    { key: 'back', node: <StripButton testId={`web-back-${id}`} icon="back" label={t('web.back')} disabled={!back} onClick={() => goBack(id)} /> },
+    { key: 'forward', node: <StripButton testId={`web-forward-${id}`} icon="forward" label={t('web.forward')} disabled={!forward} onClick={() => goForward(id)} /> },
     {
       key: 'mobile',
       node: (
@@ -236,7 +249,9 @@ function ScaledFrame({ id, url, src, surfaceId, band, status, place }: {
           data-testid={`web-frame-${id}`}
           data-view={mode.mode}
           data-scale={v.scale.toFixed(3)}
+          data-loads={loads.current}
           onLoad={() => {
+            frameLoaded(id, loads.current++ === 0);
             countFrameLoad(surfaceId);
             loadedMode.current = mode;
             setViewPending(id, false);

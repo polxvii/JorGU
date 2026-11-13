@@ -48,7 +48,7 @@ const SurfaceContent = memo(function SurfaceContent({ id, layout }: { id: Surfac
   }
   if (id === 'youtube') {
     const y = layout.youtube;
-    return <YouTubeSurface surface={y.surface} player={y.player} mode={y.mode} controls={y.controls ?? null} side={!!y.side} />;
+    return <YouTubeSurface surface={y.surface} player={y.player} mode={y.mode} controls={y.controls ?? null} side={!!y.side} scale={y.controlsScale ?? 1} />;
   }
   const web = lastWeb.get(id);
   // Full screen gives the site the whole surface; in a pane the header band sits above it.

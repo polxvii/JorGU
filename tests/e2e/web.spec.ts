@@ -52,6 +52,37 @@ test('allowed site: Mobile ↔ Desktop switches the layout without reloading, an
   await expect(frame(page).locator('body')).toHaveAttribute('data-width', '400');
 });
 
+test('web Back / Forward step the page in its own pane, never leave JorGu; Reload adds no step', async ({ page }) => {
+  await mockWeb(page);
+  await openApp(page, webPanes(SITE));
+  await waitForFrames(page, ['web:w1']);
+  const f = frame(page);
+  const back = page.getByTestId('web-back-w1');
+  const forward = page.getByTestId('web-forward-w1');
+  await expect(back).toBeDisabled();
+  await expect(forward).toBeDisabled();
+  // A link inside the site: a new page, so Back lights up.
+  await f.locator('#next').click();
+  await expect(f.locator('#page')).toHaveText('?page=2');
+  await expect(back).toBeEnabled();
+  // Reload goes to the page that was opened, without a new step.
+  await page.getByTestId('web-reload-0').click();
+  await expect(f.locator('#page')).toHaveText('');
+  await f.locator('#next').click();
+  await expect(f.locator('#page')).toHaveText('?page=2');
+  await back.click();
+  await expect(f.locator('#page')).toHaveText('');
+  await expect(forward).toBeEnabled();
+  await forward.click();
+  await expect(f.locator('#page')).toHaveText('?page=2');
+  await back.click();
+  await back.click();
+  await expect(f.locator('#page')).toHaveText('');
+  // Still JorGu, still the same page in the pane.
+  await expect(page.locator('#jorgu-root')).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe('/');
+});
+
 test('web toolbar: Mobile / Desktop and zoom one tap away, on the driver-side edge, without reloading', async ({ page }) => {
   await mockWeb(page);
   await openApp(page, webPanes(SITE));
@@ -88,7 +119,12 @@ test('web toolbar: Mobile / Desktop and zoom one tap away, on the driver-side ed
   await expect(page.getByTestId('web-zoom-reset-w1')).toHaveText('90%');
   // Same page all along.
   await expect(f.locator('#token')).toHaveText(token!);
-  await expectNoReloads(page, before);
+  await expectNoReloads(page, before);  // Remembered for the site after a reload (user 2026-11-13: zoom seemed not to stick).
+  await page.getByTestId('web-zoom-out-w1').click();
+  await expect(page.getByTestId('web-zoom-reset-w1')).toHaveText('75%');
+  await page.reload();
+  await expect(page.getByTestId('web-zoom-reset-w1')).toHaveText('75%');
+  await expect(page.getByTestId('web-frame-w1')).toHaveAttribute('data-scale', '0.750');
 });
 
 test('"Reload in this view" reloads the page in place', async ({ page }) => {

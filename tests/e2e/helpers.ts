@@ -115,7 +115,9 @@ export const TEST_SITE_HTML = `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Test site</title>
 <style>body{margin:0;font:16px sans-serif;background:#fff;color:#111} button{width:220px;height:64px;font-size:18px}</style>
 </head><body><p id="layout"></p><p id="token"></p><button id="tap">Tap me</button><p id="count">0</p>
+<a id="next" href="?page=2">Next page</a><p id="page"></p>
 <script>
+document.getElementById('page').textContent = location.search;
 var n = 0;
 document.getElementById('token').textContent = Math.random().toString(36).slice(2);
 document.getElementById('tap').onclick = function () { n += 1; document.getElementById('count').textContent = String(n); };

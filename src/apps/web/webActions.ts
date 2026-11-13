@@ -57,12 +57,13 @@ export function removeBookmark(web: Web, id: string): Web {
   return { ...web, bookmarks: web.bookmarks.filter((b) => b.id !== id) };
 }
 
-/** Remember the view per origin (§9.7), and on the page's bookmark if it has one. */
+/** Remember the view per origin (§9.7), and on that site's bookmarks. */
 export function setViewModeFor(web: Web, url: string, mode: WebViewMode): Web {
   const origin = originOf(url);
   return {
     ...web,
     viewModes: origin ? { ...web.viewModes, [origin]: mode } : web.viewModes,
-    bookmarks: web.bookmarks.map((b) => (b.url === url ? { ...b, viewMode: mode } : b)),
+    // The whole site (user 2026-11-13): a bookmark of the same site with an older choice would otherwise win.
+    bookmarks: web.bookmarks.map((b) => (b.url === url || (origin && originOf(b.url) === origin) ? { ...b, viewMode: mode } : b)),
   };
 }

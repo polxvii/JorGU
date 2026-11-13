@@ -10,7 +10,7 @@ import { useAccount } from './account/accountStore';
 import { openLibrary } from './library/libraryNav';
 import { SpeedButton } from './SpeedButton';
 import { useControlSize } from '../../shell/useControlSize';
-import { MuteButton, SeekButton } from './TransportButtons';
+import { MuteButton, RowScale, SeekButton } from './TransportButtons';
 import { attachHost, next, preparePlayer, previous, togglePlay, usePlayerUi } from './player';
 
 function EmptyPlayer() {
@@ -54,13 +54,16 @@ function EmptyPlayer() {
 type Slot = { key: string; prio: number; el: ReactNode };
 
 /** Transport controls: a strip beside the player, or 1–2 rows under it (layout engine decides; never over it). */
-function Controls({ rect, side }: { rect: Rect; side: boolean }) {
+function Controls({ rect, side, scale }: { rect: Rect; side: boolean; scale: number }) {
   const t = useT();
   const status = usePlayerUi((s) => s.status);
   const openSheet = useUi((s) => s.openSheet);
   const playing = status === 'playing' || status === 'buffering';
   // Toolbar size (Settings) scales these too (user 2026-11-12).
-  const cs = useControlSize();
+  // Under the player the row may be shrunk to fit one line (`scale`, user 2026-11-13).
+  const base = useControlSize();
+  const k = side ? 1 : scale;
+  const cs = { ...base, row: Math.round(base.row * k), rowNarrow: Math.round(base.rowNarrow * k), rowWide: Math.round(base.rowWide * k), rowIcon: Math.round(base.rowIcon * k) };
   const small = 'flex shrink-0 items-center justify-center rounded-full text-text';
   const sm = { width: cs.rowNarrow, height: cs.row };
   const slots: Slot[] = [
@@ -106,22 +109,33 @@ function Controls({ rect, side }: { rect: Rect; side: boolean }) {
     if (!keep.has(s.key) && keep.size + group.length <= fits) for (const k of group) keep.add(k);
   }
   return (
-    <div
-      data-testid="yt-transport"
-      data-side={side ? '1' : '0'}
-      className={`absolute flex items-center justify-center ${side ? 'flex-col justify-start bg-surface' : 'flex-wrap content-center'}`}
-      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, padding: YT_STRIP_PAD, rowGap: YT_ROW_GAP, columnGap: side ? 0 : 2 }}
-    >
-      {slots
-        .filter((s) => keep.has(s.key))
-        .map((s) => (
-          <Fragment key={s.key}>{s.el}</Fragment>
-        ))}
-    </div>
+    <RowScale.Provider value={k}>
+      <div
+        data-testid="yt-transport"
+        data-side={side ? '1' : '0'}
+        data-scale={k}
+        // Centred up and down beside the (centred) player, like the row under it (user 2026-11-13).
+        className={`absolute flex items-center justify-center ${side ? 'flex-col bg-surface' : 'flex-wrap content-center'}`}
+        style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, padding: YT_STRIP_PAD, rowGap: YT_ROW_GAP, columnGap: side ? 0 : 2 }}
+      >
+        {slots
+          .filter((s) => keep.has(s.key))
+          .map((s) => (
+            <Fragment key={s.key}>{s.el}</Fragment>
+          ))}
+      </div>
+    </RowScale.Provider>
   );
 }
 
-export function YouTubeSurface({ surface, player, mode, controls, side }: { surface: Rect; player: Rect | null; mode: YtMode; controls: Rect | null; side: boolean }) {
+export function YouTubeSurface({ surface, player, mode, controls, side, scale }: {
+  surface: Rect;
+  player: Rect | null;
+  mode: YtMode;
+  controls: Rect | null;
+  side: boolean;
+  scale: number;
+}) {
   const status = usePlayerUi((s) => s.status);
   const hostRef = useCallback((el: HTMLDivElement | null) => attachHost(el), []);
   useEffect(() => preparePlayer(), []);
@@ -138,7 +152,7 @@ export function YouTubeSurface({ surface, player, mode, controls, side }: { surf
         {(status === 'idle' || (status === 'error' && !usePlayerUi.getState().videoId)) && <EmptyPlayer />}
       </div>
       {mode === 'pane' && player && controls && (
-        <Controls rect={{ x: controls.x - surface.x, y: controls.y - surface.y, w: controls.w, h: controls.h }} side={side} />
+        <Controls rect={{ x: controls.x - surface.x, y: controls.y - surface.y, w: controls.w, h: controls.h }} side={side} scale={scale} />
       )}
     </div>
   );

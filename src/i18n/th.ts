@@ -214,6 +214,8 @@ export const th: Partial<Record<MessageKey, string>> = {
   'web.viewMobile': 'มือถือ',
   'web.viewDesktop': 'เดสก์ท็อป',
   'web.zoomIn': 'ขยาย',
+  'web.back': 'ย้อนกลับ',
+  'web.forward': 'ไปข้างหน้า',
   'web.zoomOut': 'ย่อ',
   'web.zoomReset': 'ซูม: แตะเพื่อกลับเป็นอัตโนมัติ 100%',
   'web.more': 'เพิ่มเติม',

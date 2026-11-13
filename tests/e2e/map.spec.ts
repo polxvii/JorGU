@@ -195,7 +195,7 @@ test("the line can't be drawn (Routes refused, or the daily route limit): the ro
   await page.getByTestId('map-navigate').click();
   await page.getByTestId('map-dest-input').fill('Central World');
   await page.getByTestId('map-dest-go').click();
-  await expect(page.getByTestId('map-embed')).toHaveAttribute('src', /\/maps\/embed\/v1\/directions\?.*destination=Central\+World/);
+  await expect(page.getByTestId('map-embed')).toHaveAttribute('data-src', /\/maps\/embed\/v1\/directions\?.*destination=Central\+World/);
   await expect(page.getByTestId('map-route-detail')).toContainText('simple map');
   await expect(page.getByTestId('map-route-navigate')).toBeVisible();
   // Route limit used up: no Routes call at all.
@@ -209,7 +209,7 @@ test("the line can't be drawn (Routes refused, or the daily route limit): the ro
   await page.getByTestId('map-navigate').click();
   await page.getByTestId('map-dest-input').fill('Siam Paragon');
   await page.getByTestId('map-dest-go').click();
-  await expect(page.getByTestId('map-embed')).toHaveAttribute('src', /destination=Siam\+Paragon/);
+  await expect(page.getByTestId('map-embed')).toHaveAttribute('data-src', /destination=Siam\+Paragon/);
   await expect(page.getByTestId('map-route-detail')).toContainText('Route limit reached');
   expect((await stub(page)).routes).toBe(0);
 });
@@ -221,7 +221,7 @@ test('Settings → route on the simple map: the route shows in the free Embed vi
   await page.getByTestId('map-navigate').click();
   await page.getByTestId('map-dest-input').fill('Central World');
   await page.getByTestId('map-dest-go').click();
-  await expect(page.getByTestId('map-embed')).toHaveAttribute('src', /\/maps\/embed\/v1\/directions\?.*destination=Central\+World.*&avoid=tolls/);
+  await expect(page.getByTestId('map-embed')).toHaveAttribute('data-src', /\/maps\/embed\/v1\/directions\?.*destination=Central\+World.*&avoid=tolls/);
   expect(await stub(page)).toMatchObject({ routes: 0, maps: 1 });
   await page.getByTestId('map-route-end').click();
   await expect(page.getByTestId('map-embed')).toHaveCount(0);
@@ -276,13 +276,13 @@ test('mode B (Settings → Simple): Embed map, no billed map load; Show route us
   page.on('popup', () => popups++);
   await openApp(page, { map: { mode: 'embed' } });
   const embed = page.getByTestId('map-embed');
-  await expect(embed).toHaveAttribute('src', /^https:\/\/www\.google\.com\/maps\/embed\/v1\/view\?key=e2e-fake-key/);
+  await expect(embed).toHaveAttribute('data-src', /^https:\/\/www\.google\.com\/maps\/embed\/v1\/view\?key=e2e-fake-key/);
   await expect(embed).toHaveAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
   expect(await page.evaluate(() => window.__mapsStub?.maps ?? 0)).toBe(0);
   await page.getByTestId('map-navigate').click();
   await page.getByTestId('map-dest-input').fill('Siam Paragon');
   await page.getByTestId('map-dest-go').click();
-  await expect(embed).toHaveAttribute('src', /\/maps\/embed\/v1\/directions\?.*destination=Siam\+Paragon/);
+  await expect(embed).toHaveAttribute('data-src', /\/maps\/embed\/v1\/directions\?.*destination=Siam\+Paragon/);
   expect(await page.evaluate(() => window.__mapsStub?.routes ?? 0)).toBe(0);
   expect(popups).toBe(0);
 });

@@ -1,7 +1,7 @@
 // Map app surface (spec §7): mode A (one Maps JavaScript map), mode B (Maps Embed, no charge), or a "not set up"
 // panel where Navigate still works. Our controls stay clear of the mini player and the full-screen bar (§6.6);
 // placement rules live in mapChrome.ts.
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSettings } from '../../features/settings/settingsStore';
 import { useUi } from '../../features/settings/uiStore';
 import { useT } from '../../i18n';
@@ -13,6 +13,7 @@ import { DEFAULT_CENTER, MAPS_KEY } from './config';
 import { kmh, useGeo } from './geo';
 import { attachMap, endRoute, recenter, refollow, setTraffic, showRouteOverview, useMapUi, zoomBy } from './mapController';
 import { mapsNavigateUrl } from './navigate';
+import { navigateInPlace } from '../web/webHistory';
 import { MAP_GAP, placeMapChrome } from './mapChrome';
 import { progress } from './routeMath';
 
@@ -37,11 +38,19 @@ function EmbedFrame({ rect }: { rect: Rect }) {
     return `https://www.google.com/maps/embed/v1/view?${q}`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nonce, route?.destination, !!pos, avoid]);
+  // Later URLs replace the page in place: no history step, so a Web pane's Back never steps this frame instead.
+  const [first] = useState(src);
+  const ref = useRef<HTMLIFrameElement>(null);
+  useEffect(() => {
+    if (src !== first) navigateInPlace(ref.current, src);
+  }, [src, first]);
   return (
     <iframe
+      ref={ref}
       title={t('apps.map')}
       data-testid="map-embed"
-      src={src}
+      data-src={src}
+      src={first}
       className="absolute border-0"
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
       referrerPolicy="strict-origin-when-cross-origin"

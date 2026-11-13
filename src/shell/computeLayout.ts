@@ -90,7 +90,7 @@ export interface LayoutResult {
   splitLength: number;
   surfaces: Partial<Record<SurfaceId, SurfaceBox>>;
   /** In a pane, `controls` is the control strip (side) or the rows under the player (below). */
-  youtube: { mode: YtMode; surface: Rect; player: Rect | null; paneIndex: PaneIndex | null; controls?: Rect | null; side?: boolean };
+  youtube: { mode: YtMode; surface: Rect; player: Rect | null; paneIndex: PaneIndex | null; controls?: Rect | null; side?: boolean; controlsScale?: number };
   floatingBar: { rect: Rect; rows: number; cols: number } | null;
   edgeStrip: Rect | null;
   controlColumn: Rect | null;
@@ -125,15 +125,27 @@ type Sizes = (typeof CONTROL_SIZES)[DockSize];
 export const ytStripWidth = (cs: Sizes) => cs.rowWide + 2 * YT_STRIP_PAD;
 /** prev, −10, play, +10, next, mute, speed, queue, library in one row. */
 const ytRowWidth = (cs: Sizes) => 7 * cs.rowNarrow + 2 * cs.rowWide + 8 * 2 + 2 * YT_STRIP_PAD;
+/**
+ * Rows under the player: one row, its buttons shrunk to fit (user 2026-11-13: not two rows in two panes), down to
+ * 36 px wide buttons; narrower than that, two rows at full size. `k` scales the buttons.
+ */
+export function ytBelowFit(width: number, cs: Sizes): { rows: 1 | 2; k: number } {
+  const full = ytRowWidth(cs);
+  if (full <= width) return { rows: 1, k: 1 };
+  const fixed = 8 * 2 + 2 * YT_STRIP_PAD;
+  const k = Math.floor(((width - fixed) / (full - fixed)) * 100) / 100;
+  return k >= Math.max(0.6, 36 / cs.rowNarrow) ? { rows: 1, k } : { rows: 2, k: 1 };
+}
 export function ytRowsBelow(width: number, cs: Sizes): number {
-  return ytRowWidth(cs) <= width ? 1 : 2;
+  return ytBelowFit(width, cs).rows;
 }
 const ytBelowHeight = (width: number, cs: Sizes) => {
-  const rows = ytRowsBelow(width, cs);
-  return rows * cs.row + (rows - 1) * YT_ROW_GAP + 2 * YT_STRIP_PAD;
+  const { rows, k } = ytBelowFit(width, cs);
+  return rows * Math.round(cs.row * k) + (rows - 1) * YT_ROW_GAP + 2 * YT_STRIP_PAD;
 };
 
-function ytPaneLayout(s: Rect, cs: Sizes, driverRight: boolean): { player: Rect; controls: Rect; side: boolean } {
+/** The player and its controls, centred up and down in the pane below the header band (user 2026-11-13). */
+function ytPaneLayout(s: Rect, cs: Sizes, driverRight: boolean): { player: Rect; controls: Rect; side: boolean; scale: number } {
   const sw = ytStripWidth(cs);
   const areaW = s.w - sw;
   const areaH = s.h - L.YT_BAND;
@@ -149,13 +161,20 @@ function ytPaneLayout(s: Rect, cs: Sizes, driverRight: boolean): { player: Rect;
   if (w >= YT_MIN_WIDTH && h >= 200 && !(belowOk && player.w * player.h > 1.1 * w * h)) {
     const x0 = driverRight ? s.x : s.x + sw;
     return {
-      player: { x: x0 + Math.floor((areaW - w) / 2), y: s.y + L.YT_BAND, w, h },
+      player: { x: x0 + Math.floor((areaW - w) / 2), y: s.y + L.YT_BAND + Math.floor((areaH - h) / 2), w, h },
       controls: { x: driverRight ? right(s) - sw : s.x, y: s.y + L.YT_BAND, w: sw, h: areaH },
       side: true,
+      scale: 1,
     };
   }
-  const cy = player.y + player.h;
-  return { player, controls: { x: s.x, y: cy, w: s.w, h: Math.max(0, Math.min(ch, bottom(s) - cy)) }, side: false };
+  const centred = { ...player, y: player.y + Math.max(0, Math.floor((areaH - player.h - ch) / 2)) };
+  const cy = centred.y + centred.h;
+  return {
+    player: centred,
+    controls: { x: s.x, y: cy, w: s.w, h: Math.max(0, Math.min(ch, bottom(s) - cy)) },
+    side: false,
+    scale: ytBelowFit(s.w, cs).k,
+  };
 }
 
 /** Shortest stacked YouTube pane of this width that still holds a ≥ 356×200 player and its controls. */
@@ -496,7 +515,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
   if (ytIdx !== null && rects[ytIdx]) {
     const s = rects[ytIdx]!;
     const pl = ytPaneLayout(s, CS, driverRight);
-    yt = { mode: 'pane', surface: s, player: pl.player, controls: pl.controls, side: pl.side, paneIndex: ytIdx };
+    yt = { mode: 'pane', surface: s, player: pl.player, controls: pl.controls, side: pl.side, controlsScale: pl.scale, paneIndex: ytIdx };
   } else if (showMiniWhenOff) {
     mini = miniBox(appArea, input.youtube.miniSize, at);
     yt = { mode: 'mini', surface: mini.rect, player: mini.rect, paneIndex: ytIdx };
@@ -517,7 +536,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
       const s = yt.surface;
       const clipped = atBottom ? { ...s, h: sheet.y - s.y } : { ...s, y: bottom(sheet), h: bottom(s) - bottom(sheet) };
       const pl = ytPaneLayout(clipped, CS, driverRight);
-      yt = { ...yt, surface: clipped, player: pl.player, controls: pl.controls, side: pl.side };
+      yt = { ...yt, surface: clipped, player: pl.player, controls: pl.controls, side: pl.side, controlsScale: pl.scale };
     }
   } else if (input.sheetOpen) {
     const ytOnDriverSide = yt.mode === 'pane' && mode === 'split' && yt.paneIndex === 1;
@@ -530,7 +549,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
       const s = yt.surface;
       const clipped = atRight ? { ...s, w: sheet.x - s.x } : { ...s, x: right(sheet), w: right(s) - right(sheet) };
       const pl = ytPaneLayout(clipped, CS, driverRight);
-      yt = { ...yt, surface: clipped, player: pl.player, controls: pl.controls, side: pl.side };
+      yt = { ...yt, surface: clipped, player: pl.player, controls: pl.controls, side: pl.side, controlsScale: pl.scale };
     }
   }
 

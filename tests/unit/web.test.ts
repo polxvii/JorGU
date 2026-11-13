@@ -78,18 +78,22 @@ describe('web settings', () => {
     expect(removeBookmark(w, id).bookmarks).toEqual([]);
   });
 
-  it('view mode is remembered per origin and on the bookmark; a bookmark wins', () => {
+  it('view mode is remembered for the whole site: per origin and on its bookmarks', () => {
     let w = addBookmark(web(), 'https://a.example/home');
+    w = addBookmark(w, 'https://c.example/');
     w = setViewModeFor(w, 'https://a.example/other', { mode: 'desktop' });
     expect(w.viewModes['https://a.example']).toEqual({ mode: 'desktop' });
     expect(resolveViewMode('https://a.example/x', w.bookmarks, w.viewModes)).toEqual({ mode: 'desktop' });
-    expect(w.bookmarks[0].viewMode).toBeUndefined();
+    // The site's bookmark follows (user 2026-11-13: its older choice used to win, so zoom seemed not to stick).
+    expect(w.bookmarks[0].viewMode).toEqual({ mode: 'desktop' });
+    expect(resolveViewMode('https://a.example/home', w.bookmarks, w.viewModes)).toEqual({ mode: 'desktop' });
+    expect(w.bookmarks[1].viewMode).toBeUndefined();
     w = setViewModeFor(w, 'https://a.example/home', { mode: 'mobile' });
     expect(resolveViewMode('https://a.example/home', w.bookmarks, w.viewModes)).toEqual({ mode: 'mobile' });
     expect(resolveViewMode('https://b.example/', w.bookmarks, w.viewModes)).toEqual(AUTO);
     // A new bookmark starts with its origin's view.
     w = addBookmark(w, 'https://a.example/new');
-    expect(w.bookmarks[1].viewMode).toEqual({ mode: 'mobile' });
+    expect(w.bookmarks[2].viewMode).toEqual({ mode: 'mobile' });
     expect(sameView({ mode: 'auto', zoom: 1 }, { mode: 'auto', zoom: 1.25 })).toBe(false);
   });
 

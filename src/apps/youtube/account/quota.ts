@@ -1,11 +1,11 @@
 // Data API quota estimate (spec §8.2): the Worker reports units per request in X-Quota-Units; the client sums
 // them per Pacific day (Google resets quota at midnight Pacific time). Default project quota 10,000 units/day;
-// one search.list call = 100 units.
+// one search.list call = 100 units, plus 1 for the results' lengths (videos.list, 2026-11-13).
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 export const DAILY_UNITS = 10_000;
-export const SEARCH_UNITS = 100;
+export const SEARCH_UNITS = 101;
 
 export function pacificDay(now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);

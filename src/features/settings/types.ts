@@ -99,11 +99,16 @@ export interface Settings {
     playbackRate: number;
     /** Tapping a video in a list keeps playing the rest of that list afterwards. */
     autoContinue: boolean;
+    /** New and Trending hide clips up to this many seconds (user 2026-11-13: Shorts run to 3 min now). */
+    hideUpTo: HideUpTo;
   };
   dockSize: DockSize;
   library: { feedChannelLimit: number };
   playbackLoginCheck?: { testedAt: string; sawAds: boolean; browser: string };
 }
+
+export const HIDE_UP_TO = [60, 120, 180] as const;
+export type HideUpTo = (typeof HIDE_UP_TO)[number];
 
 export function defaultSettings(): Settings {
   return {
@@ -121,7 +126,7 @@ export function defaultSettings(): Settings {
     },
     map: { mode: 'js', routeLine: true, follow: true, traffic: true, avoidTolls: false, avoidHighways: false, routeInfoAt: 'bottom', colors: 'day', savedPlaces: [], recentDestinations: [] },
     web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280, search: 'google' },
-    youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', playbackRate: 1, autoContinue: true },
+    youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', playbackRate: 1, autoContinue: true, hideUpTo: 120 },
     dockSize: 'normal',
     library: { feedChannelLimit: 50 },
   };

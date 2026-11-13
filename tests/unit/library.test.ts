@@ -67,12 +67,13 @@ describe('quota', () => {
     const q = await import('../../src/apps/youtube/account/quota');
     const day1 = new Date('2026-11-10T12:00:00Z');
     q.useQuota.setState({ day: q.pacificDay(day1), units: 0 });
-    expect(q.searchesLeft(q.useQuota.getState(), day1)).toBe(100);
-    q.addUnits(100, day1); // one search
+    // A search is 101 units (search.list + the results' lengths, 2026-11-13).
+    expect(q.searchesLeft(q.useQuota.getState(), day1)).toBe(99);
+    q.addUnits(101, day1); // one search
     q.addUnits(45, day1); // feed
-    expect(q.searchesLeft(q.useQuota.getState(), day1)).toBe(98);
+    expect(q.searchesLeft(q.useQuota.getState(), day1)).toBe(97);
     const day2 = new Date('2026-11-11T12:00:00Z');
-    expect(q.searchesLeft(q.useQuota.getState(), day2)).toBe(100);
+    expect(q.searchesLeft(q.useQuota.getState(), day2)).toBe(99);
     q.addUnits(1, day2);
     expect(q.useQuota.getState()).toMatchObject({ day: '2026-11-11', units: 1 });
     q.markQuotaExhausted(day2);

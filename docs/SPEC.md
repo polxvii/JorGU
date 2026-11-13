@@ -28,7 +28,7 @@
 - **YouTube controls:** back / forward 10 s and mute (iPhone ignores volume levels; mute works). On narrow panes the transport row drops speed first, then mute; all four are always in the queue sheet, the mini handle (speed, mute) and full screen. In YouTube full screen the control column doubles when the 16:9 player is limited by the other dimension anyway.
 - **Keep playing the list** (Settings, on by default): a tap in New, Trending, Search or Recently plays that video, then the rest of that list (up to 50), after any videos added with +. A tap in another list replaces that part. Playlists already play through. A pasted link has nothing to continue (`search.list relatedToVideoId` was removed in Aug 2023).
 - **Recently** tab in the library: videos played in JorGu on this device, newest first, max 100, kept 30 days (Developer Policies III.E.4); no account needed.
-- **Shorts hidden** on New and Trending. The Data API has no Shorts flag, so: length ≤ 60 s, or ≤ 3 min with `#shorts` in title, description or tags; live streams (0 s) stay. Not applied to Search (III.C.5: don't modify search results) or to the user's own playlists. Trending asks for `contentDetails` in the same call; New adds `videos.list` (≤ 2 units).
+- **Shorts hidden** on New and Trending. The Data API has no Shorts flag, so the Worker drops length ≤ 60 s, or ≤ 3 min with `#shorts` in title, description or tags; live streams (0 s) stay. Shorts can be 3 min long and most aren't tagged, so the client also hides every clip up to **Settings → Hide clips up to: 1 / 2 / 3 min** (default 2 min, user 2026-11-13; applied when showing, so a change works on cached lists; live streams and unknown lengths stay). Not applied to Search (YouTube API Services Developer Policies: API Clients "must not modify or replace … the search results") or to the user's own playlists; Search instead shows each result's length (`videos.list part=contentDetails`, +1 unit, so a search counts as 101 units). Trending asks for `contentDetails` in the same call; New adds `videos.list` (≤ 2 units).
 - **Toolbar (Dock) size** in Settings: Normal / Large / Extra large (72 / 80 / 88 px: as wide as the map / YouTube / Web strips; user 2026-11-13, was 80 / 96 / 112).
 - **Web:** pin a Recent page to the App Picker in one tap; "Add a site" bookmarks any address without opening it.
 - **Not possible:** background playback (Developer Policies III.I.9); a caption on/off button (the IFrame API documents only `cc_load_policy` / `cc_lang_pref` at load; use the player's own CC button, iOS Settings → Accessibility → Subtitles & Captioning, or YouTube's "Always show captions"); signing in to sites inside a Web pane on CarTV (tested by the user 2026-11-11: fails; the WebView blocks the embedded site's cookies, §9.6).
@@ -136,6 +136,7 @@ The feature list below comes from the README of a third-party repo, `github.com/
 - Google Help: for videos embedded on other websites, YouTube cookies must not be blocked [Official] — https://support.google.com/youtube/answer/7437519
 - Chrome keeps third-party cookies on by default (Google decision, 22 Apr 2025); Safari and Firefox block them by default [Secondary]
 - Expected: Chrome on Android → layer B likely works · Safari on iPhone → likely does not unless Prevent Cross-Site Tracking is off [Verify]
+- **Tested 2026-11-13 (user, CarTV on iPhone):** signed in at youtube.com in CarTV's own browser, then played a video in JorGu → it did **not** appear in the account's watch history, while videos played on youtube.com itself in the same browser do (first-party cookies there; the embed in JorGu is third-party, so the browser doesn't send them). Layer B doesn't work in the main runtime: playback is signed out (no watch history, no Premium). No official API writes watch history (§3.3), so JorGu's own on-device history (Library → Recently) is the only history there.
 - The app cannot detect layer B status from code (cross-origin), so it provides a manual checklist (§8.6)
 
 ### 3.2 YouTube Premium Lite still shows ads on music
@@ -432,7 +433,7 @@ Tokens never reach the client, never go in localStorage, never get logged.
 | `GET /api/yt/playlists` | `playlists.list mine=true` | 1/page | 1 h |
 | `GET /api/yt/playlist-items?id=` | `playlistItems.list` | 1/page | 1 h |
 | `GET /api/yt/liked` | `videos.list myRating=like` | 1/page | 1 h |
-| `GET /api/yt/search?q=` | `search.list type=video regionCode=TH relevanceLanguage=<ui lang> maxResults=20` | 1 search call | 24 h per query |
+| `GET /api/yt/search?q=` | `search.list type=video regionCode=TH relevanceLanguage=<ui lang> maxResults=20` → `videos.list part=contentDetails` (lengths; results unchanged) | 1 search call + 1 | 24 h per query |
 | `GET /api/yt/popular?category=` | `videos.list part=snippet,contentDetails chart=mostPopular regionCode=TH [videoCategoryId]` (Shorts hidden) | 1 | 1 h |
 | `GET /api/yt/categories?lang=` | `videoCategories.list regionCode=TH hl=<lang>` | 1 | 24 h |
 | `GET /api/yt/videos?ids=` | `videos.list part=snippet,contentDetails` (50 ids/call) | 1 | 6 h |

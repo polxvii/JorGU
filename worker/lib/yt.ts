@@ -105,24 +105,32 @@ export function looksLikeShort(seconds: number | null, snippet: Snippet | undefi
   return /#shorts?\b/i.test(text);
 }
 
-/** videos.list (snippet + contentDetails, 1 unit per 50 ids): drops Shorts, adds durations. Order kept. */
-async function withoutShorts(ctx: SessionContext, list: VideoItem[]): Promise<VideoItem[]> {
-  const info = new Map<string, { seconds: number | null; short: boolean }>();
+/** videos.list, 1 unit per 50 ids: each video's length (and snippet when asked for). */
+async function lengths(ctx: SessionContext, list: VideoItem[], part: string): Promise<Map<string, { seconds: number | null; snippet?: Snippet }>> {
+  const info = new Map<string, { seconds: number | null; snippet?: Snippet }>();
   for (let i = 0; i < list.length; i += 50) {
     const ids = list.slice(i, i + 50).map((v) => v.videoId);
-    const page = await ytGet(ctx, 'videos', { part: 'snippet,contentDetails', id: ids.join(','), maxResults: 50 });
+    const page = await ytGet(ctx, 'videos', { part, id: ids.join(','), maxResults: 50 });
     for (const it of page.items ?? []) {
-      if (typeof it.id !== 'string') continue;
-      const seconds = parseDuration(it.contentDetails?.duration);
-      info.set(it.id, { seconds, short: looksLikeShort(seconds, it.snippet) });
+      if (typeof it.id === 'string') info.set(it.id, { seconds: parseDuration(it.contentDetails?.duration), snippet: it.snippet });
     }
   }
+  return info;
+}
+
+function withDuration(v: VideoItem, seconds: number | null | undefined): VideoItem {
+  return typeof seconds === 'number' ? { ...v, duration: seconds } : v;
+}
+
+/** videos.list (snippet + contentDetails): drops Shorts, adds durations. Order kept. */
+async function withoutShorts(ctx: SessionContext, list: VideoItem[]): Promise<VideoItem[]> {
+  const info = await lengths(ctx, list, 'snippet,contentDetails');
   return list
-    .filter((v) => !info.get(v.videoId)?.short)
-    .map((v) => {
-      const seconds = info.get(v.videoId)?.seconds;
-      return typeof seconds === 'number' ? { ...v, duration: seconds } : v;
-    });
+    .filter((v) => {
+      const i = info.get(v.videoId);
+      return !i || !looksLikeShort(i.seconds, i.snippet);
+    })
+    .map((v) => withDuration(v, info.get(v.videoId)?.seconds));
 }
 
 function videoFromPlaylistItem(it: ApiItem): VideoItem | null {
@@ -249,7 +257,12 @@ export async function search(ctx: SessionContext, q: string, lang: string): Prom
     regionCode: 'TH',
     relevanceLanguage: lang === 'th' ? 'th' : 'en',
   });
-  return (page.items ?? []).map(videoFromSearch).filter((v): v is VideoItem => !!v);
+  const list = (page.items ?? []).map(videoFromSearch).filter((v): v is VideoItem => !!v);
+  if (!list.length) return list;
+  // Each result's length (user 2026-11-13, so a Short is easy to spot), +1 unit. Results are kept as they are:
+  // API Clients "must not modify or replace ... the search results" (YouTube API Services Developer Policies).
+  const info = await lengths(ctx, list, 'contentDetails');
+  return list.map((v) => withDuration(v, info.get(v.videoId)?.seconds));
 }
 
 export async function videos(ctx: SessionContext, ids: string[]): Promise<VideoItem[]> {

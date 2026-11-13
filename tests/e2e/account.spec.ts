@@ -8,7 +8,7 @@ test.describe.configure({ timeout: 60_000 });
 
 const VIDEO_A = 'M7lc1UVf-VE';
 const VIDEO_B = 'aqz-KE-bpKQ';
-const v = (videoId: string, title: string, channel = 'Mock Channel') => ({ videoId, title, channel, thumb: '' });
+const v = (videoId: string, title: string, channel = 'Mock Channel', duration?: number) => ({ videoId, title, channel, thumb: '', duration });
 
 const FEED = [v(VIDEO_A, 'Feed video one'), v(VIDEO_B, 'Feed video two')];
 const PLAYLISTS = [
@@ -19,6 +19,7 @@ const ROAD = [v(VIDEO_A, 'Road Song One'), v(VIDEO_B, 'Road Song Two'), v('dQw4w
 const NEWS = [v('9bZkp7q19f0', 'Morning news')];
 const LIKED = [v('kJQP7kiw5Fk', 'Liked thing')];
 const SEARCH = [v('OPf0YbXqDm0', 'From YouTube search')];
+const SEARCH_WITH_SHORT = [v('OPf0YbXqDm0', 'From YouTube search', 'Mock Channel', 225), v('kffacxfA7G4', 'A Short in search', 'Mock Channel', 50)];
 
 interface Mock {
   connected: boolean;
@@ -58,12 +59,13 @@ async function mockApi(page: Page, init: Partial<Mock> = {}): Promise<Mock> {
       case '/api/yt/popular': {
         const cat = url.searchParams.get('category');
         if (cat === '29') return json({ items: [] }, 200, 1);
+        if (cat === '1') return json({ items: [v(VIDEO_B, 'Movie trailer', 'Studio', 95), v(VIDEO_A, 'Full scene', 'Studio', 250)] }, 200, 1);
         return json({ items: [v(VIDEO_B, cat === '10' ? 'Top music' : cat ? `Top ${cat}` : 'Top trending')] }, 200, 1);
       }
       case '/api/yt/categories':
-        return json({ items: [{ id: '24', title: 'Entertainment' }, { id: '10', title: 'Music' }, { id: '29', title: 'Nonprofits' }] }, 200, 1);
+        return json({ items: [{ id: '24', title: 'Entertainment' }, { id: '10', title: 'Music' }, { id: '29', title: 'Nonprofits' }, { id: '1', title: 'Film' }] }, 200, 1);
       case '/api/yt/search':
-        return json({ items: SEARCH }, 200, 100);
+        return json({ items: url.searchParams.get('q') === 'shorts test' ? SEARCH_WITH_SHORT : SEARCH }, 200, 101);
       case '/api/yt/videos':
         return json({ items: (url.searchParams.get('ids') ?? '').split(',').map((id) => v(id, `Title of ${id}`, 'Fetched channel')) }, 200, 1);
       default:
@@ -265,7 +267,7 @@ test('Trending: category chips from YouTube (Music first); a category without a 
   await page.getByTestId('lib-tab-trending').click();
   await expect(page.getByTestId('lib-tab-music')).toHaveCount(0);
   const chips = page.getByTestId('chart-categories').getByRole('radio');
-  await expect(chips).toHaveText(['All', 'Music', 'Entertainment', 'Nonprofits']);
+  await expect(chips).toHaveText(['All', 'Music', 'Entertainment', 'Nonprofits', 'Film']);
   await expect(page.getByTestId('lib-trending')).toContainText('Top trending');
   await chips.nth(1).click();
   await expect(page.getByTestId('lib-trending')).toContainText('Top music');
@@ -329,3 +331,47 @@ for (const size of [
     }
   });
 }
+
+test('short clips: New and Trending hide clips up to 2 min (Settings: 1 / 2 / 3 min); Search keeps them, with lengths', async ({ page }) => {
+  const m = await mockApi(page);
+  await openApp(page);
+  await page.getByTestId('yt-empty-library').click();
+  await page.getByTestId('lib-tab-trending').click();
+  await page.getByTestId('chart-categories').locator('[data-value="1"]').click();
+  const chart = page.getByTestId('lib-trending');
+  // 1:35 is hidden by default (Shorts can be 3 min; the worker's guess only catches <= 60 s or #shorts).
+  await expect(chart).toContainText('Full scene');
+  await expect(chart).toContainText('4:10');
+  await expect(chart).not.toContainText('Movie trailer');
+  await page.getByTestId('sheet-close').click();
+
+  await page.getByTestId('dock-settings').click();
+  const setting = page.getByTestId('setting-hide-up-to');
+  await expect(setting.getByRole('radio')).toHaveText(['1 min', '2 min', '3 min']);
+  await expect(setting.locator('[data-value="120"]')).toHaveAttribute('aria-checked', 'true');
+  await setting.locator('[data-value="60"]').click();
+  await page.getByTestId('sheet-close').click();
+  // Applies to the cached list at once: no new request.
+  const calls = countCalls(m, 'GET /api/yt/popular?category=1');
+  await page.getByTestId('yt-empty-library').click();
+  await page.getByTestId('lib-tab-trending').click();
+  await expect(chart).toContainText('Movie trailer');
+  expect(countCalls(m, 'GET /api/yt/popular?category=1')).toBe(calls);
+  await page.reload();
+  await page.getByTestId('dock-settings').click();
+  await expect(page.getByTestId('setting-hide-up-to').locator('[data-value="60"]')).toHaveAttribute('aria-checked', 'true');
+  await page.getByTestId('setting-hide-up-to').locator('[data-value="120"]').click();
+  await page.getByTestId('sheet-close').click();
+
+  // Search: YouTube's results as they are (Developer Policies), each with its length.
+  await page.getByTestId('yt-empty-library').click();
+  await page.getByTestId('lib-tab-search').click();
+  await page.getByTestId('search-input').fill('shorts test');
+  await page.getByTestId('search-go').click();
+  await page.getByTestId('search-youtube').click();
+  const results = page.getByTestId('search-youtube-results');
+  await expect(results).toContainText('A Short in search');
+  await expect(results).toContainText('0:50');
+  await expect(results).toContainText('3:45');
+});
+

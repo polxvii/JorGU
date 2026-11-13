@@ -5,7 +5,7 @@ import * as W from '../../apps/web/webActions';
 import * as A from '../../shell/layoutActions';
 import { mergeSettings } from './merge';
 import type {
-  AppPick, Bookmark, DockSize, DriverSide, Language, MiniCorner, MiniPlayerSize, PaneIndex, Settings, SplitDirection, ThemeId, WebInstanceId, WebViewMode,
+  AppPick, Bookmark, DockSize, DriverSide, HideUpTo, Language, MiniCorner, MiniPlayerSize, PaneIndex, Settings, SplitDirection, ThemeId, WebInstanceId, WebViewMode,
 } from './types';
 import { defaultSettings } from './types';
 import { moveById } from './reorder';
@@ -23,6 +23,7 @@ export interface SettingsActions {
   setMiniPlayerSize: (size: MiniPlayerSize) => void;
   setMiniCorner: (corner: MiniCorner) => void;
   setAutoContinue: (on: boolean) => void;
+  setHideUpTo: (seconds: HideUpTo) => void;
   setDockSize: (size: DockSize) => void;
   setMapMode: (mode: Settings['map']['mode']) => void;
   setRouteLine: (on: boolean) => void;
@@ -85,6 +86,7 @@ export const useSettings = create<SettingsState>()(
       setMiniPlayerSize: (miniPlayerSize) => set((s) => ({ youtube: { ...s.youtube, miniPlayerSize } })),
       setMiniCorner: (miniCorner) => set((s) => ({ youtube: { ...s.youtube, miniCorner } })),
       setAutoContinue: (autoContinue) => set((s) => ({ youtube: { ...s.youtube, autoContinue } })),
+      setHideUpTo: (hideUpTo) => set((s) => ({ youtube: { ...s.youtube, hideUpTo } })),
       setDockSize: (dockSize) => set({ dockSize }),
       setMapMode: (mode) => set((s) => ({ map: { ...s.map, mode } })),
       setRouteLine: (routeLine) => set((s) => ({ map: { ...s.map, routeLine } })),

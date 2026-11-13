@@ -192,15 +192,35 @@ describe('Data API proxy', () => {
     expect(await second.json()).toEqual({ code: 'SLOW_DOWN' });
   });
 
-  it('search sends region TH and the UI language; decodes HTML entities', async () => {
+  it('search sends region TH and the UI language; decodes HTML entities; adds lengths, keeps every result (Shorts too)', async () => {
+    const paths: string[] = [];
     google = (url) => {
+      paths.push(url.pathname);
+      if (url.pathname === '/youtube/v3/videos') {
+        // Lengths only (1 unit): the results are YouTube's, not changed (Developer Policies).
+        expect(url.searchParams.get('part')).toBe('contentDetails');
+        expect(url.searchParams.get('id')).toBe('M7lc1UVf-VE,aqz-KE-bpKQ');
+        return Response.json({ items: [{ id: 'M7lc1UVf-VE', contentDetails: { duration: 'PT3M5S' } }, { id: 'aqz-KE-bpKQ', contentDetails: { duration: 'PT40S' } }] });
+      }
       expect(url.searchParams.get('regionCode')).toBe('TH');
       expect(url.searchParams.get('relevanceLanguage')).toBe('th');
       expect(url.searchParams.get('type')).toBe('video');
-      return Response.json({ items: [{ id: { videoId: 'M7lc1UVf-VE' }, snippet: { title: 'Tom &amp; Jerry&#39;s', channelTitle: 'A' } }] });
+      return Response.json({
+        items: [
+          { id: { videoId: 'M7lc1UVf-VE' }, snippet: { title: 'Tom &amp; Jerry&#39;s', channelTitle: 'A' } },
+          { id: { videoId: 'aqz-KE-bpKQ' }, snippet: { title: 'Quick #shorts', channelTitle: 'B' } },
+        ],
+      });
     };
     const res = await handleApi(req('/api/yt/search?q=x&lang=th', { cookie: await sessionCookie() }), env);
-    expect((await res.json()) as unknown).toEqual({ items: [{ videoId: 'M7lc1UVf-VE', title: "Tom & Jerry's", channel: 'A', thumb: '', publishedAt: undefined }].map((v) => JSON.parse(JSON.stringify(v))) });
+    expect((await res.json()) as unknown).toEqual({
+      items: [
+        { videoId: 'M7lc1UVf-VE', title: "Tom & Jerry's", channel: 'A', thumb: '', duration: 185 },
+        { videoId: 'aqz-KE-bpKQ', title: 'Quick #shorts', channel: 'B', thumb: '', duration: 40 },
+      ],
+    });
+    expect(paths).toEqual(['/youtube/v3/search', '/youtube/v3/videos']);
+    expect(res.headers.get('X-Quota-Units')).toBe('101');
   });
 
   it('chart by category: passes videoCategoryId; a category without a chart is an empty list', async () => {

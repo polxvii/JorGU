@@ -16,6 +16,7 @@ import { ConnectCard } from './ConnectCard';
 import { PastePanel } from './PastePanel';
 import { PlaylistsPanel } from './PlaylistsPanel';
 import { SearchPanel } from './SearchPanel';
+import { withoutShortClips } from './shortClips';
 import { useLoad } from './useLoad';
 import { LoadFrame, VideoList } from './VideoList';
 import type { Cached } from '../account/cache';
@@ -40,21 +41,28 @@ const ordered = (list: CategoryItem[]) => [
   ...list.filter((c) => !PINNED.includes(c.id)),
 ];
 
+/** New and Trending: short clips hidden (Settings → "Hide clips up to"). */
 function VideoPanel({ load, testId, empty }: { load: (force: boolean) => Promise<Cached<VideoItem[]>>; testId: string; empty: MessageKey }) {
+  const t = useT();
   const close = useUi((s) => s.closeSheet);
+  const upTo = useSettings((s) => s.youtube.hideUpTo);
   const state = useLoad(load);
   return (
     <LoadFrame state={state} empty={empty}>
-      {(items) => (
-        <VideoList
-          testId={testId}
-          items={items}
-          onPlay={(i) => {
-            playFromList(items, i);
-            close();
-          }}
-        />
-      )}
+      {(all) => {
+        const items = withoutShortClips(all, upTo);
+        if (!items.length) return <p className="py-6 text-center text-text-dim">{t(empty)}</p>;
+        return (
+          <VideoList
+            testId={testId}
+            items={items}
+            onPlay={(i) => {
+              playFromList(items, i);
+              close();
+            }}
+          />
+        );
+      }}
     </LoadFrame>
   );
 }

@@ -1,5 +1,5 @@
 import { sanitizeLayout } from '../../shell/layoutActions';
-import type { Settings } from './types';
+import { HIDE_UP_TO, type Settings } from './types';
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
@@ -21,6 +21,7 @@ export function mergeSettings(persisted: unknown, current: Settings): Settings {
   if (!['auto', 'tl', 'tr', 'bl', 'br'].includes(merged.youtube.miniCorner)) merged.youtube.miniCorner = 'auto';
   if (!['normal', 'large', 'xlarge'].includes(merged.dockSize)) merged.dockSize = 'normal';
   if (typeof merged.youtube.autoContinue !== 'boolean') merged.youtube.autoContinue = true;
+  if (!(HIDE_UP_TO as readonly number[]).includes(merged.youtube.hideUpTo)) merged.youtube.hideUpTo = 120;
   if (typeof merged.map.routeLine !== 'boolean') merged.map.routeLine = true;
   if (typeof merged.map.avoidTolls !== 'boolean') merged.map.avoidTolls = false;
   if (typeof merged.map.avoidHighways !== 'boolean') merged.map.avoidHighways = false;

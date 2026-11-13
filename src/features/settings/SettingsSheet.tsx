@@ -5,7 +5,7 @@ import { Sheet } from '../../shell/Sheet';
 import type { Rect } from '../../shell/geometry';
 import { THEMES, THEME_IDS } from '../../theme/themes';
 import { useSettings } from './settingsStore';
-import type { ThemeId } from './types';
+import { HIDE_UP_TO, type HideUpTo, type ThemeId } from './types';
 import { setSpeed } from '../../apps/youtube/player';
 import { SPEED_PRESETS, formatSpeed } from '../../apps/youtube/speed';
 import { AccountSection } from '../../apps/youtube/library/ConnectCard';
@@ -175,6 +175,16 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
           ]}
         />
         <p className="mt-1 px-1 text-[13px] text-text-dim">{t('settings.autoContinueHint')}</p>
+      </Section>
+
+      <Section title={t('settings.hideUpTo')}>
+        <Segmented
+          testId="setting-hide-up-to"
+          value={String(s.youtube.hideUpTo)}
+          onChange={(v) => s.setHideUpTo(Number(v) as HideUpTo)}
+          options={HIDE_UP_TO.map((sec) => ({ value: String(sec), label: t('settings.minutes', { count: sec / 60 }) }))}
+        />
+        <p className="mt-1 px-1 text-[13px] text-text-dim">{t('settings.hideUpToHint')}</p>
       </Section>
 
       <Section title={t('settings.miniPlayer')}>

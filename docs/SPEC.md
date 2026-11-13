@@ -136,7 +136,7 @@ The feature list below comes from the README of a third-party repo, `github.com/
 - Google Help: for videos embedded on other websites, YouTube cookies must not be blocked [Official] — https://support.google.com/youtube/answer/7437519
 - Chrome keeps third-party cookies on by default (Google decision, 22 Apr 2025); Safari and Firefox block them by default [Secondary]
 - Expected: Chrome on Android → layer B likely works · Safari on iPhone → likely does not unless Prevent Cross-Site Tracking is off [Verify]
-- **Tested 2026-11-13 (user, CarTV on iPhone):** signed in at youtube.com in CarTV's own browser, then played a video in JorGu → it did **not** appear in the account's watch history, while videos played on youtube.com itself in the same browser do (first-party cookies there; the embed in JorGu is third-party, so the browser doesn't send them). Layer B doesn't work in the main runtime: playback is signed out (no watch history, no Premium). No official API writes watch history (§3.3), so JorGu's own on-device history (Library → Recently) is the only history there.
+- **Tested 2026-11-13 (user, CarTV on iPhone):** signed in at youtube.com in CarTV's own browser, then played a video in JorGu → it did **not** appear in the account's watch history, while videos played on youtube.com itself in the same browser do (first-party cookies there; the embed in JorGu is third-party, so the browser doesn't send them). Layer B doesn't work in the main runtime: playback is signed out (no watch history, no Premium). AsCar (the browser app used since): no "Allow Cross-Website Tracking" switch in iOS Settings → Apps → AsCar (user 2026-11-13); iOS shows that switch only for apps that declare `NSCrossWebsiteTrackingUsageDescription`, so only the host app's developer can unlock signed-in embeds. A history playlist in the account (official API) was offered and declined by the user (2026-11-13). No official API writes watch history (§3.3), so JorGu's own on-device history (Library → Recently) is the only history there.
 - The app cannot detect layer B status from code (cross-origin), so it provides a manual checklist (§8.6)
 
 ### 3.2 YouTube Premium Lite still shows ads on music
@@ -198,7 +198,7 @@ Also: the IFrame API no longer supports setting playback quality [Official, IFra
 
 ### 3.10 Target browser: CarPlay browser apps on iPhone
 
-JorGu's main runtime is the in-app browser of a third-party CarPlay app (CarTV / AP TV) on an iPhone 16 Pro Max, displayed on the car's CarPlay screen. On iOS this is a `WKWebView` inside that app, not Safari. Capabilities depend on how the host app configures it, so every item below is [Verify] (test with the M0 probe page):
+JorGu's main runtime is the in-app browser of a third-party CarPlay app on an iPhone 16 Pro Max (since 2026-11-13 **AsCar**: CarTV gives no location; earlier CarTV / AP TV), displayed on the car's CarPlay screen. On iOS this is a `WKWebView` inside that app, not Safari. Capabilities depend on how the host app configures it, so every item below is [Verify] (test with the M0 probe page):
 
 | Capability | Expected | If missing |
 |---|---|---|

@@ -140,6 +140,8 @@ describe('traffic on the route, per section (Compute Routes Pro legs)', () => {
     expect(trafficLevel(1.5)).toBe('slow');
     // Time left counts the current section in part.
     expect(trafficMillisLeft(s, 1500)).toBe(150_000 + 90_000);
+    // A section that took another way counts at the route's own pace, not its detour's time.
+    expect(trafficMillisLeft(s, 1500, 60)).toBe(150_000 + 1000 * 60);
     // The bar: car at the bottom (0), destination at the top (1); same colours merge.
     expect(barPieces(s, 1500, 3000)).toEqual([
       { from: 0, to: 1 / 3, level: 'jam' },

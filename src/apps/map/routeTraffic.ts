@@ -72,13 +72,18 @@ export function sectionsFromLegs(
   return out;
 }
 
-/** Time left in traffic from `along` to the end (the current section counted in part). */
-export function trafficMillisLeft(sections: TrafficSection[], along: number): number {
+/**
+ * Time left in traffic from `along` to the end (the current section counted in part). A section whose leg took
+ * another way (unknown) would add its detour's time: it counts at `paceMsPerM` instead (the route's own pace in
+ * traffic), when given. (Live 2026-11-13: one run showed 41 min for a 30 min route.)
+ */
+export function trafficMillisLeft(sections: TrafficSection[], along: number, paceMsPerM?: number): number {
   let ms = 0;
   for (const s of sections) {
     if (s.to <= along) continue;
     const share = s.from >= along ? 1 : (s.to - along) / (s.to - s.from || 1);
-    ms += s.ms * share;
+    const own = !Number.isFinite(s.ratio) && paceMsPerM ? (s.to - s.from) * paceMsPerM : s.ms;
+    ms += own * share;
   }
   return ms;
 }

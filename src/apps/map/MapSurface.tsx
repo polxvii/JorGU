@@ -80,7 +80,10 @@ function RouteBox({ rect }: { rect: Rect }) {
   if (route.status === 'ready' && line) {
     const p = pos ? progress(pos, route.path, route.distanceMeters, route.durationMillis) : { metersLeft: route.distanceMeters, millisLeft: route.durationMillis };
     // With traffic per section known (Compute Routes Pro), the time left counts the traffic.
-    if (route.traffic) p.millisLeft = trafficMillisLeft(route.traffic.sections, pos ? projectOnPath(pos, route.path).along : 0) || p.millisLeft;
+    if (route.traffic) {
+      const pace = route.distanceMeters > 0 ? route.durationMillis / route.distanceMeters : undefined;
+      p.millisLeft = trafficMillisLeft(route.traffic.sections, pos ? projectOnPath(pos, route.path).along : 0, pace) || p.millisLeft;
+    }
     const eta = new Date(Date.now() + p.millisLeft).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
     time = t('map.routeMin', { min: Math.max(1, Math.round(p.millisLeft / 60000)) });
     detail = t('map.routeKmEta', { km: (p.metersLeft / 1000).toFixed(p.metersLeft < 10000 ? 1 : 0), eta });

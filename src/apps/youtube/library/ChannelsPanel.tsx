@@ -1,5 +1,5 @@
 // Channels in New (user 2026-11-15: "lots of things I'm not interested in"): every subscribed channel with a Shown /
-// Off switch. Off = left out of New (the Worker skips it, so another channel takes its place), Trending and Mix.
+// Off switch. Off = left out of New (the Worker skips it, so another channel takes its place) and Trending.
 // Channels turned off come first (also ones hidden from Trending that aren't subscriptions, so a channel hidden by
 // mistake can always be turned back on), then the ones played most, with their play count.
 import { useState } from 'react';
@@ -34,7 +34,7 @@ export function ChannelsPanel({ onBack }: { onBack: () => void }) {
       <p className="px-1 text-[13px] text-text-dim">{t('library.channelsHint')}</p>
       <LoadFrame state={state} empty="library.empty">
         {(subs) => {
-          // Hidden channels that aren't subscriptions (from Trending or a Mix): listed too, keyed as they were hidden.
+          // Hidden channels that aren't subscriptions (from Trending): listed too, keyed as they were hidden.
           // Order and rows come from when the page opened, so a tap never moves or removes a row.
           const known = { ...offAtOpen, ...Object.fromEntries(Object.entries(muted).map(([k, m]) => [k, m.title])) };
           const extra = Object.entries(known)

@@ -20,9 +20,9 @@ export function mergeSettings(persisted: unknown, current: Settings): Settings {
   if (merged.language !== 'en' && merged.language !== 'th') merged.language = 'en';
   if (!['auto', 'tl', 'tr', 'bl', 'br'].includes(merged.youtube.miniCorner)) merged.youtube.miniCorner = 'auto';
   if (!['normal', 'large', 'xlarge'].includes(merged.dockSize)) merged.dockSize = 'normal';
-  // Before 2026-11-15: autoContinue on/off. Off stays off; on becomes Mix (the new default).
+  // Before 2026-11-15: autoContinue on/off (off stays off). 'mix' (2026-11-15 to 2026-11-16) becomes 'list'.
   const yt = merged.youtube as Settings['youtube'] & { autoContinue?: unknown };
-  if (!(CONTINUE_WITH as readonly string[]).includes(yt.continueWith)) yt.continueWith = 'mix';
+  if (!(CONTINUE_WITH as readonly string[]).includes(yt.continueWith)) yt.continueWith = 'list';
   if (yt.autoContinue === false && !(isPlainObject(persisted) && isPlainObject(persisted.youtube) && 'continueWith' in persisted.youtube)) yt.continueWith = 'off';
   delete yt.autoContinue;
   if (typeof merged.youtube.hidePlayed !== 'boolean') merged.youtube.hidePlayed = true;

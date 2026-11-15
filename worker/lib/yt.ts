@@ -293,7 +293,7 @@ export async function search(ctx: SessionContext, q: string, lang: string): Prom
 
 export async function videos(ctx: SessionContext, ids: string[]): Promise<VideoItem[]> {
   if (ids.length === 0) return [];
-  // contentDetails too (same 1 unit): Mix clips get their length, so short ones can be skipped (user 2026-11-15).
+  // contentDetails too (same 1 unit): each clip's length.
   const page = await ytGet(ctx, 'videos', { part: 'snippet,contentDetails', id: ids.slice(0, 50).join(',') });
   return (page.items ?? []).map(videoFromVideosList).filter((v): v is VideoItem => !!v);
 }

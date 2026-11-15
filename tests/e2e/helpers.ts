@@ -8,7 +8,7 @@ declare global {
       setPlaying: (playing: boolean) => void;
       yt: () => { hasPlayer: boolean; state: number | null; time: number; duration: number; rate: number | null; iframeLoads: number; visibleRatio: number };
       seekNearEnd: (seconds?: number) => void;
-      queue: () => { items: { videoId: string; title?: string; channel?: string; auto?: boolean; mix?: boolean }[]; index: number };
+      queue: () => { items: { videoId: string; title?: string; channel?: string; auto?: boolean }[]; index: number };
       map: () => { hasMap: boolean; mode: string; lines: number };
     };
   }

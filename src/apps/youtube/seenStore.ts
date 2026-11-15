@@ -101,7 +101,7 @@ export function isMuted(v: { channel?: string; channelId?: string }, s: Pick<See
   return (!!v.channelId && !!s.muted[v.channelId]) || (!!v.channel && !!s.muted[v.channel]);
 }
 
-/** Why a clip is left out of New, Trending and Mix; null = show it. `hidePlayed` = Settings switch. */
+/** Why a clip is left out of New and Trending; null = show it. `hidePlayed` = Settings switch. */
 export function skipReason(v: { videoId: string; channel?: string; channelId?: string }, s: SeenView, hidePlayed: boolean): SkipReason | null {
   if (s.hidden[v.videoId]) return 'hidden';
   if (isMuted(v, s)) return 'muted';

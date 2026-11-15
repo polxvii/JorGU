@@ -15,7 +15,6 @@ import { playFromList } from '../playActions';
 import { channelPlays, skipReason, useSeen } from '../seenStore';
 import { ChannelsPanel } from './ChannelsPanel';
 import { ConnectCard } from './ConnectCard';
-import { MixPanel } from './MixPanel';
 import { PastePanel } from './PastePanel';
 import { PlaylistsPanel } from './PlaylistsPanel';
 import { SearchPanel } from './SearchPanel';
@@ -31,7 +30,6 @@ export const YOUTUBE_SITE = 'https://www.youtube.com/';
 /** Order chosen by the user (2026-11-11). */
 const TABS: { id: LibraryTab; label: MessageKey }[] = [
   { id: 'feed', label: 'library.tab.feed' },
-  { id: 'mix', label: 'library.tab.mix' },
   { id: 'playlists', label: 'library.tab.playlists' },
   { id: 'trending', label: 'library.tab.trending' },
   { id: 'recent', label: 'library.tab.recent' },
@@ -210,8 +208,6 @@ function Panel({ tab }: { tab: LibraryTab }) {
       return <RecentPanel />;
     case 'feed':
       return <FeedPanel />;
-    case 'mix':
-      return <MixPanel />;
     case 'playlists':
       return <PlaylistsPanel />;
     case 'search':
@@ -234,7 +230,7 @@ export function LibrarySheet({ rect }: { rect: Rect }) {
     if (el && row) row.scrollLeft = Math.max(0, el.offsetLeft - (row.clientWidth - el.offsetWidth) / 2);
   }, []);
 
-  const needsAccount = tab !== 'paste' && tab !== 'recent' && tab !== 'mix';
+  const needsAccount = tab !== 'paste' && tab !== 'recent';
   const gated = needsAccount && (status === 'disconnected' || status === 'unavailable');
   // After an expiry (REAUTH) cached lists keep working until the user reconnects (§8.1).
   const showPanel = !gated || (status === 'disconnected' && expired);

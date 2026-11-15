@@ -12,7 +12,7 @@ export type SheetState =
   | { kind: 'web'; pane: PaneIndex }
   | { kind: 'map' };
 
-export type LibraryTab = 'paste' | 'recent' | 'feed' | 'mix' | 'playlists' | 'trending' | 'search';
+export type LibraryTab = 'paste' | 'recent' | 'feed' | 'playlists' | 'trending' | 'search';
 
 export interface Toast {
   id: number;

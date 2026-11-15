@@ -98,11 +98,11 @@ export interface Settings {
     miniCorner: MiniCorner;
     playbackRate: number;
     /**
-     * After the last clip in the queue (user 2026-11-15): 'mix' = YouTube's Mix of that clip (related clips),
-     * 'list' = a tap in a list queues the rest of that list (the old "keep playing the list"), 'off' = stop.
+     * After the last clip in the queue: 'list' = a tap in a list queues the rest of that list, 'off' = stop.
+     * (A third choice, YouTube's Mix, was removed on 2026-11-16: only music has one.)
      */
     continueWith: ContinueWith;
-    /** New, Trending and Mix leave out clips played in JorGu (last 30 days); Search marks them. */
+    /** New and Trending leave out clips played in JorGu (last 30 days); Search marks them. */
     hidePlayed: boolean;
     /** New and Trending hide clips up to this many seconds (user 2026-11-13: Shorts run to 3 min now). */
     hideUpTo: HideUpTo;
@@ -113,7 +113,7 @@ export interface Settings {
 }
 
 export const HIDE_UP_TO = [60, 120, 180] as const;
-export const CONTINUE_WITH = ['mix', 'list', 'off'] as const;
+export const CONTINUE_WITH = ['list', 'off'] as const;
 export type ContinueWith = (typeof CONTINUE_WITH)[number];
 export type HideUpTo = (typeof HIDE_UP_TO)[number];
 
@@ -133,7 +133,7 @@ export function defaultSettings(): Settings {
     },
     map: { mode: 'js', routeLine: true, follow: true, traffic: true, avoidTolls: false, avoidHighways: false, routeInfoAt: 'bottom', colors: 'day', savedPlaces: [], recentDestinations: [] },
     web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280, search: 'google' },
-    youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', playbackRate: 1, continueWith: 'mix', hidePlayed: true, hideUpTo: 120 },
+    youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', playbackRate: 1, continueWith: 'list', hidePlayed: true, hideUpTo: 120 },
     dockSize: 'normal',
     library: { feedChannelLimit: 50 },
   };

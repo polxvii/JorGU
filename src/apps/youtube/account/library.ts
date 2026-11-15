@@ -118,29 +118,6 @@ export async function fillTitles(ids: string[]): Promise<void> {
   }
 }
 
-/**
- * Title, channel and length of each id (videos.list, 1 unit per 50, cached 6 h), for Mix clips. Null without an
- * account (the player then supplies each title as it plays).
- */
-export async function videoMeta(ids: string[]): Promise<Map<string, VideoItem> | null> {
-  const out = new Map<string, VideoItem>();
-  const missing: string[] = [];
-  for (const id of new Set(ids)) {
-    const hit = await peek<VideoItem>(`v:${id}`);
-    if (hit && Date.now() - hit.t < TTL.video && hit.v.duration !== undefined) out.set(id, hit.v);
-    else missing.push(id);
-  }
-  if (missing.length && useAccount.getState().status !== 'connected') return out.size ? out : null;
-  for (let i = 0; i < missing.length; i += 50) {
-    const r = await api<{ items: VideoItem[] }>(`/api/yt/videos?ids=${missing.slice(i, i + 50).join(',')}`);
-    for (const v of r.items) {
-      out.set(v.videoId, v);
-      await put(`v:${v.videoId}`, v);
-    }
-  }
-  return out;
-}
-
 export function untitledQueueIds(): string[] {
   return useQueue
     .getState()

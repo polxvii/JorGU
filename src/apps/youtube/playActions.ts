@@ -28,9 +28,8 @@ export const AUTO_CONTINUE_MAX = 50;
 
 /**
  * Tap in a list (New, Trending, search, Recently): plays it now. Then, by Settings → When the queue ends: 'list' =
- * the rest of that list; 'mix' = nothing queued here, the player continues with the Mix of the last clip when the
- * queue runs out (player.ts); 'off' = stop. Manually queued (+) videos still come first; a tap in another list
- * replaces the auto part.
+ * the rest of that list; 'off' = stop. Manually queued (+) videos still come first; a tap in another list replaces
+ * the auto part.
  */
 export function playFromList(list: Playable[], index: number): void {
   const v = list[index];
@@ -38,12 +37,6 @@ export function playFromList(list: Playable[], index: number): void {
   playVideo(v);
   const rest = useSettings.getState().youtube.continueWith === 'list' ? list.slice(index + 1, index + 1 + AUTO_CONTINUE_MAX) : [];
   useQueue.getState().setAutoTail(rest.map(toItem));
-}
-
-/** Mix tab: plays the seed now (a tap, so it may start with sound), then its Mix whatever the setting. */
-export function playMix(seed: Playable): void {
-  useQueue.getState().playNow([{ ...toItem(seed), mix: true }]);
-  playIndex(0, { auto: false });
 }
 
 export function queueVideos(list: Playable[]): void {

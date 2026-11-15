@@ -10,8 +10,6 @@ export interface QueueItem {
   start?: number;
   /** Added by auto-continue (rest of the list a video was tapped in); replaced when another list is tapped. */
   auto?: boolean;
-  /** From a Mix, or a Mix seed (Mix tab): when the queue ends after it, its Mix continues whatever the setting. */
-  mix?: boolean;
 }
 
 export type Repeat = 'off' | 'all' | 'one';

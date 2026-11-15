@@ -3,7 +3,6 @@ import { Icon } from '../../shell/Icon';
 import { Sheet } from '../../shell/Sheet';
 import type { Rect } from '../../shell/geometry';
 import { type Repeat, useQueue } from './queueStore';
-import { useSettings } from '../../features/settings/settingsStore';
 import { playIndex } from './player';
 import { SpeedButton } from './SpeedButton';
 import { MuteButton, SeekButton } from './TransportButtons';
@@ -14,11 +13,6 @@ export function QueueSheet({ rect }: { rect: Rect }) {
   const index = useQueue((s) => s.index);
   const repeat = useQueue((s) => s.repeat);
   const shuffle = useQueue((s) => s.shuffle);
-  const order = useQueue((s) => s.order);
-  const continueWith = useSettings((s) => s.youtube.continueWith);
-  // The queue's last clip (in play order) continues with its Mix (player.ts wantsMix).
-  const last = items[order[order.length - 1] ?? items.length - 1];
-  const mixNext = !!last && repeat !== 'all' && (last.mix === true || continueWith === 'mix');
   const { setRepeat, toggleShuffle, remove, clear } = useQueue.getState();
   const repeats: { value: Repeat; label: string }[] = [
     { value: 'off', label: t('queue.repeatOff') },
@@ -77,9 +71,7 @@ export function QueueSheet({ rect }: { rect: Rect }) {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[16px] font-semibold">{it.title ?? t('yt.untitled')}</span>
                   <span className="block truncate text-[13px] opacity-75">
-                    {i === index
-                      ? t('queue.nowPlaying')
-                      : [it.channel ?? (it.mix ? '' : it.videoId), it.auto ? t(it.mix ? 'queue.fromMix' : 'queue.fromList') : ''].filter(Boolean).join(' · ')}
+                    {i === index ? t('queue.nowPlaying') : [it.channel ?? it.videoId, it.auto ? t('queue.fromList') : ''].filter(Boolean).join(' · ')}
                   </span>
                 </span>
               </button>
@@ -94,13 +86,6 @@ export function QueueSheet({ rect }: { rect: Rect }) {
             </li>
           ))}
         </ol>
-      )}
-
-      {mixNext && (
-        <p data-testid="queue-mix-next" className="mt-2 flex items-center gap-2 px-1 text-[14px] text-text-dim">
-          <Icon name="mix" size={20} className="shrink-0" />
-          {t('queue.mixNext')}
-        </p>
       )}
 
       {items.length > 0 && (

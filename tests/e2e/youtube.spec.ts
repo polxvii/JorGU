@@ -144,32 +144,16 @@ test('invalid and playlist-only links are explained, not played', async ({ page 
   await revealHeaders(page);
 });
 
-// Mix (user 2026-11-15): the queue ending continues with YouTube's Mix of the last clip, played one by one by JorGu.
-const MUSIC = 'dQw4w9WgXcQ';
+// Played clips are remembered (user 2026-11-15); the end of the queue just stops (the Mix was removed 2026-11-16).
+const ENDED = 0;
 
-test('Mix: when the queue ends, the Mix of the last clip continues; played clips are remembered', async ({ page }) => {
-  await openApp(page);
-  await pasteAndPlay(page, `https://youtu.be/${MUSIC}`);
-  const played = () => page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('jorgu:seen') ?? '{"state":{"played":{}}}').state.played));
-  await expect.poll(played).toContain(MUSIC);
-  await page.evaluate(() => window.__jorgu!.seekNearEnd(1.5));
-  await expect.poll(async () => page.evaluate(() => window.__jorgu!.queue().items.length), { timeout: 30_000 }).toBeGreaterThan(5);
-  const q = await page.evaluate(() => window.__jorgu!.queue());
-  expect(q.index).toBe(1);
-  expect(q.items.slice(1).every((i) => i.mix && i.auto)).toBe(true);
-  expect(q.items.slice(1).map((i) => i.videoId)).not.toContain(MUSIC);
-  await expect.poll(async () => (await yt(page)).state, { timeout: 45_000 }).toBe(PLAYING);
-  // No account here: the player supplies the title as it plays.
-  await expect.poll(async () => page.evaluate(() => window.__jorgu!.queue().items[1].title ?? ''), { timeout: 20_000 }).not.toBe('');
-  await expectPlayerClear(page);
-});
-
-test('Mix: a clip without one (not music) stops with a note', async ({ page }) => {
+test('played clips are remembered; the end of the queue stops', async ({ page }) => {
   await openApp(page);
   await pasteAndPlay(page, VIDEO_A);
+  const played = () => page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('jorgu:seen') ?? '{"state":{"played":{}}}').state.played));
+  await expect.poll(played).toContain(VIDEO_A);
   await page.evaluate(() => window.__jorgu!.seekNearEnd(1.5));
-  await expect(page.getByTestId('toast')).toContainText('No Mix', { timeout: 30_000 });
+  await expect.poll(async () => (await yt(page)).state, { timeout: 30_000 }).toBe(ENDED);
   expect((await page.evaluate(() => window.__jorgu!.queue())).items).toHaveLength(1);
-  expect((await yt(page)).state).not.toBe(PLAYING);
+  await expect(page.getByTestId('toast')).toHaveCount(0);
 });
-

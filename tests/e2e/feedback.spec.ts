@@ -95,14 +95,15 @@ test('transport row: ±10 s and mute fit in the pane; on a narrow pane speed mov
   for (const id of ['queue-back10', 'queue-forward10', 'queue-mute', 'queue-speed']) await expect(page.getByTestId(id)).toBeVisible();
 });
 
-test('when the queue ends: rest of the list / stop / Mix (default, user 2026-11-15)', async ({ page }) => {
+test('when the queue ends: rest of the list (default) / stop; no Mix (removed 2026-11-16)', async ({ page }) => {
   await mockAccount(page);
   await openApp(page);
   // Real playback would mark clips as played and New would hide them: keep them listed for this test.
   await page.getByTestId('dock-settings').click();
-  await expect(page.getByTestId('setting-auto-continue').locator('[data-value="mix"]')).toHaveAttribute('aria-checked', 'true');
+  const choices = page.getByTestId('setting-auto-continue').locator('[data-value]');
+  await expect(choices).toHaveCount(2);
+  await expect(page.getByTestId('setting-auto-continue').locator('[data-value="list"]')).toHaveAttribute('aria-checked', 'true');
   await page.getByTestId('setting-hide-played').locator('[data-value="off"]').click();
-  await page.getByTestId('setting-auto-continue').locator('[data-value="list"]').click();
   await page.getByTestId('sheet-close').click();
   const tap = async (title: string) => {
     await page.getByTestId('yt-library').click();
@@ -118,18 +119,6 @@ test('when the queue ends: rest of the list / stop / Mix (default, user 2026-11-
   await tap('Two');
   // Old auto part gone; only the tapped video added after the current one.
   await expect.poll(() => queue(page)).toEqual(['One', 'Two']);
-  await page.getByTestId('yt-queue').click();
-  await expect(page.getByTestId('queue-mix-next')).toHaveCount(0);
-  await page.getByTestId('sheet-close').click();
-
-  // Mix: nothing queued from the list; the queue sheet says the Mix of the last clip comes next.
-  await page.getByTestId('dock-settings').click();
-  await page.getByTestId('setting-auto-continue').locator('[data-value="mix"]').click();
-  await page.getByTestId('sheet-close').click();
-  await tap('Three');
-  await expect.poll(() => queue(page)).toEqual(['One', 'Two', 'Three']);
-  await page.getByTestId('yt-queue').click();
-  await expect(page.getByTestId('queue-mix-next')).toBeVisible();
 });
 
 test('Recently tab: works without an account, plays from there, can be cleared', async ({ page }) => {

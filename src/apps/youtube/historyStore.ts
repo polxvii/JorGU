@@ -10,7 +10,7 @@ export interface HistoryEntry {
   channel?: string;
   /** Last played (ms). */
   at: number;
-  /** Times played (since it entered the list), for the Mix tab's "played most". */
+  /** Times played (since it entered the list). */
   plays?: number;
 }
 

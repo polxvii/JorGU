@@ -310,7 +310,7 @@ describe('Data API proxy', () => {
     ]);
   });
 
-  it('videos.list gives title, channel id and length (for Mix clips) for 1 unit', async () => {
+  it('videos.list gives title, channel id and length for 1 unit', async () => {
     google = (url) => {
       expect(url.searchParams.get('part')).toBe('snippet,contentDetails');
       return Response.json({ items: [{ id: 'M7lc1UVf-VE', snippet: { title: 'Song', channelTitle: 'Band', channelId: 'UCaaaaaaaaaaaaaaaaaaaaaa' }, contentDetails: { duration: 'PT3M30S' } }] });

@@ -510,14 +510,12 @@ test('New: played clips left out, ranked by channels played; hide a clip or its 
   await expect.poll(() => m.calls.filter((c) => c.startsWith('GET /api/yt/feed')).at(-1)).toBe(`GET /api/yt/feed?exclude=${UCC}`);
 });
 
-test('Search marks played clips but keeps them; Mix tab: Mixes of songs played most and liked videos', async ({ page }) => {
+test('Search marks played clips but keeps them; no Mix tab (removed 2026-11-16)', async ({ page }) => {
   await mockApi(page);
   await openApp(page);
-  await page.evaluate(() => {
-    localStorage.setItem('jorgu:seen', JSON.stringify({ state: { played: { OPf0YbXqDm0: { at: Date.now(), ch: 'Mock Channel' } }, hidden: {}, muted: {} }, version: 1 }));
-    const e = (videoId: string, title: string, channel: string, plays: number) => ({ videoId, title, channel, plays, at: Date.now() - plays * 1000 });
-    localStorage.setItem('jorgu:history', JSON.stringify({ state: { entries: [e('dQw4w9WgXcQ', 'Played twice', 'Band', 2), e('9bZkp7q19f0', 'Played five times', 'Other', 5)] }, version: 1 }));
-  });
+  await page.evaluate(() =>
+    localStorage.setItem('jorgu:seen', JSON.stringify({ state: { played: { OPf0YbXqDm0: { at: Date.now(), ch: 'Mock Channel' } }, hidden: {}, muted: {} }, version: 1 })),
+  );
   await page.reload();
   await page.getByTestId('yt-empty-library').click();
   await page.getByTestId('lib-tab-search').click();
@@ -528,15 +526,6 @@ test('Search marks played clips but keeps them; Mix tab: Mixes of songs played m
   await expect(results).toContainText('From YouTube search');
   await expect(results.getByTestId('lib-mark')).toHaveText('Played');
   await expect(results.getByTestId('lib-hide')).toHaveCount(0);
-
-  await page.getByTestId('lib-tab-mix').click();
-  await expect(page.getByTestId('lib-mix-played').locator('li')).toHaveText([/Mix · Played five times/, /Mix · Played twice/]);
-  await expect(page.getByTestId('lib-mix-liked')).toContainText('Mix · Liked thing');
-  await page.getByTestId('lib-mix-played').locator('li button').first().click();
-  await expect(page.getByTestId('library-sheet')).toHaveCount(0);
-  const q = await queue(page);
-  expect(q.items.map((i) => [i.videoId, i.mix])).toEqual([['9bZkp7q19f0', true]]);
-  await page.getByTestId('yt-queue').click();
-  await expect(page.getByTestId('queue-mix-next')).toBeVisible();
+  await expect(page.getByTestId('lib-tab-mix')).toHaveCount(0);
 });
 

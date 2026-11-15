@@ -5,10 +5,6 @@ export interface YTPlayer {
   pauseVideo(): void;
   loadVideoById(videoId: string, startSeconds?: number): void;
   cueVideoById(videoId: string, startSeconds?: number): void;
-  /** Object syntax: a playlist id (a Mix is "RD" + a video id; spec §8.5). */
-  cuePlaylist(args: { list: string; listType: 'playlist'; index?: number }): void;
-  /** Video ids of the playlist in the player, or null when it isn't playing a playlist. */
-  getPlaylist(): string[] | null;
   /** Not in the typed docs list but documented in the player object; title/author of the loaded video. */
   getVideoData?(): { video_id?: string; title?: string; author?: string } | undefined;
   seekTo(seconds: number, allowSeekAhead: boolean): void;

@@ -1,6 +1,5 @@
-// Played / hidden clips, muted channels, New ranking and Mix seeds (user 2026-11-15).
+// Played / hidden clips, muted channels and New ranking (user 2026-11-15).
 import { beforeEach, describe, expect, it } from 'vitest';
-import { mixSeeds } from '../../src/apps/youtube/library/mixSeeds';
 import { rankFeed } from '../../src/apps/youtube/library/rankFeed';
 import { SEEN_MAX_AGE_MS, SEEN_MAX_IDS, channelPlays, skipReason, useSeen } from '../../src/apps/youtube/seenStore';
 import { mergeSettings } from '../../src/features/settings/merge';
@@ -84,32 +83,15 @@ describe('New ranking', () => {
   });
 });
 
-describe('Mix seeds', () => {
-  const e = (videoId: string, channel: string, plays: number, at: number) => ({ videoId, title: `T ${videoId}`, channel, plays, at });
-
-  it('played most, then most recent; 2 per channel; hidden and untitled ones left out', () => {
-    const entries = [
-      e('a1', 'A', 5, 1),
-      e('a2', 'A', 4, 2),
-      e('a3', 'A', 9, 3),
-      e('b1', 'B', 1, 9),
-      e('b2', 'B', 1, 8),
-      e('c1', 'C', 2, 1),
-      { videoId: 'x', channel: 'X', plays: 50, at: 1 },
-    ];
-    expect(mixSeeds(entries).map((s) => s.videoId)).toEqual(['a3', 'a1', 'c1', 'b1', 'b2']);
-    expect(mixSeeds(entries, { a3: 1 }).map((s) => s.videoId)).toEqual(['a1', 'a2', 'c1', 'b1', 'b2']);
-    expect(mixSeeds(entries, {}, 2)).toHaveLength(2);
-  });
-});
-
 describe('settings: when the queue ends', () => {
-  it('Mix by default; an old "keep playing the list" off stays off; a saved choice is kept', () => {
-    expect(defaultSettings().youtube.continueWith).toBe('mix');
-    expect(mergeSettings({ youtube: { autoContinue: true } }, defaultSettings()).youtube.continueWith).toBe('mix');
+  it('rest of the list by default; an old "keep playing the list" off stays off; Mix (removed) becomes the list', () => {
+    expect(defaultSettings().youtube.continueWith).toBe('list');
+    expect(mergeSettings({ youtube: { autoContinue: true } }, defaultSettings()).youtube.continueWith).toBe('list');
     expect(mergeSettings({ youtube: { autoContinue: false } }, defaultSettings()).youtube.continueWith).toBe('off');
     expect(mergeSettings({ youtube: { autoContinue: false, continueWith: 'list' } }, defaultSettings()).youtube.continueWith).toBe('list');
-    expect(mergeSettings({ youtube: { continueWith: 'radio' } }, defaultSettings()).youtube.continueWith).toBe('mix');
+    expect(mergeSettings({ youtube: { continueWith: 'off' } }, defaultSettings()).youtube.continueWith).toBe('off');
+    expect(mergeSettings({ youtube: { continueWith: 'mix' } }, defaultSettings()).youtube.continueWith).toBe('list');
+    expect(mergeSettings({ youtube: { continueWith: 'radio' } }, defaultSettings()).youtube.continueWith).toBe('list');
     expect('autoContinue' in mergeSettings({ youtube: { autoContinue: true } }, defaultSettings()).youtube).toBe(false);
     expect(mergeSettings({ youtube: {} }, defaultSettings()).youtube.hidePlayed).toBe(true);
   });

@@ -41,11 +41,11 @@ function Meta({ channel, age }: { channel: string; age: string }) {
 
 const BADGE: Record<SkipReason, MessageKey> = { played: 'library.played', hidden: 'library.hiddenBadge', muted: 'library.hiddenBadge' };
 
-/** Hide a clip from New, Trending and Mix; the toast offers to hide its whole channel (user 2026-11-15). */
+/** Hide a clip from New and Trending; the toast offers to hide its whole channel (user 2026-11-15). */
 export function hideClip(v: VideoItem): void {
   const seen = useSeen.getState();
   seen.hide(v.videoId);
-  // Not later in the queue either (rest of a list, Mix).
+  // Not later in the queue either (rest of a list).
   useQueue.getState().filterAuto((it) => it.videoId !== v.videoId);
   useUi.getState().showToast({
     message: 'toast.hidden',

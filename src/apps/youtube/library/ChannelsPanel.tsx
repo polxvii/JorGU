@@ -1,6 +1,8 @@
 // Channels in New (user 2026-11-15: "lots of things I'm not interested in"): every subscribed channel with a Shown /
 // Off switch. Off = left out of New (the Worker skips it, so another channel takes its place), Trending and Mix.
-// Channels played most come first, with their play count.
+// Channels turned off come first (also ones hidden from Trending that aren't subscriptions, so a channel hidden by
+// mistake can always be turned back on), then the ones played most, with their play count.
+import { useState } from 'react';
 import { useT } from '../../../i18n';
 import { Icon } from '../../../shell/Icon';
 import { loadSubscriptions } from '../account/library';
@@ -14,6 +16,7 @@ export function ChannelsPanel({ onBack }: { onBack: () => void }) {
   const muted = useSeen((s) => s.muted);
   const plays = channelPlays(useSeen((s) => s.played));
   const { mute, unmute } = useSeen.getState();
+  const [offAtOpen] = useState(() => Object.fromEntries(Object.entries(useSeen.getState().muted).map(([k, m]) => [k, m.title])));
   return (
     <div className="flex flex-col gap-2" data-testid="lib-channels-panel">
       <div className="flex items-center gap-2">
@@ -31,11 +34,22 @@ export function ChannelsPanel({ onBack }: { onBack: () => void }) {
       <p className="px-1 text-[13px] text-text-dim">{t('library.channelsHint')}</p>
       <LoadFrame state={state} empty="library.empty">
         {(subs) => {
-          const list = [...subs].sort((a, b) => (plays.get(b.title) ?? 0) - (plays.get(a.title) ?? 0) || a.title.localeCompare(b.title));
+          // Hidden channels that aren't subscriptions (from Trending or a Mix): listed too, keyed as they were hidden.
+          // Order and rows come from when the page opened, so a tap never moves or removes a row.
+          const known = { ...offAtOpen, ...Object.fromEntries(Object.entries(muted).map(([k, m]) => [k, m.title])) };
+          const extra = Object.entries(known)
+            .filter(([key, title]) => !subs.some((c) => c.channelId === key || c.title === key || c.title === title))
+            .map(([key, title]) => ({ channelId: key, title, thumb: '' }));
+          const wasOff = (c: { channelId: string; title: string }) => c.channelId in offAtOpen || c.title in offAtOpen;
+          const isOff = (c: { channelId: string; title: string }) => !!muted[c.channelId] || !!muted[c.title];
+          const list = [...extra, ...subs].sort(
+            (a, b) =>
+              Number(wasOff(b)) - Number(wasOff(a)) || (plays.get(b.title) ?? 0) - (plays.get(a.title) ?? 0) || a.title.localeCompare(b.title),
+          );
           return (
             <ul className="flex flex-col gap-1" data-testid="lib-channel-list">
               {list.map((c) => {
-                const off = !!muted[c.channelId] || !!muted[c.title];
+                const off = isOff(c);
                 const n = plays.get(c.title) ?? 0;
                 return (
                   <li key={c.channelId} data-channel-id={c.channelId} data-off={off ? '1' : '0'} className="flex items-center gap-3 rounded-xl bg-bg p-2">

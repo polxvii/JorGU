@@ -53,9 +53,15 @@ export function hideClip(v: VideoItem): void {
     action: {
       label: 'toast.muteChannel',
       run: () => {
-        useSeen.getState().mute(v.channelId || v.channel, v.channel);
+        const key = v.channelId || v.channel;
+        useSeen.getState().mute(key, v.channel);
         useQueue.getState().filterAuto((it) => it.channel !== v.channel);
-        useUi.getState().showToast({ message: 'toast.channelMuted', params: { title: v.channel } });
+        // Hid the wrong one (user 2026-11-15): Undo, or turn it back on in "Channels in New".
+        useUi.getState().showToast({
+          message: 'toast.channelMuted',
+          params: { title: v.channel },
+          action: { label: 'toast.undo', run: () => useSeen.getState().unmute(key) },
+        });
       },
     },
   });

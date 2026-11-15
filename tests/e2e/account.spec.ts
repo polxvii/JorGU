@@ -460,6 +460,12 @@ test('New: played clips left out, ranked by channels played; hide a clip or its 
   await page.getByTestId('toast-action').click();
   await expect(feed).not.toContainText('Vlog B2');
   await expect(page.getByTestId('toast')).toContainText('Channel hidden: Vlogger B');
+  // Wrong one? Undo brings it back; hide it again for the rest of the test.
+  await page.getByTestId('toast-action').click();
+  await expect(feed).toContainText('Vlog B2');
+  await feed.locator('li[data-video-id="kJQP7kiw5Fk"]').getByTestId('lib-hide').click();
+  await page.getByTestId('toast-action').click();
+  await expect(feed).not.toContainText('Vlog B2');
   await expect(showHidden).toContainText('3 hidden');
 
   // Show them for a look, with why each was left out; then hide them again.
@@ -467,22 +473,37 @@ test('New: played clips left out, ranked by channels played; hide a clip or its 
   await expect(feed.locator('li')).toHaveCount(5);
   await expect(feed.locator('li[data-video-id="aqz-KE-bpKQ"] [data-testid="lib-mark"]')).toHaveText('Played');
   await expect(feed.locator('li[data-video-id="dQw4w9WgXcQ"]')).toHaveAttribute('data-mark', 'hidden');
-  await expect(feed.locator('li[data-video-id="kJQP7kiw5Fk"]')).toHaveAttribute('data-mark', 'muted');
+  // Vlog B2 was hidden itself before its channel was hidden again (after the Undo above).
+  await expect(feed.locator('li[data-video-id="kJQP7kiw5Fk"]')).toHaveAttribute('data-mark', 'hidden');
   await showHidden.click();
   await expect(feed.locator('li')).toHaveCount(2);
 
-  // Channels in New: played most first; Vlogger B is off; switch News C off and Vlogger B back on.
+  // Channels in New: channels turned off first (also one hidden from Trending that isn't a subscription), then
+  // played most; switch News C off and Vlogger B and the Trending one back on.
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('jorgu:seen')!);
+    s.state.muted.UCzzzzzzzzzzzzzzzzzzzzzz = { title: 'Trending Channel', at: Date.now() };
+    localStorage.setItem('jorgu:seen', JSON.stringify(s));
+  });
+  await page.reload();
+  await page.getByTestId('yt-empty-library').click();
   await page.getByTestId('lib-channels').click();
   const list = page.getByTestId('lib-channel-list');
-  await expect(list.locator('li').first()).toHaveAttribute('data-channel-id', UCA);
-  await expect(list.locator('li').first()).toContainText('played 1×');
+  await expect(list.locator('li')).toHaveCount(4);
+  await expect(list.locator('li').nth(0)).toHaveAttribute('data-channel-id', 'UCzzzzzzzzzzzzzzzzzzzzzz');
+  await expect(list.locator('li').nth(1)).toHaveAttribute('data-channel-id', UCB);
+  await expect(list.locator('li').nth(2)).toHaveAttribute('data-channel-id', UCA);
+  await expect(list.locator('li').nth(2)).toContainText('played 1×');
+  await list.locator('li[data-channel-id="UCzzzzzzzzzzzzzzzzzzzzzz"]').getByTestId('lib-channel-toggle').click();
+  await expect(list.locator('li[data-channel-id="UCzzzzzzzzzzzzzzzzzzzzzz"]')).toHaveAttribute('data-off', '0');
   await expect(list.locator(`li[data-channel-id="${UCB}"]`)).toHaveAttribute('data-off', '1');
   await list.locator(`li[data-channel-id="${UCC}"]`).getByTestId('lib-channel-toggle').click();
   await list.locator(`li[data-channel-id="${UCB}"]`).getByTestId('lib-channel-toggle').click();
   await expect(list.locator(`li[data-channel-id="${UCC}"]`)).toHaveAttribute('data-off', '1');
   await expect(list.locator(`li[data-channel-id="${UCB}"]`)).toHaveAttribute('data-off', '0');
   await page.getByTestId('lib-channels-back').click();
-  await expect(feed).toContainText('Vlog B2');
+  // Vlogger B is on again, but both its clips were hidden one by one; News C is off now.
+  await expect(feed).toContainText('Song A1');
   await expect(feed).not.toContainText('News C1');
   // The next refresh asks the Worker to skip News C, so another channel takes its place.
   await page.getByTestId('lib-refresh').click();

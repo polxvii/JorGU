@@ -79,7 +79,7 @@ export function QueueSheet({ rect }: { rect: Rect }) {
                   <span className="block truncate text-[13px] opacity-75">
                     {i === index
                       ? t('queue.nowPlaying')
-                      : [it.channel ?? it.videoId, it.auto ? t(it.mix ? 'queue.fromMix' : 'queue.fromList') : ''].filter(Boolean).join(' · ')}
+                      : [it.channel ?? (it.mix ? '' : it.videoId), it.auto ? t(it.mix ? 'queue.fromMix' : 'queue.fromList') : ''].filter(Boolean).join(' · ')}
                   </span>
                 </span>
               </button>

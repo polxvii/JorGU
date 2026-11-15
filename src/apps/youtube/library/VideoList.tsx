@@ -25,12 +25,16 @@ export function Thumb({ src }: { src: string }) {
   );
 }
 
-/** Channel · length · age; the length and age are never cut off, a long channel name is. */
-function Meta({ channel, meta }: { channel: string; meta: string }) {
+/**
+ * Channel and age ("3 days ago"): one line when they fit, else the age wraps under the channel, so a narrow row
+ * (hide + add buttons, big sheets) never squeezes the channel away (live screenshot 2026-11-15). The length is on
+ * the thumbnail, YouTube style.
+ */
+function Meta({ channel, age }: { channel: string; age: string }) {
   return (
-    <span className="flex min-w-0 text-[13px] text-text-dim" data-testid="lib-meta">
-      <span className="truncate">{channel}</span>
-      {meta && <span className="shrink-0 whitespace-pre">{channel ? ` · ${meta}` : meta}</span>}
+    <span className="flex min-w-0 flex-wrap gap-x-2 text-[13px] leading-snug text-text-dim" data-testid="lib-meta">
+      {channel && <span className="max-w-full truncate">{channel}</span>}
+      {age && <span className="whitespace-nowrap" data-testid="lib-age">{age}</span>}
     </span>
   );
 }
@@ -88,8 +92,13 @@ export function VideoList({ items, onPlay, testId, subtitle, marks = true, hideB
               <span className={`relative flex shrink-0 ${m ? 'opacity-60' : ''}`}>
                 <Thumb src={v.thumb} />
                 {m && (
-                  <span data-testid="lib-mark" className="absolute inset-x-0 bottom-0 rounded-b-lg bg-black/75 py-0.5 text-center text-[11px] font-semibold text-white">
+                  <span data-testid="lib-mark" className="absolute left-1 top-1 rounded bg-black/80 px-1.5 text-[11px] font-semibold leading-5 text-white">
                     {t(BADGE[m])}
+                  </span>
+                )}
+                {!!v.duration && (
+                  <span data-testid="lib-duration" className="tabular absolute bottom-1 right-1 rounded bg-black/80 px-1 text-[11px] font-semibold leading-4 text-white">
+                    {formatDuration(v.duration)}
                   </span>
                 )}
               </span>
@@ -98,33 +107,36 @@ export function VideoList({ items, onPlay, testId, subtitle, marks = true, hideB
                 {subtitle ? (
                   <span className="block truncate text-[13px] text-text-dim">{subtitle(v)}</span>
                 ) : (
-                  <Meta channel={v.channel} meta={[v.duration ? formatDuration(v.duration) : '', formatAge(v.publishedAt, lang, now)].filter(Boolean).join(' · ')} />
+                  <Meta channel={v.channel} age={formatAge(v.publishedAt, lang, now)} />
                 )}
               </span>
             </button>
-            {hideButton && (
+            {/* + over Hide in one column, so the title keeps its width. */}
+            <span className="flex shrink-0 flex-col">
               <button
                 type="button"
-                aria-label={t(m === 'hidden' ? 'library.unhide' : 'library.hide')}
-                data-testid="lib-hide"
-                onClick={() => (m === 'hidden' ? useSeen.getState().unhide(v.videoId) : hideClip(v))}
-                className="flex h-12 w-11 shrink-0 items-center justify-center rounded-xl text-text-dim"
+                aria-label={t('paste.addToQueue')}
+                data-testid="lib-add"
+                onClick={() => {
+                  queueVideos([v]);
+                  showToast({ message: 'library.added', params: { title: v.title } });
+                }}
+                className={`flex w-12 items-center justify-center rounded-xl text-text ${hideButton ? 'h-11' : 'h-12'}`}
               >
-                <Icon name={m === 'hidden' ? 'eye' : 'hide'} size={22} />
+                <Icon name="plus" size={22} />
               </button>
-            )}
-            <button
-              type="button"
-              aria-label={t('paste.addToQueue')}
-              data-testid="lib-add"
-              onClick={() => {
-                queueVideos([v]);
-                showToast({ message: 'library.added', params: { title: v.title } });
-              }}
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-text"
-            >
-              <Icon name="plus" size={22} />
-            </button>
+              {hideButton && (
+                <button
+                  type="button"
+                  aria-label={t(m === 'hidden' ? 'library.unhide' : 'library.hide')}
+                  data-testid="lib-hide"
+                  onClick={() => (m === 'hidden' ? useSeen.getState().unhide(v.videoId) : hideClip(v))}
+                  className="flex h-11 w-12 items-center justify-center rounded-xl text-text-dim"
+                >
+                  <Icon name={m === 'hidden' ? 'eye' : 'hide'} size={22} />
+                </button>
+              )}
+            </span>
           </li>
         );
       })}

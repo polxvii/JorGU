@@ -420,7 +420,11 @@ test('sheets are drawn bigger and wider (user 2026-11-13), more so with a bigger
   expect(Math.round((await title.boundingBox())!.height)).toBeGreaterThanOrEqual(23);
   expect(Math.round((await page.getByTestId('lib-feed').locator('img, span.w-24').first().boundingBox())!.width)).toBe(120);
   // Channel · length · age.
-  await expect(page.getByTestId('lib-feed').locator('[data-testid="lib-meta"]').first()).toHaveText('Mock Channel · 4:05 · 3 days ago');
+  // Channel and age under the title; the length on the thumbnail (YouTube style).
+  const first = page.getByTestId('lib-feed').locator('li').first();
+  await expect(first.getByTestId('lib-meta')).toContainText('Mock Channel');
+  await expect(first.getByTestId('lib-age')).toHaveText('3 days ago');
+  await expect(first.getByTestId('lib-duration')).toHaveText('4:05');
   await expectPlayerClear(page);
 
   await page.getByTestId('sheet-close').click();

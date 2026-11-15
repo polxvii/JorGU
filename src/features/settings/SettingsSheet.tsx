@@ -5,7 +5,8 @@ import { Sheet } from '../../shell/Sheet';
 import type { Rect } from '../../shell/geometry';
 import { THEMES, THEME_IDS } from '../../theme/themes';
 import { useSettings } from './settingsStore';
-import { HIDE_UP_TO, type HideUpTo, type ThemeId } from './types';
+import { CONTINUE_WITH, HIDE_UP_TO, type HideUpTo, type ThemeId } from './types';
+import { useSeen } from '../../apps/youtube/seenStore';
 import { setSpeed } from '../../apps/youtube/player';
 import { SPEED_PRESETS, formatSpeed } from '../../apps/youtube/speed';
 import { AccountSection } from '../../apps/youtube/library/ConnectCard';
@@ -167,14 +168,32 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
       <Section title={t('settings.autoContinue')}>
         <Segmented
           testId="setting-auto-continue"
-          value={s.youtube.autoContinue ? 'on' : 'off'}
-          onChange={(v) => s.setAutoContinue(v === 'on')}
+          value={s.youtube.continueWith}
+          onChange={(v) => s.setContinueWith(v as (typeof CONTINUE_WITH)[number])}
+          options={CONTINUE_WITH.map((v) => ({ value: v, label: t(`settings.continue.${v}`) }))}
+        />
+        <p className="mt-1 px-1 text-[13px] text-text-dim">{t(`settings.continueHint.${s.youtube.continueWith}`)}</p>
+      </Section>
+
+      <Section title={t('settings.hidePlayed')}>
+        <Segmented
+          testId="setting-hide-played"
+          value={s.youtube.hidePlayed ? 'on' : 'off'}
+          onChange={(v) => s.setHidePlayed(v === 'on')}
           options={[
             { value: 'on', label: t('settings.on') },
             { value: 'off', label: t('settings.off') },
           ]}
         />
-        <p className="mt-1 px-1 text-[13px] text-text-dim">{t('settings.autoContinueHint')}</p>
+        <p className="mt-1 px-1 text-[13px] text-text-dim">{t('settings.hidePlayedHint')}</p>
+        <button
+          type="button"
+          data-testid="setting-forget-clips"
+          onClick={() => useSeen.getState().forgetClips()}
+          className="mt-2 min-h-12 w-full rounded-xl bg-bg text-[15px] font-semibold text-text"
+        >
+          {t('settings.forgetClips')}
+        </button>
       </Section>
 
       <Section title={t('settings.hideUpTo')}>

@@ -1,7 +1,7 @@
 // YouTube library sheet: paste a link, new from subscriptions, playlists, search, trending by category (§8.2–8.4, §8.9).
 // Liked videos have no tab (user decision 2026-11-10) but stay in the library search.
 // youtube.com itself can't be embedded (X-Frame-Options), so "YouTube" opens the real site in a new tab.
-import { useCallback, useEffect } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useSettings } from '../../../features/settings/settingsStore';
 import { type LibraryTab, useUi } from '../../../features/settings/uiStore';
 import { type MessageKey, useT } from '../../../i18n';
@@ -12,10 +12,14 @@ import { useAccount } from '../account/accountStore';
 import { loadCategories, loadFeed, loadPopular } from '../account/library';
 import { useHistory } from '../historyStore';
 import { playFromList } from '../playActions';
+import { channelPlays, skipReason, useSeen } from '../seenStore';
+import { ChannelsPanel } from './ChannelsPanel';
 import { ConnectCard } from './ConnectCard';
+import { MixPanel } from './MixPanel';
 import { PastePanel } from './PastePanel';
 import { PlaylistsPanel } from './PlaylistsPanel';
 import { SearchPanel } from './SearchPanel';
+import { rankFeed } from './rankFeed';
 import { withoutShortClips } from './shortClips';
 import { useLoad } from './useLoad';
 import { LoadFrame, VideoList } from './VideoList';
@@ -27,6 +31,7 @@ export const YOUTUBE_SITE = 'https://www.youtube.com/';
 /** Order chosen by the user (2026-11-11). */
 const TABS: { id: LibraryTab; label: MessageKey }[] = [
   { id: 'feed', label: 'library.tab.feed' },
+  { id: 'mix', label: 'library.tab.mix' },
   { id: 'playlists', label: 'library.tab.playlists' },
   { id: 'trending', label: 'library.tab.trending' },
   { id: 'recent', label: 'library.tab.recent' },
@@ -41,29 +46,93 @@ const ordered = (list: CategoryItem[]) => [
   ...list.filter((c) => !PINNED.includes(c.id)),
 ];
 
-/** New and Trending: short clips hidden (Settings → "Hide clips up to"). */
-function VideoPanel({ load, testId, empty }: { load: (force: boolean) => Promise<Cached<VideoItem[]>>; testId: string; empty: MessageKey }) {
+/**
+ * New and Trending: short clips hidden (Settings → "Hide clips up to"); clips played in JorGu, hidden, or from a
+ * channel turned off are left out (user 2026-11-15), and "N hidden · Show" brings them back for a look. `rank` (New):
+ * channels played most first, at most 2 clips each at the top.
+ */
+function VideoPanel({ load, testId, empty, rank = false, header }: {
+  load: (force: boolean) => Promise<Cached<VideoItem[]>>;
+  testId: string;
+  empty: MessageKey;
+  rank?: boolean;
+  header?: ReactNode;
+}) {
   const t = useT();
   const close = useUi((s) => s.closeSheet);
   const upTo = useSettings((s) => s.youtube.hideUpTo);
+  const hidePlayed = useSettings((s) => s.youtube.hidePlayed);
+  const played = useSeen((s) => s.played);
+  const hidden = useSeen((s) => s.hidden);
+  const muted = useSeen((s) => s.muted);
+  const [showAll, setShowAll] = useState(false);
   const state = useLoad(load);
   return (
     <LoadFrame state={state} empty={empty}>
       {(all) => {
-        const items = withoutShortClips(all, upTo);
-        if (!items.length) return <p className="py-6 text-center text-text-dim">{t(empty)}</p>;
+        const long = withoutShortClips(all, upTo);
+        const kept = long.filter((v) => !skipReason(v, { played, hidden, muted }, hidePlayed));
+        const shown = showAll ? long : kept;
+        const items = rank ? rankFeed(shown, channelPlays(played)) : shown;
+        const off = long.length - kept.length;
         return (
-          <VideoList
-            testId={testId}
-            items={items}
-            onPlay={(i) => {
-              playFromList(items, i);
-              close();
-            }}
-          />
+          <>
+            {header}
+            {items.length ? (
+              <VideoList
+                testId={testId}
+                items={items}
+                hideButton
+                onPlay={(i) => {
+                  playFromList(items, i);
+                  close();
+                }}
+              />
+            ) : (
+              <p className="py-6 text-center text-text-dim">{t(empty)}</p>
+            )}
+            {(off > 0 || showAll) && (
+              <button
+                type="button"
+                data-testid={`${testId}-show-hidden`}
+                onClick={() => setShowAll(!showAll)}
+                className="min-h-12 rounded-xl bg-bg px-3 text-[14px] font-semibold text-text-dim"
+              >
+                {showAll ? t('library.hideAgain') : t('library.hiddenCount', { count: off })}
+              </button>
+            )}
+          </>
         );
       }}
     </LoadFrame>
+  );
+}
+
+/** New from subscriptions, ranked; "Channels in New" switches channels off (user 2026-11-15). */
+function FeedPanel() {
+  const t = useT();
+  const [channels, setChannels] = useState(false);
+  const off = useSeen((s) => Object.keys(s.muted).length);
+  if (channels) return <ChannelsPanel onBack={() => setChannels(false)} />;
+  return (
+    <VideoPanel
+      load={loadFeed}
+      testId="lib-feed"
+      empty="library.feedEmpty"
+      rank
+      header={
+        <button
+          type="button"
+          data-testid="lib-channels"
+          onClick={() => setChannels(true)}
+          className="flex min-h-12 items-center gap-2 rounded-xl bg-bg px-3 text-left text-[15px] font-semibold text-text"
+        >
+          <Icon name="user" size={20} />
+          <span className="min-w-0 flex-1 truncate">{t('library.channels', { count: off })}</span>
+          <Icon name="forward" size={20} />
+        </button>
+      }
+    />
   );
 }
 
@@ -85,6 +154,7 @@ function RecentPanel() {
     <div className="flex flex-col gap-2">
       <VideoList
         testId="lib-recent"
+        marks={false}
         items={items}
         onPlay={(i) => {
           playFromList(items, i);
@@ -139,7 +209,9 @@ function Panel({ tab }: { tab: LibraryTab }) {
     case 'recent':
       return <RecentPanel />;
     case 'feed':
-      return <VideoPanel key="feed" load={loadFeed} testId="lib-feed" empty="library.feedEmpty" />;
+      return <FeedPanel />;
+    case 'mix':
+      return <MixPanel />;
     case 'playlists':
       return <PlaylistsPanel />;
     case 'search':
@@ -162,7 +234,7 @@ export function LibrarySheet({ rect }: { rect: Rect }) {
     if (el && row) row.scrollLeft = Math.max(0, el.offsetLeft - (row.clientWidth - el.offsetWidth) / 2);
   }, []);
 
-  const needsAccount = tab !== 'paste' && tab !== 'recent';
+  const needsAccount = tab !== 'paste' && tab !== 'recent' && tab !== 'mix';
   const gated = needsAccount && (status === 'disconnected' || status === 'unavailable');
   // After an expiry (REAUTH) cached lists keep working until the user reconnects (§8.1).
   const showPanel = !gated || (status === 'disconnected' && expired);

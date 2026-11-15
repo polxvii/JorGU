@@ -13,6 +13,7 @@ export type { Env };
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const PLAYLIST_ID = /^[A-Za-z0-9_-]{10,64}$/;
 const CATEGORY_ID = /^\d{1,3}$/;
+const CHANNEL_ID = /^UC[A-Za-z0-9_-]{22}$/;
 const SEARCH_GAP_MS = 1000;
 const STATE_MAX_AGE = 600;
 const frameCheckLimiter = new RateLimiter(10, 60_000);
@@ -98,7 +99,10 @@ const routes: Record<string, { method: 'GET' | 'POST'; handler: Handler }> = {
   },
   '/api/yt/feed': {
     method: 'GET',
-    handler: async (_req, url, ctx) => items(await yt.feed(ctx, Number(url.searchParams.get('limit') ?? 40) || 40)),
+    handler: async (_req, url, ctx) => {
+      const exclude = (url.searchParams.get('exclude') ?? '').split(',').filter((id) => CHANNEL_ID.test(id)).slice(0, 100);
+      return json(await yt.feed(ctx, Number(url.searchParams.get('limit') ?? 40) || 40, exclude));
+    },
   },
   '/api/yt/subscriptions': {
     method: 'GET',

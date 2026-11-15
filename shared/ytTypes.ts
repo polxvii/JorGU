@@ -4,10 +4,18 @@ export interface VideoItem {
   videoId: string;
   title: string;
   channel: string;
+  /** The channel's id (UC…), to mute a channel (user 2026-11-15). Missing on lists cached before. */
+  channelId?: string;
   thumb: string;
   publishedAt?: string;
-  /** Seconds (videos.list contentDetails.duration); 0 for live streams. Only on New and Trending. */
+  /** Seconds (videos.list contentDetails.duration); 0 for live streams. On New, Trending, Search and videos.list. */
   duration?: number;
+}
+
+/** New from subscriptions, plus the muted channels the account is still subscribed to (they stay muted). */
+export interface FeedResponse {
+  items: VideoItem[];
+  muted: { channelId: string; title: string }[];
 }
 
 export interface PlaylistItem {

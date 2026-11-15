@@ -20,12 +20,32 @@ const ROAD = [v(VIDEO_A, 'Road Song One'), v(VIDEO_B, 'Road Song Two'), v('dQw4w
 const NEWS = [v('9bZkp7q19f0', 'Morning news')];
 const LIKED = [v('kJQP7kiw5Fk', 'Liked thing')];
 const SEARCH = [v('OPf0YbXqDm0', 'From YouTube search')];
+// Channels for New (user 2026-11-15).
+const UCA = 'UCaaaaaaaaaaaaaaaaaaaaaa';
+const UCB = 'UCbbbbbbbbbbbbbbbbbbbbbb';
+const UCC = 'UCcccccccccccccccccccccc';
+const SUBS = [
+  { channelId: UCB, title: 'Vlogger B', thumb: '' },
+  { channelId: UCA, title: 'Band A', thumb: '' },
+  { channelId: UCC, title: 'News C', thumb: '' },
+];
+const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+const clip = (videoId: string, title: string, channel: string, channelId: string, h: number) => ({ ...v(videoId, title, channel, 300), channelId, publishedAt: hoursAgo(h) });
+const FEED_CHANNELS = [
+  clip('M7lc1UVf-VE', 'Song A1', 'Band A', UCA, 1),
+  clip('aqz-KE-bpKQ', 'Song A2', 'Band A', UCA, 2),
+  clip('dQw4w9WgXcQ', 'Vlog B1', 'Vlogger B', UCB, 3),
+  clip('kJQP7kiw5Fk', 'Vlog B2', 'Vlogger B', UCB, 4),
+  clip('9bZkp7q19f0', 'News C1', 'News C', UCC, 5),
+];
 const SEARCH_WITH_SHORT = [v('OPf0YbXqDm0', 'From YouTube search', 'Mock Channel', 225), v('kffacxfA7G4', 'A Short in search', 'Mock Channel', 50)];
 
 interface Mock {
   connected: boolean;
   reauth: boolean;
   calls: string[];
+  /** Replaces FEED for one test. */
+  feed?: unknown[];
 }
 
 async function mockApi(page: Page, init: Partial<Mock> = {}): Promise<Mock> {
@@ -50,7 +70,9 @@ async function mockApi(page: Page, init: Partial<Mock> = {}): Promise<Mock> {
         m.connected = false;
         return json({ ok: true });
       case '/api/yt/feed':
-        return json({ items: FEED }, 200, 42);
+        return json({ items: m.feed ?? FEED, muted: [] }, 200, 42);
+      case '/api/yt/subscriptions':
+        return json({ items: SUBS }, 200, 1);
       case '/api/yt/playlists':
         return json({ items: PLAYLISTS }, 200, 1);
       case '/api/yt/playlist-items':
@@ -168,10 +190,11 @@ test('connected: New, Playlists → Play all; no Liked tab; + adds to queue; lis
   await page.getByTestId('yt-library').click();
   await expect(page.getByTestId('lib-tab-liked')).toHaveCount(0);
 
-  // Second visit within the TTL comes from IndexedDB, not the network.
+  // Second visit within the TTL comes from IndexedDB, not the network. (Feed video one may be hidden by now: Play
+  // all played it, and New leaves out clips played here.)
   const feedCalls = countCalls(m, 'GET /api/yt/feed');
   await page.getByTestId('lib-tab-feed').click();
-  await expect(feed).toContainText('Feed video one');
+  await expect(feed).toContainText('Feed video two');
   expect(countCalls(m, 'GET /api/yt/feed')).toBe(feedCalls);
   expect(await idbKeys(page)).toEqual(expect.arrayContaining(['feed', 'playlists', 'pl:PLroadtrip0001']));
 
@@ -408,5 +431,87 @@ test('sheets are drawn bigger and wider (user 2026-11-13), more so with a bigger
   await page.getByTestId('yt-queue').click();
   await expect(page.getByTestId('queue-sheet')).toBeVisible();
   await expectPlayerClear(page);
+});
+
+test('New: played clips left out, ranked by channels played; hide a clip or its channel; "N hidden · Show"; Channels in New', async ({ page }) => {
+  const m = await mockApi(page, { feed: FEED_CHANNELS });
+  await openApp(page);
+  // Song A2 was played here 2 days ago (JorGu's own memory, 30 days).
+  await page.evaluate(() =>
+    localStorage.setItem('jorgu:seen', JSON.stringify({ state: { played: { 'aqz-KE-bpKQ': { at: Date.now() - 2 * 86_400_000, ch: 'Band A' } }, hidden: {}, muted: {} }, version: 1 })),
+  );
+  await page.reload();
+  await page.getByTestId('yt-empty-library').click();
+  const feed = page.getByTestId('lib-feed');
+  const ids = () => feed.locator('li').evaluateAll((els) => els.map((e) => e.getAttribute('data-video-id')));
+  await expect(feed).toContainText('Song A1');
+  expect(await ids()).toEqual(['M7lc1UVf-VE', 'dQw4w9WgXcQ', 'kJQP7kiw5Fk', '9bZkp7q19f0']);
+  const showHidden = page.getByTestId('lib-feed-show-hidden');
+  await expect(showHidden).toContainText('1 hidden');
+
+  // Hide one clip, then (from the toast) its whole channel.
+  await feed.locator('li[data-video-id="dQw4w9WgXcQ"]').getByTestId('lib-hide').click();
+  await expect(feed).not.toContainText('Vlog B1');
+  await expect(page.getByTestId('toast')).toContainText('Hidden: Vlog B1');
+  await page.getByTestId('toast-action').click();
+  await expect(feed).not.toContainText('Vlog B2');
+  await expect(page.getByTestId('toast')).toContainText('Channel hidden: Vlogger B');
+  await expect(showHidden).toContainText('3 hidden');
+
+  // Show them for a look, with why each was left out; then hide them again.
+  await showHidden.click();
+  await expect(feed.locator('li')).toHaveCount(5);
+  await expect(feed.locator('li[data-video-id="aqz-KE-bpKQ"] [data-testid="lib-mark"]')).toHaveText('Played');
+  await expect(feed.locator('li[data-video-id="dQw4w9WgXcQ"]')).toHaveAttribute('data-mark', 'hidden');
+  await expect(feed.locator('li[data-video-id="kJQP7kiw5Fk"]')).toHaveAttribute('data-mark', 'muted');
+  await showHidden.click();
+  await expect(feed.locator('li')).toHaveCount(2);
+
+  // Channels in New: played most first; Vlogger B is off; switch News C off and Vlogger B back on.
+  await page.getByTestId('lib-channels').click();
+  const list = page.getByTestId('lib-channel-list');
+  await expect(list.locator('li').first()).toHaveAttribute('data-channel-id', UCA);
+  await expect(list.locator('li').first()).toContainText('played 1×');
+  await expect(list.locator(`li[data-channel-id="${UCB}"]`)).toHaveAttribute('data-off', '1');
+  await list.locator(`li[data-channel-id="${UCC}"]`).getByTestId('lib-channel-toggle').click();
+  await list.locator(`li[data-channel-id="${UCB}"]`).getByTestId('lib-channel-toggle').click();
+  await expect(list.locator(`li[data-channel-id="${UCC}"]`)).toHaveAttribute('data-off', '1');
+  await expect(list.locator(`li[data-channel-id="${UCB}"]`)).toHaveAttribute('data-off', '0');
+  await page.getByTestId('lib-channels-back').click();
+  await expect(feed).toContainText('Vlog B2');
+  await expect(feed).not.toContainText('News C1');
+  // The next refresh asks the Worker to skip News C, so another channel takes its place.
+  await page.getByTestId('lib-refresh').click();
+  await expect.poll(() => m.calls.filter((c) => c.startsWith('GET /api/yt/feed')).at(-1)).toBe(`GET /api/yt/feed?exclude=${UCC}`);
+});
+
+test('Search marks played clips but keeps them; Mix tab: Mixes of songs played most and liked videos', async ({ page }) => {
+  await mockApi(page);
+  await openApp(page);
+  await page.evaluate(() => {
+    localStorage.setItem('jorgu:seen', JSON.stringify({ state: { played: { OPf0YbXqDm0: { at: Date.now(), ch: 'Mock Channel' } }, hidden: {}, muted: {} }, version: 1 }));
+    const e = (videoId: string, title: string, channel: string, plays: number) => ({ videoId, title, channel, plays, at: Date.now() - plays * 1000 });
+    localStorage.setItem('jorgu:history', JSON.stringify({ state: { entries: [e('dQw4w9WgXcQ', 'Played twice', 'Band', 2), e('9bZkp7q19f0', 'Played five times', 'Other', 5)] }, version: 1 }));
+  });
+  await page.reload();
+  await page.getByTestId('yt-empty-library').click();
+  await page.getByTestId('lib-tab-search').click();
+  await page.getByTestId('search-input').fill('anything');
+  await page.getByTestId('search-go').click();
+  await page.getByTestId('search-youtube').click();
+  const results = page.getByTestId('search-youtube-results');
+  await expect(results).toContainText('From YouTube search');
+  await expect(results.getByTestId('lib-mark')).toHaveText('Played');
+  await expect(results.getByTestId('lib-hide')).toHaveCount(0);
+
+  await page.getByTestId('lib-tab-mix').click();
+  await expect(page.getByTestId('lib-mix-played').locator('li')).toHaveText([/Mix · Played five times/, /Mix · Played twice/]);
+  await expect(page.getByTestId('lib-mix-liked')).toContainText('Mix · Liked thing');
+  await page.getByTestId('lib-mix-played').locator('li button').first().click();
+  await expect(page.getByTestId('library-sheet')).toHaveCount(0);
+  const q = await queue(page);
+  expect(q.items.map((i) => [i.videoId, i.mix])).toEqual([['9bZkp7q19f0', true]]);
+  await page.getByTestId('yt-queue').click();
+  await expect(page.getByTestId('queue-mix-next')).toBeVisible();
 });
 

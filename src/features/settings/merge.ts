@@ -1,5 +1,5 @@
 import { sanitizeLayout } from '../../shell/layoutActions';
-import { HIDE_UP_TO, type Settings } from './types';
+import { CONTINUE_WITH, HIDE_UP_TO, type Settings } from './types';
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
@@ -20,7 +20,12 @@ export function mergeSettings(persisted: unknown, current: Settings): Settings {
   if (merged.language !== 'en' && merged.language !== 'th') merged.language = 'en';
   if (!['auto', 'tl', 'tr', 'bl', 'br'].includes(merged.youtube.miniCorner)) merged.youtube.miniCorner = 'auto';
   if (!['normal', 'large', 'xlarge'].includes(merged.dockSize)) merged.dockSize = 'normal';
-  if (typeof merged.youtube.autoContinue !== 'boolean') merged.youtube.autoContinue = true;
+  // Before 2026-11-15: autoContinue on/off. Off stays off; on becomes Mix (the new default).
+  const yt = merged.youtube as Settings['youtube'] & { autoContinue?: unknown };
+  if (!(CONTINUE_WITH as readonly string[]).includes(yt.continueWith)) yt.continueWith = 'mix';
+  if (yt.autoContinue === false && !(isPlainObject(persisted) && isPlainObject(persisted.youtube) && 'continueWith' in persisted.youtube)) yt.continueWith = 'off';
+  delete yt.autoContinue;
+  if (typeof merged.youtube.hidePlayed !== 'boolean') merged.youtube.hidePlayed = true;
   if (!(HIDE_UP_TO as readonly number[]).includes(merged.youtube.hideUpTo)) merged.youtube.hideUpTo = 120;
   if (typeof merged.map.routeLine !== 'boolean') merged.map.routeLine = true;
   if (typeof merged.map.avoidTolls !== 'boolean') merged.map.avoidTolls = false;

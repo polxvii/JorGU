@@ -10,6 +10,8 @@ export interface QueueItem {
   start?: number;
   /** Added by auto-continue (rest of the list a video was tapped in); replaced when another list is tapped. */
   auto?: boolean;
+  /** From a Mix, or a Mix seed (Mix tab): when the queue ends after it, its Mix continues whatever the setting. */
+  mix?: boolean;
 }
 
 export type Repeat = 'off' | 'all' | 'one';
@@ -75,6 +77,8 @@ interface QueueActions {
   setRepeat: (repeat: Repeat) => void;
   toggleShuffle: () => void;
   updateMeta: (videoId: string, meta: Partial<Pick<QueueItem, 'title' | 'channel'>>) => void;
+  /** Drops auto items after the current one that `drop` rejects (a clip hidden or a channel muted meanwhile). */
+  filterAuto: (keep: (it: QueueItem) => boolean) => void;
   clear: () => void;
 }
 
@@ -135,6 +139,11 @@ export const useQueue = create<QueueState>()(
         }),
       updateMeta: (videoId, meta) =>
         set((s) => ({ items: s.items.map((it) => (it.videoId === videoId ? { ...it, ...meta } : it)) })),
+      filterAuto: (keep) =>
+        set((s) => {
+          const items = s.items.filter((it, i) => i <= s.index || !it.auto || keep(it));
+          return items.length === s.items.length ? s : { items, order: rebuildOrder({ items, index: s.index, shuffle: s.shuffle }) };
+        }),
       clear: () => set({ ...EMPTY }),
     }),
     {

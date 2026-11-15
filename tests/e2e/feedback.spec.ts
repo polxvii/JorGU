@@ -1,4 +1,4 @@
-// User feedback batch (2026-11-11): mini player corner + grip, Dock size, ±10 s / mute, auto-continue toggle,
+// User feedback batch (2026-11-11): mini player corner + grip, Dock size, ±10 s / mute, when the queue ends,
 // Recently tab, pin from Recent / add a site.
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { box, expectPlayerClear, mockWeb, openApp, revealHeaders, startSimulatedPlayback } from './helpers';
@@ -95,21 +95,41 @@ test('transport row: ±10 s and mute fit in the pane; on a narrow pane speed mov
   for (const id of ['queue-back10', 'queue-forward10', 'queue-mute', 'queue-speed']) await expect(page.getByTestId(id)).toBeVisible();
 });
 
-test('auto-continue: a tap in New queues the rest of the list (+ first); off = just that video', async ({ page }) => {
+test('when the queue ends: rest of the list / stop / Mix (default, user 2026-11-15)', async ({ page }) => {
   await mockAccount(page);
   await openApp(page);
-  await page.getByTestId('yt-library').click();
-  await page.getByTestId('lib-tab-feed').click();
-  await page.getByTestId('lib-feed').locator('li button').first().click();
+  // Real playback would mark clips as played and New would hide them: keep them listed for this test.
+  await page.getByTestId('dock-settings').click();
+  await expect(page.getByTestId('setting-auto-continue').locator('[data-value="mix"]')).toHaveAttribute('aria-checked', 'true');
+  await page.getByTestId('setting-hide-played').locator('[data-value="off"]').click();
+  await page.getByTestId('setting-auto-continue').locator('[data-value="list"]').click();
+  await page.getByTestId('sheet-close').click();
+  const tap = async (title: string) => {
+    await page.getByTestId('yt-library').click();
+    await page.getByTestId('lib-tab-feed').click();
+    await page.getByTestId('lib-feed').locator('li', { hasText: title }).locator('button').first().click();
+  };
+  await tap('One');
   await expect.poll(() => queue(page)).toEqual(['One', 'Two*', 'Three*']);
 
   await page.getByTestId('dock-settings').click();
   await page.getByTestId('setting-auto-continue').locator('[data-value="off"]').click();
   await page.getByTestId('sheet-close').click();
-  await page.getByTestId('yt-library').click();
-  await page.getByTestId('lib-feed').locator('li').nth(1).locator('button').first().click();
+  await tap('Two');
   // Old auto part gone; only the tapped video added after the current one.
   await expect.poll(() => queue(page)).toEqual(['One', 'Two']);
+  await page.getByTestId('yt-queue').click();
+  await expect(page.getByTestId('queue-mix-next')).toHaveCount(0);
+  await page.getByTestId('sheet-close').click();
+
+  // Mix: nothing queued from the list; the queue sheet says the Mix of the last clip comes next.
+  await page.getByTestId('dock-settings').click();
+  await page.getByTestId('setting-auto-continue').locator('[data-value="mix"]').click();
+  await page.getByTestId('sheet-close').click();
+  await tap('Three');
+  await expect.poll(() => queue(page)).toEqual(['One', 'Two', 'Three']);
+  await page.getByTestId('yt-queue').click();
+  await expect(page.getByTestId('queue-mix-next')).toBeVisible();
 });
 
 test('Recently tab: works without an account, plays from there, can be cleared', async ({ page }) => {

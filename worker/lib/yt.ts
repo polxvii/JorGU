@@ -4,9 +4,9 @@ import type { SessionContext } from './session';
 
 const BASE = 'https://www.googleapis.com/youtube/v3/';
 
-import type { CategoryItem, ChannelItem, PlaylistItem, VideoItem } from '../../shared/ytTypes';
+import type { CategoryItem, ChannelItem, FeedResponse, PlaylistItem, VideoItem } from '../../shared/ytTypes';
 
-export type { CategoryItem, ChannelItem, PlaylistItem, VideoItem };
+export type { CategoryItem, ChannelItem, FeedResponse, PlaylistItem, VideoItem };
 
 interface Thumbs {
   default?: { url: string };
@@ -17,7 +17,9 @@ interface Thumbs {
 interface Snippet {
   title?: string;
   channelTitle?: string;
+  channelId?: string;
   videoOwnerChannelTitle?: string;
+  videoOwnerChannelId?: string;
   publishedAt?: string;
   thumbnails?: Thumbs;
   resourceId?: { videoId?: string; channelId?: string };
@@ -82,7 +84,16 @@ async function allPages(ctx: SessionContext, path: string, params: Record<string
 function videoFromVideosList(it: ApiItem): VideoItem | null {
   const id = typeof it.id === 'string' ? it.id : undefined;
   if (!id || !it.snippet?.title) return null;
-  return { videoId: id, title: it.snippet.title, channel: it.snippet.channelTitle ?? '', thumb: thumbOf(it.snippet.thumbnails), publishedAt: it.snippet.publishedAt };
+  const seconds = parseDuration(it.contentDetails?.duration);
+  return {
+    videoId: id,
+    title: it.snippet.title,
+    channel: it.snippet.channelTitle ?? '',
+    channelId: it.snippet.channelId,
+    thumb: thumbOf(it.snippet.thumbnails),
+    publishedAt: it.snippet.publishedAt,
+    ...(seconds === null ? {} : { duration: seconds }),
+  };
 }
 
 /** ISO 8601 duration (PT1H2M3S, P1DT2H) to seconds; null if it can't be read. */
@@ -141,6 +152,7 @@ function videoFromPlaylistItem(it: ApiItem): VideoItem | null {
     videoId: id,
     title,
     channel: it.snippet?.videoOwnerChannelTitle ?? it.snippet?.channelTitle ?? '',
+    channelId: it.snippet?.videoOwnerChannelId ?? it.snippet?.channelId,
     thumb: thumbOf(it.snippet?.thumbnails),
     publishedAt: it.contentDetails?.videoPublishedAt ?? it.snippet?.publishedAt,
   };
@@ -149,7 +161,14 @@ function videoFromPlaylistItem(it: ApiItem): VideoItem | null {
 function videoFromSearch(it: ApiItem): VideoItem | null {
   const id = typeof it.id === 'object' ? it.id.videoId : undefined;
   if (!id || !it.snippet?.title) return null;
-  return { videoId: id, title: decodeEntities(it.snippet.title), channel: decodeEntities(it.snippet.channelTitle ?? ''), thumb: thumbOf(it.snippet.thumbnails), publishedAt: it.snippet.publishedAt };
+  return {
+    videoId: id,
+    title: decodeEntities(it.snippet.title),
+    channel: decodeEntities(it.snippet.channelTitle ?? ''),
+    channelId: it.snippet.channelId,
+    thumb: thumbOf(it.snippet.thumbnails),
+    publishedAt: it.snippet.publishedAt,
+  };
 }
 
 /** search.list returns HTML-escaped titles. */
@@ -167,12 +186,19 @@ export async function subscriptions(ctx: SessionContext, order: 'relevance' | 'a
 /**
  * "New from subscriptions" (§8.2): uploads playlists of the most relevant channels, 5 newest each.
  * Capped at 40 channels: the Workers free plan allows 50 subrequests per request [Verify plan limit].
+ * `exclude` = channels the user muted (user 2026-11-15): skipped, so the next most relevant ones take their place
+ * (a second page of subscriptions when more than 10 are muted). Muted channels still subscribed come back in `muted`.
  */
-export async function feed(ctx: SessionContext, limit: number): Promise<VideoItem[]> {
+export async function feed(ctx: SessionContext, limit: number, exclude: string[] = []): Promise<FeedResponse> {
   const n = Math.max(1, Math.min(40, limit));
-  const subs = await ytGet(ctx, 'subscriptions', { part: 'snippet', mine: 'true', maxResults: n, order: 'relevance' });
-  const channelIds = (subs.items ?? []).map((it) => it.snippet?.resourceId?.channelId).filter((x): x is string => !!x);
-  if (channelIds.length === 0) return [];
+  const skip = new Set(exclude);
+  const subs = await allPages(ctx, 'subscriptions', { part: 'snippet', mine: 'true', maxResults: 50, order: 'relevance' }, skip.size > 10 ? 2 : 1);
+  const all = subs
+    .map((it) => ({ channelId: it.snippet?.resourceId?.channelId ?? '', title: it.snippet?.title ?? '' }))
+    .filter((c) => c.channelId);
+  const muted = all.filter((c) => skip.has(c.channelId));
+  const channelIds = all.filter((c) => !skip.has(c.channelId)).slice(0, n).map((c) => c.channelId);
+  if (channelIds.length === 0) return { items: [], muted };
   const channels = await ytGet(ctx, 'channels', { part: 'contentDetails', id: channelIds.join(','), maxResults: 50 });
   const uploads = (channels.items ?? []).map((c) => c.contentDetails?.relatedPlaylists?.uploads).filter((x): x is string => !!x);
   const results: VideoItem[] = [];
@@ -192,9 +218,9 @@ export async function feed(ctx: SessionContext, limit: number): Promise<VideoIte
     }
   };
   await Promise.all(Array.from({ length: 8 }, worker));
-  // 40 channels + subscriptions + channels + 2 videos.list calls stay under the 50-subrequest limit.
+  // 40 channels + 2 subscriptions pages + channels + 2 videos.list calls stay under the 50-subrequest limit.
   const newest = results.sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '')).slice(0, 100);
-  return withoutShorts(ctx, newest);
+  return { items: await withoutShorts(ctx, newest), muted };
 }
 
 export async function playlists(ctx: SessionContext): Promise<PlaylistItem[]> {
@@ -267,6 +293,7 @@ export async function search(ctx: SessionContext, q: string, lang: string): Prom
 
 export async function videos(ctx: SessionContext, ids: string[]): Promise<VideoItem[]> {
   if (ids.length === 0) return [];
-  const page = await ytGet(ctx, 'videos', { part: 'snippet', id: ids.slice(0, 50).join(',') });
+  // contentDetails too (same 1 unit): Mix clips get their length, so short ones can be skipped (user 2026-11-15).
+  const page = await ytGet(ctx, 'videos', { part: 'snippet,contentDetails', id: ids.slice(0, 50).join(',') });
   return (page.items ?? []).map(videoFromVideosList).filter((v): v is VideoItem => !!v);
 }

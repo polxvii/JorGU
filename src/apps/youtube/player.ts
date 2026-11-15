@@ -1,12 +1,20 @@
 // Singleton YouTube player controller (spec §8.5, §3.9).
 // The IFrame API iframe lives inside one host element that is never re-parented; the layout engine only moves
-// that host with CSS. Automatic playback (queue advance, error skip) only starts while the player is visible.
+// that host with CSS. Automatic playback (queue advance, error skip, Mix) only starts while the player is visible.
+//
+// Mix (user 2026-11-15): when the queue ends, the player cues YouTube's Mix of the last clip ("RD" + its id, a
+// playlist id the IFrame API takes), reads its video ids (getPlaylist), and JorGu queues them and plays them one by
+// one with loadVideoById. The player is never left playing the Mix playlist itself: it would advance on its own
+// (live check 2026-11-15: no ENDED between playlist items), past the "only while visible" rule. A Mix doesn't
+// always start with its seed, and non-music clips may have none (then playback stops with a toast).
 import { create } from 'zustand';
 import { useSettings } from '../../features/settings/settingsStore';
 import { useUi } from '../../features/settings/uiStore';
 import { type YTPlayer, YT_STATE, loadIframeApi } from './iframeApi';
+import { videoMeta } from './account/library';
 import { useHistory } from './historyStore';
-import { type QueueItem, currentItem, nextIndex, prevIndex, useQueue } from './queueStore';
+import { type QueueItem, currentItem, makeItem, nextIndex, prevIndex, useQueue } from './queueStore';
+import { skipReason, useSeen } from './seenStore';
 import { applicableRate, nextSpeed } from './speed';
 
 export type PlayerStatus = 'idle' | 'loading' | 'unstarted' | 'cued' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
@@ -44,6 +52,15 @@ let consecutiveErrors = 0;
 let iframeLoads = 0;
 /** Video already written to Recently for the current play. */
 let recordedId = '';
+/** Seed whose Mix is cued in the player right now ('' = none). */
+let mixFor = '';
+let mixTimer = 0;
+/** The queue ended while the player was hidden: the Mix starts when it shows again. */
+let pendingMix = false;
+/** Clips queued from one Mix. */
+export const MIX_MAX = 25;
+/** No CUED with a list by then = no Mix (non-music clips cue nothing at all). */
+const MIX_TIMEOUT_MS = 8000;
 
 const setUi = (patch: Partial<PlayerUi>) => usePlayerUi.setState(patch);
 
@@ -132,6 +149,7 @@ export function playIndex(index: number, opts: { auto: boolean }): void {
     return;
   }
   setUi({ videoId: item.videoId, status: 'loading', pendingNext: false });
+  cancelMix();
   recordedId = '';
   applyRateOnPlay = true;
   updateMediaSession(item);
@@ -154,14 +172,85 @@ function advance(manual: boolean): void {
   const q = useQueue.getState();
   const n = nextIndex(q, manual);
   if (n === null) {
-    setUi({ status: 'ended' });
+    const last = currentItem(q);
+    if (last && wantsMix(last)) startMix(last, manual);
+    else setUi({ status: 'ended' });
     return;
   }
   playIndex(n, { auto: !manual });
 }
 
+/** The queue ending after `item` continues with its Mix: Settings say so, or it came from a Mix. */
+export function wantsMix(item: QueueItem): boolean {
+  return item.mix === true || useSettings.getState().youtube.continueWith === 'mix';
+}
+
+function cancelMix(): void {
+  mixFor = '';
+  pendingMix = false;
+  window.clearTimeout(mixTimer);
+}
+
+function startMix(seed: QueueItem, manual: boolean): void {
+  if (!player) return;
+  if (!manual && !canAutoPlay()) {
+    pendingMix = true;
+    setUi({ status: 'ended', pendingNext: true });
+    return;
+  }
+  cancelMix();
+  mixFor = seed.videoId;
+  setUi({ status: 'loading', pendingNext: false });
+  mixTimer = window.setTimeout(() => void finishMix(seed.videoId, []), MIX_TIMEOUT_MS);
+  player.cuePlaylist({ list: `RD${seed.videoId}`, listType: 'playlist' });
+}
+
+/** The Mix's ids arrived (or not): queue the ones worth playing and play the first. */
+async function finishMix(seedId: string, ids: string[]): Promise<void> {
+  if (mixFor !== seedId) return;
+  mixFor = '';
+  window.clearTimeout(mixTimer);
+  const q = useQueue.getState();
+  const at = currentItem(q)?.key;
+  const queued = new Set(q.items.map((it) => it.videoId));
+  const yt = useSettings.getState().youtube;
+  const seen = useSeen.getState();
+  let pick = [...new Set(ids)].filter((id) => !queued.has(id) && !skipReason({ videoId: id }, seen, yt.hidePlayed));
+  if (pick.length === 0) {
+    setUi({ status: 'ended' });
+    useUi.getState().showToast({ message: 'toast.noMix' });
+    return;
+  }
+  // Titles, channels and lengths (videos.list, 1 unit, needs the account): drop short clips and muted channels.
+  const meta = await videoMeta(pick.slice(0, 50)).catch(() => null);
+  if (currentItem(useQueue.getState())?.key !== at || mixFor) return; // the user played something else meanwhile
+  if (meta) {
+    pick = pick.filter((id) => {
+      const v = meta.get(id);
+      return !v || ((!v.duration || v.duration > yt.hideUpTo) && !skipReason(v, useSeen.getState(), yt.hidePlayed));
+    });
+  }
+  const items = pick.slice(0, MIX_MAX).map((id) => {
+    const v = meta?.get(id);
+    return makeItem(id, { mix: true, ...(v ? { title: v.title, channel: v.channel } : {}) });
+  });
+  if (items.length === 0) {
+    setUi({ status: 'ended' });
+    useUi.getState().showToast({ message: 'toast.noMix' });
+    return;
+  }
+  useQueue.getState().setAutoTail(items);
+  playIndex(useQueue.getState().index + 1, { auto: true });
+}
+
 function resumePendingIfVisible(): void {
   if (!usePlayerUi.getState().pendingNext || !canAutoPlay()) return;
+  if (pendingMix) {
+    const last = currentItem(useQueue.getState());
+    pendingMix = false;
+    if (last) startMix(last, false);
+    return;
+  }
   playIndex(useQueue.getState().index, { auto: true });
 }
 
@@ -181,6 +270,14 @@ function onState(state: number): void {
   const ui = useUi.getState();
   // The player's own volume control can mute too; keep our button in step.
   if (player) setUi({ muted: player.isMuted() });
+  if (mixFor) {
+    // Cueing a Mix: only its CUED (with the list) matters.
+    if (state === YT_STATE.CUED && player) {
+      const ids = player.getPlaylist() ?? [];
+      if (ids.length) void finishMix(mixFor, ids);
+    }
+    return;
+  }
   switch (state) {
     case YT_STATE.PLAYING:
       consecutiveErrors = 0;
@@ -189,7 +286,14 @@ function onState(state: number): void {
         const item = currentItem(useQueue.getState());
         if (item && item.videoId !== recordedId) {
           recordedId = item.videoId;
-          useHistory.getState().record({ videoId: item.videoId, title: item.title, channel: item.channel });
+          // A Mix clip or a pasted link may have no title yet: the player knows it.
+          const data = player?.getVideoData?.();
+          const title = item.title ?? (data?.video_id === item.videoId ? data.title : undefined);
+          const channel = item.channel ?? (data?.video_id === item.videoId ? data.author : undefined);
+          if (!item.title && title) useQueue.getState().updateMeta(item.videoId, { title, ...(channel ? { channel } : {}) });
+          useHistory.getState().record({ videoId: item.videoId, title, channel });
+          // Played in JorGu: New, Trending and Mix leave it out for 30 days (user 2026-11-15).
+          useSeen.getState().markPlayed(item.videoId, channel);
         }
       }
       ui.setYoutube({ playing: true });
@@ -221,6 +325,11 @@ function onState(state: number): void {
 
 function onError(code: number): void {
   const ui = useUi.getState();
+  if (mixFor) {
+    // The Mix couldn't be cued (a clip without one): stop, no skipping.
+    void finishMix(mixFor, []);
+    return;
+  }
   const videoId = usePlayerUi.getState().videoId ?? '';
   ui.setYoutube({ playing: false });
   if (code === 153) {

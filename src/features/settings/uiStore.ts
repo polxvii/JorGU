@@ -12,13 +12,14 @@ export type SheetState =
   | { kind: 'web'; pane: PaneIndex }
   | { kind: 'map' };
 
-export type LibraryTab = 'paste' | 'recent' | 'feed' | 'playlists' | 'trending' | 'search';
+export type LibraryTab = 'paste' | 'recent' | 'feed' | 'mix' | 'playlists' | 'trending' | 'search';
 
 export interface Toast {
   id: number;
   message: MessageKey;
   params?: Record<string, string | number>;
-  action?: { label: MessageKey; href: string };
+  /** A link (href) or a button that runs code (run). */
+  action?: { label: MessageKey; href?: string; run?: () => void };
 }
 
 export interface UiState {

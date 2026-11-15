@@ -277,6 +277,49 @@ describe('Data API proxy', () => {
     expect(await res.json()).toEqual({ items: [{ id: '10', title: 'เพลง' }] });
   });
 
+  it('New skips muted channels (others take their place), says which are still subscribed, keeps channel ids', async () => {
+    const UC = (n: number) => `UC${String(n).padStart(22, '0')}`;
+    const seen: string[] = [];
+    google = (url) => {
+      seen.push(url.pathname);
+      const p = url.searchParams;
+      if (url.pathname === '/youtube/v3/subscriptions') {
+        // 50 at a time by relevance, so muted ones can be skipped and still 40 fill up.
+        expect(p.get('maxResults')).toBe('50');
+        expect(p.get('order')).toBe('relevance');
+        return Response.json({ items: [1, 2, 3].map((n) => ({ snippet: { title: `Ch ${n}`, resourceId: { channelId: UC(n) } } })) });
+      }
+      if (url.pathname === '/youtube/v3/channels') {
+        expect(p.get('id')).toBe(`${UC(1)},${UC(3)}`);
+        return Response.json({ items: [{ contentDetails: { relatedPlaylists: { uploads: 'UU1' } } }, { contentDetails: { relatedPlaylists: { uploads: 'UU3' } } }] });
+      }
+      if (url.pathname === '/youtube/v3/playlistItems') {
+        const n = p.get('playlistId') === 'UU1' ? 1 : 3;
+        return Response.json({
+          items: [{ snippet: { title: `Clip ${n}`, videoOwnerChannelTitle: `Ch ${n}`, videoOwnerChannelId: UC(n) }, contentDetails: { videoId: `vid${n}xxxxxxx`, videoPublishedAt: `2026-11-1${n}T00:00:00Z` } }],
+        });
+      }
+      return Response.json({ items: [1, 3].map((n) => ({ id: `vid${n}xxxxxxx`, contentDetails: { duration: 'PT4M' }, snippet: { title: `Clip ${n}` } })) });
+    };
+    const res = await handleApi(req(`/api/yt/feed?exclude=${UC(2)},nonsense`, { cookie: await sessionCookie() }), env);
+    const body = (await res.json()) as { items: { videoId: string; channelId?: string; duration?: number }[]; muted: unknown };
+    expect(body.muted).toEqual([{ channelId: UC(2), title: 'Ch 2' }]);
+    expect(body.items.map((v) => [v.videoId, v.channelId, v.duration])).toEqual([
+      ['vid3xxxxxxx', UC(3), 240],
+      ['vid1xxxxxxx', UC(1), 240],
+    ]);
+  });
+
+  it('videos.list gives title, channel id and length (for Mix clips) for 1 unit', async () => {
+    google = (url) => {
+      expect(url.searchParams.get('part')).toBe('snippet,contentDetails');
+      return Response.json({ items: [{ id: 'M7lc1UVf-VE', snippet: { title: 'Song', channelTitle: 'Band', channelId: 'UCaaaaaaaaaaaaaaaaaaaaaa' }, contentDetails: { duration: 'PT3M30S' } }] });
+    };
+    const res = await handleApi(req('/api/yt/videos?ids=M7lc1UVf-VE', { cookie: await sessionCookie() }), env);
+    expect(await res.json()).toEqual({ items: [{ videoId: 'M7lc1UVf-VE', title: 'Song', channel: 'Band', channelId: 'UCaaaaaaaaaaaaaaaaaaaaaa', thumb: '', duration: 210 }] });
+    expect(res.headers.get('X-Quota-Units')).toBe('1');
+  });
+
   it('requires a session', async () => {
     const res = await handleApi(req('/api/yt/liked'), env);
     expect(res.status).toBe(401);

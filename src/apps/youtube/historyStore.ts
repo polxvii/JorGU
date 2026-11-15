@@ -10,6 +10,8 @@ export interface HistoryEntry {
   channel?: string;
   /** Last played (ms). */
   at: number;
+  /** Times played (since it entered the list), for the Mix tab's "played most". */
+  plays?: number;
 }
 
 export const HISTORY_MAX = 100;
@@ -32,7 +34,7 @@ export const useHistory = create<HistoryState>()(
       record: (e, now = Date.now()) =>
         set((s) => {
           const old = s.entries.find((x) => x.videoId === e.videoId);
-          const entry: HistoryEntry = { ...old, ...e, title: e.title ?? old?.title, channel: e.channel ?? old?.channel, at: now };
+          const entry: HistoryEntry = { ...old, ...e, title: e.title ?? old?.title, channel: e.channel ?? old?.channel, at: now, plays: (old?.plays ?? 0) + 1 };
           return { entries: fresh([entry, ...s.entries.filter((x) => x.videoId !== e.videoId)], now).slice(0, HISTORY_MAX) };
         }),
       updateMeta: (videoId, meta) =>

@@ -18,7 +18,7 @@ export function Toasts({ rect }: { rect: Rect }) {
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
     >
       <span className="min-w-0 flex-1 leading-tight">{t(toast.message, toast.params)}</span>
-      {toast.action && (
+      {toast.action?.href && (
         <a
           href={toast.action.href}
           target="_blank"
@@ -27,6 +27,19 @@ export function Toasts({ rect }: { rect: Rect }) {
         >
           {t(toast.action.label)}
         </a>
+      )}
+      {toast.action?.run && (
+        <button
+          type="button"
+          data-testid="toast-action"
+          onClick={() => {
+            toast.action?.run?.();
+            dismiss(toast.id);
+          }}
+          className="min-h-10 shrink-0 rounded-lg bg-accent px-3 text-[14px] font-semibold text-on-accent"
+        >
+          {t(toast.action.label)}
+        </button>
       )}
       <button
         type="button"

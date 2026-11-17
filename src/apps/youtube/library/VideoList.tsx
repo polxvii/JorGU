@@ -68,16 +68,32 @@ export function hideClip(v: VideoItem): void {
 }
 
 /**
- * Tap a row = play now. "+" = add to the end of the queue. Clips played in JorGu (30 days) or hidden carry a
- * badge (`marks`, on by default); `hideButton` adds the hide / show-again button (New, Trending).
+ * Mark a clip played by hand (user 2026-11-17): watched on the TV or phone, which JorGu can't know. Counts like a
+ * clip played here (left out of New, Trending and playlists, marked in Search); the toast offers Undo.
  */
-export function VideoList({ items, onPlay, testId, subtitle, marks = true, hideButton = false }: {
+export function markClipPlayed(v: VideoItem): void {
+  useSeen.getState().markPlayed(v.videoId, v.channel || undefined);
+  if (useSettings.getState().youtube.hidePlayed) useQueue.getState().filterAuto((it) => it.videoId !== v.videoId);
+  useUi.getState().showToast({
+    message: 'toast.markedPlayed',
+    params: { title: v.title },
+    action: { label: 'toast.undo', run: () => useSeen.getState().unmarkPlayed(v.videoId) },
+  });
+}
+
+/**
+ * Tap a row = play now. "+" = add to the end of the queue. Clips played in JorGu (30 days) or hidden carry a
+ * badge (`marks`, on by default); ✓ marks a clip played or not (`playedButton`, with the marks); `hideButton` adds
+ * the hide / show-again button (New, Trending).
+ */
+export function VideoList({ items, onPlay, testId, subtitle, marks = true, hideButton = false, playedButton = marks }: {
   items: VideoItem[];
   onPlay: (index: number) => void;
   testId: string;
   subtitle?: (v: VideoItem) => string;
   marks?: boolean;
   hideButton?: boolean;
+  playedButton?: boolean;
 }) {
   const t = useT();
   const showToast = useUi((s) => s.showToast);
@@ -88,6 +104,19 @@ export function VideoList({ items, onPlay, testId, subtitle, marks = true, hideB
   const now = Date.now();
   const mark = (v: VideoItem): SkipReason | null =>
     !marks ? null : hidden[v.videoId] ? 'hidden' : isMuted(v, { muted }) ? 'muted' : played[v.videoId] ? 'played' : null;
+  const tick = (v: VideoItem, size: string) =>
+    playedButton && (
+      <button
+        type="button"
+        aria-pressed={!!played[v.videoId]}
+        aria-label={t(played[v.videoId] ? 'library.unmarkPlayed' : 'library.markPlayed')}
+        data-testid="lib-mark-played"
+        onClick={() => (played[v.videoId] ? useSeen.getState().unmarkPlayed(v.videoId) : markClipPlayed(v))}
+        className={`flex shrink-0 items-center justify-center rounded-xl ${size} ${played[v.videoId] ? 'bg-accent text-on-accent' : 'text-text-dim'}`}
+      >
+        <Icon name="played" size={22} />
+      </button>
+    );
   return (
     <ul className="flex flex-col gap-1" data-testid={testId}>
       {items.map((v, i) => {
@@ -117,7 +146,8 @@ export function VideoList({ items, onPlay, testId, subtitle, marks = true, hideB
                 )}
               </span>
             </button>
-            {/* + over Hide in one column, so the title keeps its width. */}
+            {/* ✓ beside + over Hide (New, Trending: slimmer columns); else ✓ under + in one column, so the title keeps its width. */}
+            {hideButton && tick(v, 'h-12 w-10 self-center')}
             <span className="flex shrink-0 flex-col">
               <button
                 type="button"
@@ -127,17 +157,18 @@ export function VideoList({ items, onPlay, testId, subtitle, marks = true, hideB
                   queueVideos([v]);
                   showToast({ message: 'library.added', params: { title: v.title } });
                 }}
-                className={`flex w-12 items-center justify-center rounded-xl text-text ${hideButton ? 'h-11' : 'h-12'}`}
+                className={`flex items-center justify-center rounded-xl text-text ${hideButton ? 'h-11 w-10' : playedButton ? 'h-11 w-12' : 'h-12 w-12'}`}
               >
                 <Icon name="plus" size={22} />
               </button>
+              {!hideButton && tick(v, 'h-11 w-12')}
               {hideButton && (
                 <button
                   type="button"
                   aria-label={t(m === 'hidden' ? 'library.unhide' : 'library.hide')}
                   data-testid="lib-hide"
                   onClick={() => (m === 'hidden' ? useSeen.getState().unhide(v.videoId) : hideClip(v))}
-                  className="flex h-11 w-12 items-center justify-center rounded-xl text-text-dim"
+                  className={`flex h-11 items-center justify-center rounded-xl text-text-dim ${playedButton ? 'w-10' : 'w-12'}`}
                 >
                   <Icon name={m === 'hidden' ? 'eye' : 'hide'} size={22} />
                 </button>

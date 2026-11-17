@@ -26,6 +26,8 @@ interface SeenState {
   /** Key: the channel id (UC…), or its title when the id isn't known (lists cached before ids were kept). */
   muted: Record<string, MutedChannel>;
   markPlayed: (videoId: string, channel?: string, now?: number) => void;
+  /** Undo a mark (✓ on a list row tapped again, or the toast's Undo). */
+  unmarkPlayed: (videoId: string) => void;
   hide: (videoId: string, now?: number) => void;
   unhide: (videoId: string) => void;
   mute: (key: string, title: string, now?: number) => void;
@@ -52,6 +54,12 @@ export const useSeen = create<SeenState>()(
       muted: {},
       markPlayed: (videoId, channel, now = Date.now()) =>
         set((s) => ({ played: trim({ ...s.played, [videoId]: { at: now, ...(channel ? { ch: channel } : {}) } }, (v) => v.at, now) })),
+      unmarkPlayed: (videoId) =>
+        set((s) => {
+          const played = { ...s.played };
+          delete played[videoId];
+          return { played };
+        }),
       hide: (videoId, now = Date.now()) => set((s) => ({ hidden: trim({ ...s.hidden, [videoId]: now }, (v) => v, now) })),
       unhide: (videoId) =>
         set((s) => {

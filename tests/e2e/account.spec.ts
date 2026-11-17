@@ -557,3 +557,41 @@ test('Playlists: clips played here are left out, "1 hidden · Show" brings them 
   expect((await queue(page)).items.map((i) => i.videoId)).toEqual([VIDEO_B, 'dQw4w9WgXcQ']);
 });
 
+test('✓ Mark as played by hand: leaves New and playlists, Undo or ✓ again brings it back (user 2026-11-17)', async ({ page }) => {
+  await mockApi(page);
+  await openApp(page);
+  await page.getByTestId('yt-empty-library').click();
+  const feed = page.getByTestId('lib-feed');
+  await expect(feed).toContainText('Feed video one');
+  const row = feed.locator(`li[data-video-id="${VIDEO_A}"]`);
+  const tick = row.getByTestId('lib-mark-played');
+  await expect(tick).toHaveAttribute('aria-pressed', 'false');
+  await tick.click();
+  await expect(feed).not.toContainText('Feed video one');
+  await expect(page.getByTestId('toast')).toContainText('Marked as played: Feed video one');
+  await page.getByTestId('toast-action').click();
+  await expect(feed).toContainText('Feed video one');
+
+  // Again; with Show it carries the Played badge and ✓ is on; ✓ again unmarks it.
+  await tick.click();
+  await expect(feed).not.toContainText('Feed video one');
+  await page.getByTestId('lib-feed-show-hidden').click();
+  await expect(row.getByTestId('lib-mark')).toHaveText('Played');
+  await expect(tick).toHaveAttribute('aria-pressed', 'true');
+  await tick.click();
+  await expect(row.getByTestId('lib-mark')).toHaveCount(0);
+  await expect(tick).toHaveAttribute('aria-pressed', 'false');
+
+  // Counts like a clip played here: the playlist leaves it out too.
+  await tick.click();
+  await page.getByTestId('lib-tab-playlists').click();
+  await page.locator('[data-playlist-id="PLroadtrip0001"]').click();
+  const items = page.getByTestId('lib-playlist-items');
+  await expect(items).toContainText('Road Song Two');
+  await expect(items).not.toContainText('Road Song One');
+  // ✓ in a playlist too.
+  await items.locator(`li[data-video-id="${VIDEO_B}"]`).getByTestId('lib-mark-played').click();
+  await expect(items).not.toContainText('Road Song Two');
+  await expect(page.getByTestId('lib-playlist-items-show-hidden')).toContainText('2 hidden');
+});
+

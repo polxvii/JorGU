@@ -58,6 +58,14 @@ describe('route box', () => {
     const b = placeMapChrome(withBox).routeBox!;
     expect(b).toEqual({ x: MAP_GAP, y: 600 - MAP_GAP - ROUTE_BOX.h, w: ROUTE_BOX.w, h: ROUTE_BOX.h });
     expect(placeMapChrome({ ...withBox, routeBoxAt: 'top' }).routeBox!.y).toBe(60);
+    // Flush with the top edge (user 2026-11-17); the toolbar still starts below the header band.
+    const flush = placeMapChrome({ ...withBox, routeBoxAt: 'top', boxTop: MAP_GAP });
+    expect(flush.routeBox!.y).toBe(MAP_GAP);
+    expect(flush.buttons.y).toBe(60);
+    // Clear of the pane's ⛶ when it's on the box's side (strip moved to the other edge).
+    const fs = { x: MAP_GAP, y: 4, w: 48, h: 48 };
+    const moved = placeMapChrome({ ...withBox, routeBoxAt: 'top', boxTop: MAP_GAP, avoid: [fs] }).routeBox!;
+    expect(intersects(moved, fs)).toBe(false);
     const left = placeMapChrome({ ...withBox, right: false });
     expect(left.routeBox!.x + left.routeBox!.w).toBe(464 - MAP_GAP);
   });

@@ -49,9 +49,14 @@ interface MapUi {
   route: RouteState | null;
   /** Bumped to reload the Embed iframe at the current position (mode B "Recenter"). */
   embedNonce: number;
+  /**
+   * Route box (+ speed beside it) when it sits at the top of the map, relative to the map surface: the pane header
+   * (shown for 4 s after a touch) keeps beside it instead of covering it (user 2026-11-17).
+   */
+  topBox: { x: number; y: number; w: number; h: number } | null;
 }
 
-export const useMapUi = create<MapUi>()(() => ({ mode: 'none', notice: null, ready: false, route: null, embedNonce: 0 }));
+export const useMapUi = create<MapUi>()(() => ({ mode: 'none', notice: null, ready: false, route: null, embedNonce: 0, topBox: null }));
 
 let el: HTMLElement | null = null;
 let libs: MapsLibs | null = null;

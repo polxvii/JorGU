@@ -18,6 +18,7 @@ import { MAP_GAP, placeMapChrome } from './mapChrome';
 import { pathLength, progress, projectOnPath } from './routeMath';
 import { type TrafficLevel, barPieces, trafficMillisLeft } from './routeTraffic';
 import { intersects } from '../../shell/geometry';
+import { L } from '../../shell/computeLayout';
 
 const BUTTON = STRIP_BUTTON;
 const MapButton = StripButton;
@@ -165,13 +166,20 @@ function RouteChooser({ box, height, top }: { box: Rect; height: number; top: nu
 }
 
 const LEVEL_COLOUR: Record<TrafficLevel, string> = { free: '#1E8E3E', slow: '#F29900', jam: '#D93025', unknown: '#9AA0A6' };
-/** Behind the car: the same colours 50 % faded (user 2026-11-13, chosen from a mock), mixed solid so the map doesn't show through. */
-const PASSED_COLOUR: Record<TrafficLevel, string> = { free: '#88C199', slow: '#F2C67A', jam: '#E5928C', unknown: '#C4C7C9' };
+/**
+ * Behind the car: the same colours 25 % faded, mixed solid so the map doesn't show through. (50 % from a mock,
+ * 2026-11-13, read as grey on the car screen: user 2026-11-17.)
+ */
+const PASSED_COLOUR: Record<TrafficLevel, string> = { free: '#56AA6E', slow: '#F5B340', jam: '#E3645C', unknown: '#B3B8BC' };
+/** The car's dot: Google's location blue whatever the theme (a grey accent hid it: user 2026-11-17). */
+const CAR_BLUE = '#1A73E8';
+const CAR_DOT = 18;
 export const TRAFFIC_BAR_W = 12;
 
 /**
- * Traffic on the road ahead (user 2026-11-13): a bar beside the map's toolbar, the car at the bottom and the
- * destination at the top, green / orange / red per section. The route line itself stays one solid blue line.
+ * Traffic along the route (user 2026-11-13): a bar beside the map's toolbar, start at the bottom and destination at
+ * the top, green / orange / red per section; the car's blue dot climbs it, the stretch behind it faded. The route
+ * line itself stays one solid blue line.
  */
 function TrafficBar({ rect }: { rect: Rect }) {
   const t = useT();
@@ -208,11 +216,17 @@ function TrafficBar({ rect }: { rect: Rect }) {
       <div className="absolute left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-[#D93025] ring-2 ring-white" style={{ top: 3 }} />
       <div
         data-testid="map-traffic-bar-car"
-        className="absolute left-1/2 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-accent shadow"
-        style={{ bottom: 8 + progress * inner - 8 }}
+        className="absolute left-1/2 -translate-x-1/2 rounded-full border-[3px] border-white shadow-[0_1px_4px_rgba(0,0,0,0.5)]"
+        style={{ width: CAR_DOT, height: CAR_DOT, background: CAR_BLUE, bottom: 8 + progress * inner - CAR_DOT / 2 }}
       />
     </div>
   );
+}
+
+function union(a: Rect, b: Rect): Rect {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
 }
 
 function NotSetUp() {
@@ -308,8 +322,22 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   }
 
   const top = Math.max(MAP_GAP, band + 4);
-  // The route box's corner is worked out even without a route: the speed sits there then (user 2026-11-13).
-  const ui = placeMapChrome({ w: size.w, h: size.h, top, btn: cs.map, items: items.length, right: driverRight, avoid, routeBox: true, routeBoxAt: routeInfoAt });
+  // The pane's ⛶ button (top corner, driver side): normally over the toolbar strip; the route box keeps clear of it.
+  const fs = band > 0 ? [{ x: driverRight ? size.w - L.FS_BUTTON - L.FS_MARGIN : L.FS_MARGIN, y: L.FS_MARGIN, w: L.FS_BUTTON, h: L.FS_BUTTON }] : [];
+  // The route box's corner is worked out even without a route: the speed sits there then (user 2026-11-13). At the
+  // top it's flush with the edge (user 2026-11-17); the pane header keeps beside it (topBox below).
+  const ui = placeMapChrome({
+    w: size.w,
+    h: size.h,
+    top,
+    boxTop: MAP_GAP,
+    btn: cs.map,
+    items: items.length,
+    right: driverRight,
+    avoid: [...avoid, ...fs],
+    routeBox: true,
+    routeBoxAt: routeInfoAt,
+  });
   const speed = kmh(pos?.speed ?? null);
   const box = route ? ui.routeBox : null;
   const bar = (() => {
@@ -343,9 +371,16 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   })();
   const canvas = mode === 'none' ? { x: 0, y: 0, w: size.w, h: size.h } : ui.canvas;
   const side = ui.right ? 'right' : 'left';
+  // What sits in the header band (route box, speed beside it): the pane header keeps beside it (PaneChrome).
+  const atTop = mode === 'none' || band === 0 ? [] : [box, speedBox].filter((r): r is Rect => !!r && r.y < band);
+  const topBox = atTop.length ? atTop.reduce(union) : null;
 
   // Pane ↔ full screen, strip width: the car's place on screen depends on the map's size.
   useEffect(() => refollow(), [canvas.w, canvas.h]);
+  useEffect(() => {
+    useMapUi.setState({ topBox });
+  }, [topBox?.x, topBox?.y, topBox?.w, topBox?.h]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => useMapUi.setState({ topBox: null }), []);
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-bg" data-testid="map-surface" data-mode={mode}>

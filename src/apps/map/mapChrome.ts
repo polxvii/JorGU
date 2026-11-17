@@ -15,8 +15,10 @@ export const ROUTE_BOX = { w: 248, h: 84 };
 export interface MapChromeInput {
   w: number;
   h: number;
-  /** First free y (below the pane header band; 0-ish in full screen). */
+  /** First free y for the toolbar (below the pane header band and ⛶; 0-ish in full screen). */
   top: number;
+  /** First y for the route box at the top (default `top`). Flush with the top edge (user 2026-11-17). */
+  boxTop?: number;
   /** Button size (Toolbar size setting). */
   btn: number;
   /** Toolbar buttons, in priority order. */
@@ -83,7 +85,7 @@ export function placeMapChrome(i: MapChromeInput): MapChrome {
     // The far corner: the other side of the map from the strip.
     const x0 = right ? canvas.x + MAP_GAP : canvas.x + canvas.w - MAP_GAP - w;
     const lowest = i.h - MAP_GAP - H;
-    const y0 = i.routeBoxAt === 'top' ? i.top : lowest;
+    const y0 = i.routeBoxAt === 'top' ? (i.boxTop ?? i.top) : lowest;
     const ok = (r: Rect) =>
       r.x >= canvas.x && r.y >= 0 && r.x + r.w <= canvas.x + canvas.w && r.y + r.h <= i.h && !i.avoid.some((a) => intersects(r, a));
     // The chosen corner; else the nearest spot past whatever is there: up/down, or sideways toward the strip.

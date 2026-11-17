@@ -169,7 +169,11 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   await routeBox.click();
   await expect(routeBox).toHaveAttribute('data-at', 'top');
   rb = await box(page, '[data-testid="map-route"]');
-  expect(rb.y).toBeLessThan(surface.y + 80);
+  // Flush with the top edge (user 2026-11-17); the tap showed the pane headers: the map's keeps beside the box.
+  expect(Math.round(rb.y - surface.y)).toBe(8);
+  const header = await page.locator('[data-chrome="pane-header"][data-pane="1"]').boundingBox();
+  expect(header).not.toBeNull();
+  expect(header!.x).toBeGreaterThanOrEqual(rb.x + rb.width);
   await routeBox.click();
   await expect(routeBox).toHaveAttribute('data-at', 'bottom');
   // The Where to? sheet has the same hand-off, with its full label.
@@ -534,7 +538,7 @@ test('speed (km/h) beside the route box, in its corner without a route (user 202
   await expect(page.getByTestId('map-controls').getByTestId('map-speed')).toHaveCount(0);
 });
 
-test('traffic bar: the car dot climbs the whole route; driven part grey, jams stay where they are', async ({ page }) => {
+test('traffic bar: the blue car dot climbs the whole route; driven part faded, jams stay where they are', async ({ page }) => {
   await withLocation(page);
   await openApp(page);
   await expect.poll(async () => (await stub(page)).markers).toBe(1);
@@ -554,10 +558,12 @@ test('traffic bar: the car dot climbs the whole route; driven part grey, jams st
   const b = await box(page, '[data-testid="map-traffic-bar"]');
   const dot = await box(page, '[data-testid="map-traffic-bar-car"]');
   expect(Math.abs(dot.y + dot.height / 2 - (b.y + b.height / 2))).toBeLessThan(6);
+  // Google blue whatever the theme (the grey theme's accent hid it: user 2026-11-17).
+  expect(await page.getByTestId('map-traffic-bar-car').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgb(26, 115, 232)');
   // The jam (section 2 of 26, behind us now) didn't move on the bar; it's faded now.
   const jamAfter = await box(page, '[data-testid="map-traffic-bar"] [data-level="jam"][data-passed="1"]');
   expect(Math.round(jamAfter.y)).toBe(Math.round(jamBefore.y));
   expect(Math.round(jamAfter.height)).toBe(Math.round(jamBefore.height));
-  expect(await page.locator('[data-testid="map-traffic-bar"] [data-level="jam"][data-passed="1"]').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgb(229, 146, 140)');
+  expect(await page.locator('[data-testid="map-traffic-bar"] [data-level="jam"][data-passed="1"]').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgb(227, 100, 92)');
 });
 

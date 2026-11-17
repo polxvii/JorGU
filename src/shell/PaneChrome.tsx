@@ -7,12 +7,15 @@ import { useUi } from '../features/settings/uiStore';
 import type { PaneIndex } from '../features/settings/types';
 import { WebHeaderControls } from '../apps/web/WebHeaderControls';
 import { YouTubeHeaderTitle } from '../apps/youtube/YouTubeHeaderTitle';
+import { useMapUi } from '../apps/map/mapController';
 import { type MessageKey, useT } from '../i18n';
-import type { LayoutResult, PaneBox } from './computeLayout';
+import { type LayoutResult, type PaneBox, clearOf } from './computeLayout';
 import { enterFullscreen } from './fullscreen';
 import { Icon, type IconName } from './Icon';
 
 const DRAG_THRESHOLD = 10;
+/** Narrower than this beside the map's route box, the map pane's header stays hidden (same rule as the mini player). */
+const HEADER_MIN_W = 200;
 const DOUBLE_TAP_MS = 320;
 
 const APP_LABEL: Record<string, MessageKey> = {
@@ -42,6 +45,14 @@ function PaneHeader({ pane, layout }: { pane: PaneBox; layout: LayoutResult }) {
   const target = drag?.over === pane.index && drag.from !== pane.index;
   const driverRight = layout.driverSide === 'right';
   const web = pane.app.kind === 'web' ? pane.app : null;
+  // The map's route box sits at the very top when chosen (user 2026-11-17): the header goes beside it, or stays hidden
+  // when there's no room; while dragging it shows in full so the drop target lights up.
+  const topBox = useMapUi((s) => s.topBox);
+  const mapRect = layout.surfaces.map?.rect ?? pane.rect;
+  const header =
+    pane.app.kind === 'map' && topBox && !drag
+      ? clearOf(pane.header, { x: mapRect.x + topBox.x, y: mapRect.y + topBox.y, w: topBox.w, h: topBox.h }, HEADER_MIN_W, { ...pane.header, w: 0 })
+      : pane.header;
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button, a')) return;
@@ -77,6 +88,7 @@ function PaneHeader({ pane, layout }: { pane: PaneBox; layout: LayoutResult }) {
     }
   };
 
+  if (header.w === 0) return null;
   return (
     <div
       data-chrome="pane-header"
@@ -89,10 +101,10 @@ function PaneHeader({ pane, layout }: { pane: PaneBox; layout: LayoutResult }) {
         target ? 'bg-accent text-on-accent' : 'bg-surface/90 text-text'
       } ${lifted ? 'ring-2 ring-accent' : ''}`}
       style={{
-        left: pane.header.x,
-        top: pane.header.y,
-        width: pane.header.w,
-        height: pane.header.h,
+        left: header.x,
+        top: header.y,
+        width: header.w,
+        height: header.h,
         // Web and YouTube headers stay: they hold the web controls / the clip title, in a band nothing else uses.
         visibility: visible || drag || web || pane.app.kind === 'youtube' ? 'visible' : 'hidden',
         touchAction: 'none',

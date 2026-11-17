@@ -292,7 +292,8 @@ function placeToast(area: Rect, avoid: (Rect | null | undefined)[], extra: Rect[
 }
 
 /** `r` trimmed to its larger part beside `m` (4 px clear), or `hidden` if that part is narrower than `minW`. */
-function clearOf(r: Rect, m: Rect, minW: number, hidden: Rect): Rect {
+/** `r` trimmed to the wider side of `m` (same row); `hidden` when that side is narrower than `minW`. */
+export function clearOf(r: Rect, m: Rect, minW: number, hidden: Rect): Rect {
   if (!intersects(r, m)) return r;
   const before = { ...r, w: Math.max(0, m.x - 4 - r.x) };
   const after = { ...r, x: right(m) + 4, w: Math.max(0, right(r) - right(m) - 4) };

@@ -136,6 +136,7 @@ export const th: Partial<Record<MessageKey, string>> = {
   'library.unhide': 'แสดงคลิปนี้อีก',
   'library.hiddenCount': 'ซ่อนอยู่ {count} คลิป (เล่นแล้ว ซ่อนไว้ หรือปิดช่อง) · แสดง',
   'library.hideAgain': 'ซ่อนอีกครั้ง',
+  'library.allHidden': 'คลิปในนี้ถูกซ่อนหมดแล้ว',
   'library.channels': 'ช่องในแท็บใหม่ (ปิดไว้ {count})',
   'library.channelsTitle': 'ช่องในแท็บใหม่',
   'library.channelsHint': 'ปิด = ไม่ขึ้นในแท็บใหม่และมาแรง แท็บใหม่ยังเลื่อนช่องที่เล่นบ่อยขึ้นก่อน ช่วงบนสุดช่องละไม่เกิน 2 คลิป',

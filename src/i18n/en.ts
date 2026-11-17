@@ -133,6 +133,7 @@ export const en = {
   'library.unhide': 'Show this clip again',
   'library.hiddenCount': '{count} hidden (played, hidden or channel off) · Show',
   'library.hideAgain': 'Hide them again',
+  'library.allHidden': 'Every clip here is hidden',
   'library.channels': 'Channels in New ({count} off)',
   'library.channelsTitle': 'Channels in New',
   'library.channelsHint': 'Off = never in New or Trending. New also ranks the channels you play most higher, max 2 clips each at the top',

@@ -529,3 +529,31 @@ test('Search marks played clips but keeps them; no Mix tab (removed 2026-11-16)'
   await expect(page.getByTestId('lib-tab-mix')).toHaveCount(0);
 });
 
+test('Playlists: clips played here are left out, "1 hidden · Show" brings them back; Play all plays what is shown (user 2026-11-17)', async ({ page }) => {
+  await mockApi(page);
+  await openApp(page);
+  // Road Song One was played here yesterday.
+  await page.evaluate((id) => localStorage.setItem('jorgu:seen', JSON.stringify({ state: { played: { [id]: { at: Date.now() - 86_400_000, ch: 'Mock Channel' } }, hidden: {}, muted: {} }, version: 1 })), VIDEO_A);
+  await page.reload();
+  await page.getByTestId('yt-empty-library').click();
+  await page.getByTestId('lib-tab-playlists').click();
+  await page.locator('[data-playlist-id="PLroadtrip0001"]').click();
+  const items = page.getByTestId('lib-playlist-items');
+  const ids = () => items.locator('li').evaluateAll((els) => els.map((e) => e.getAttribute('data-video-id')));
+  await expect(items).toContainText('Road Song Two');
+  expect(await ids()).toEqual([VIDEO_B, 'dQw4w9WgXcQ']);
+  const show = page.getByTestId('lib-playlist-items-show-hidden');
+  await expect(show).toContainText('1 hidden');
+
+  await show.click();
+  expect(await ids()).toEqual(ROAD.map((x) => x.videoId));
+  await expect(items.locator(`li[data-video-id="${VIDEO_A}"] [data-testid="lib-mark"]`)).toHaveText('Played');
+  await expect(show).toHaveText('Hide them again');
+  await show.click();
+  expect(await ids()).toEqual([VIDEO_B, 'dQw4w9WgXcQ']);
+
+  await page.getByTestId('lib-play-all').click();
+  await expect(page.getByTestId('library-sheet')).toHaveCount(0);
+  expect((await queue(page)).items.map((i) => i.videoId)).toEqual([VIDEO_B, 'dQw4w9WgXcQ']);
+});
+

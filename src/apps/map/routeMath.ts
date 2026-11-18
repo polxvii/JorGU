@@ -26,6 +26,41 @@ export function projectOnPath(p: LL, path: LL[]): { off: number; along: number }
   if (path.length === 0) return { off: Infinity, along: 0 };
   if (path.length === 1) return { off: haversine(p, path[0]), along: 0 };
   let best = { off: Infinity, along: 0 };
+  for (const s of segmentProjections(p, path)) if (s.off < best.off) best = s;
+  return best;
+}
+
+/** Another pass of the route this much further than the nearest one may be where the car is (the road's other side). */
+export const SAME_ROAD_M = 40;
+
+/**
+ * Where the car is along the path, staying with the stretch it was on (`hint`: metres along at the last fix). A route
+ * that uses the same road twice (out to a U-turn and back, user 2026-11-18: the car's dot fell back down the traffic
+ * bar) has two places near the car; the nearest one can be the other side of the road. Each run of segments near the
+ * car is one pass; the pass nearest to the hint wins. No hint: the nearest point.
+ */
+export function projectNear(p: LL, path: LL[], hint: number | null): { off: number; along: number } {
+  if (hint === null || path.length < 3) return projectOnPath(p, path);
+  const segs = segmentProjections(p, path);
+  let min = Infinity;
+  for (const s of segs) min = Math.min(min, s.off);
+  let best: { off: number; along: number } | null = null;
+  let run: { off: number; along: number } | null = null;
+  const close = () => {
+    if (run && (!best || Math.abs(run.along - hint) < Math.abs(best.along - hint))) best = run;
+    run = null;
+  };
+  for (const s of segs) {
+    if (s.off > min + SAME_ROAD_M) close();
+    else if (!run || s.off < run.off) run = s;
+  }
+  close();
+  return best ?? projectOnPath(p, path);
+}
+
+/** The nearest point on each segment of the path: distance from it and distance along the path. */
+function segmentProjections(p: LL, path: LL[]): { off: number; along: number }[] {
+  const out: { off: number; along: number }[] = [];
   let walked = 0;
   for (let i = 1; i < path.length; i++) {
     const a = path[i - 1];
@@ -41,10 +76,10 @@ export function projectOnPath(p: LL, path: LL[]): { off: number; along: number }
     const t = len2 > 0 ? Math.max(0, Math.min(1, (px * bx + py * by) / len2)) : 0;
     const off = Math.hypot(px - t * bx, py - t * by);
     const seg = haversine(a, b);
-    if (off < best.off) best = { off, along: walked + t * seg };
+    out.push({ off, along: walked + t * seg });
     walked += seg;
   }
-  return best;
+  return out;
 }
 
 // ---------- navigation camera (user request 2026-11-12: route ahead at the top, car low on the screen) ----------
@@ -84,9 +119,9 @@ export function pointAlong(path: LL[], along: number): LL {
 }
 
 /** Direction of the road ahead: from the car's spot on the line to `ahead` m further. Null when off the line. */
-export function aheadBearing(p: LL, path: LL[], ahead = 60): number | null {
+export function aheadBearing(p: LL, path: LL[], hint: number | null = null, ahead = 60): number | null {
   if (path.length < 2) return null;
-  const { off, along } = projectOnPath(p, path);
+  const { off, along } = projectNear(p, path, hint);
   if (off > OFF_ROUTE_M) return null;
   const from = pointAlong(path, along);
   const to = pointAlong(path, along + ahead);
@@ -109,13 +144,13 @@ export const RECOMPUTE_MIN_MS = 60_000;
 
 /** Distance and time left, scaled from the route's own duration (traffic-unaware: Essentials SKU). */
 export function progress(p: LL, path: LL[], distanceMeters: number, durationMillis: number) {
-  const total = pathLength(path) || distanceMeters || 1;
   const { off, along } = projectOnPath(p, path);
+  return { off, offRoute: off > OFF_ROUTE_M, ...remaining(along, path, distanceMeters, durationMillis) };
+}
+
+/** Distance and time left from `along` metres down the path. */
+export function remaining(along: number, path: LL[], distanceMeters: number, durationMillis: number) {
+  const total = pathLength(path) || distanceMeters || 1;
   const leftRatio = Math.max(0, Math.min(1, 1 - along / total));
-  return {
-    off,
-    offRoute: off > OFF_ROUTE_M,
-    metersLeft: Math.round(distanceMeters * leftRatio),
-    millisLeft: Math.round(durationMillis * leftRatio),
-  };
+  return { metersLeft: Math.round(distanceMeters * leftRatio), millisLeft: Math.round(durationMillis * leftRatio) };
 }

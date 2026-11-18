@@ -7,8 +7,8 @@ import type { MessageKey } from '../../i18n';
 import { DEFAULT_CENTER, MAP_ID, mapsConfigured } from './config';
 import { type Position, useGeo } from './geo';
 import { type GMap, type GMarker, type GLayer, type GPolyline, type MapsLibs, loadMaps, onMapsAuthFailure } from './mapsLoader';
-import { type TrafficSection, sectionPlan, sectionsFromLegs, slowStretches } from './routeTraffic';
-import { OFF_ROUTE_M, RECOMPUTE_MIN_MS, type LL, aheadBearing, bearing, cameraCenter, haversine, progress, projectOnPath, turn } from './routeMath';
+import { type Driven, NOT_DRIVEN, type TrafficSection, carryDriven, mergeAhead, sectionPlan, sectionsFromLegs, slowStretches } from './routeTraffic';
+import { OFF_ROUTE_M, RECOMPUTE_MIN_MS, type LL, aheadBearing, bearing, cameraCenter, haversine, progress, projectNear, projectOnPath, turn } from './routeMath';
 import { canSpend, useMapUsage } from './usage';
 
 export type MapMode = 'js' | 'embed' | 'none';
@@ -24,8 +24,12 @@ export interface RouteState {
   viaEmbed: boolean;
   /** Why the free view is used instead of the live line. */
   note: MessageKey | null;
-  /** Traffic per section of the road ahead (Compute Routes Pro), for the side bar and the ETA; null until known. */
+  /** Traffic per section of the route line (Compute Routes Pro), for the side bar and the ETA; null until known. */
   traffic: { sections: TrafficSection[]; at: number } | null;
+  /** Where the car is along `path` (metres), kept with the stretch it's on (routeMath.projectNear); null until known. */
+  along: number | null;
+  /** The trip driven on earlier lines of this route (before a new route from where the car was): the bar shows it. */
+  driven: Driven;
   /** Google's route choices (up to 3, traffic-aware), fastest first; `chosen` is the one drawn and followed. */
   options: RouteOption[];
   chosen: number;
@@ -138,6 +142,7 @@ export function attachMap(container: HTMLElement): void {
 
 function updatePosition(pos: Position | null): void {
   if (!pos) return;
+  trackAlong(pos);
   const here = { lat: pos.lat, lng: pos.lng };
   if (map && libs) {
     if (!marker) {
@@ -154,6 +159,15 @@ function updatePosition(pos: Position | null): void {
   const r = useMapUi.getState().route;
   if (r?.status === 'needsLocation') void computeRoute(r.destination);
   checkRoute(pos);
+}
+
+/** The car's place along the route line; off the line it stays where the car left it. */
+function trackAlong(pos: Position): void {
+  const r = useMapUi.getState().route;
+  if (!r || r.viaEmbed || r.path.length < 2) return;
+  const on = projectNear(pos, r.path, r.along);
+  if (on.off > OFF_ROUTE_M || on.along === r.along) return;
+  useMapUi.setState((s) => (s.route === r ? { route: { ...r, along: on.along } } : s));
 }
 
 // ---------- camera (user request 2026-11-12) ----------
@@ -178,7 +192,7 @@ function navigating(): boolean {
 /** Direction of travel: the road ahead on the route line, else the GPS course when moving, else from the last fix. */
 function travelHeading(pos: Position): number | null {
   const r = useMapUi.getState().route;
-  const onLine = r && !r.viaEmbed && r.path.length > 1 ? aheadBearing(pos, r.path) : null;
+  const onLine = r && !r.viaEmbed && r.path.length > 1 ? aheadBearing(pos, r.path, r.along) : null;
   if (onLine !== null) return onLine;
   if (pos.heading != null && Number.isFinite(pos.heading) && (pos.speed ?? 0) > 1.5) return pos.heading;
   if (lastPos && haversine(lastPos, pos) > 15) return bearing(lastPos, pos);
@@ -331,9 +345,7 @@ async function refreshTraffic(): Promise<void> {
   const r = useMapUi.getState().route;
   if (!libs || !r || r.viaEmbed || r.status !== 'ready' || r.path.length < 2 || trafficBusy) return;
   if (!useSettings.getState().map.traffic || document.visibilityState === 'hidden' || !canSpend('traffic')) return;
-  const pos = useGeo.getState().pos;
-  const on = pos ? projectOnPath(pos, r.path) : null;
-  const plan = sectionPlan(r.path, on && on.off <= OFF_ROUTE_M ? on.along : 0);
+  const plan = sectionPlan(r.path, r.along ?? 0);
   if (!plan) return;
   const computedAt = r.computedAt;
   trafficBusy = true;
@@ -351,7 +363,9 @@ async function refreshTraffic(): Promise<void> {
     const legs = routes?.[0]?.legs;
     if (!legs?.length) return;
     useMapUi.setState((s) =>
-      s.route && s.route.computedAt === computedAt ? { route: { ...s.route, traffic: { sections: sectionsFromLegs(plan.bounds, legs), at: Date.now() } } } : s,
+      s.route && s.route.computedAt === computedAt
+        ? { route: { ...s.route, traffic: { sections: mergeAhead(s.route.traffic?.sections, sectionsFromLegs(plan.bounds, legs)), at: Date.now() } } }
+        : s,
     );
     paintTraffic();
   } catch {
@@ -467,8 +481,10 @@ async function computeRoute(destination: string): Promise<void> {
     // A recompute after leaving the route takes the fastest without asking.
     const first = current.path.length === 0;
     const ask = first && options.length > 1;
+    // A new route from here mid-trip starts at the car: the bar keeps what was driven on the old line.
+    const driven = first ? current.driven : carryDriven(current.driven, current.traffic?.sections ?? [], current.along ?? 0);
     // While the driver chooses, no traffic request yet: it's made for the route they pick.
-    set({ options, computedAt: Date.now(), choosing: ask });
+    set({ options, driven, computedAt: Date.now(), choosing: ask });
     applyChoice(0);
     if (ask) openChooser();
     else if (first) driveView(pos);
@@ -484,6 +500,8 @@ function applyChoice(i: number): void {
   const o = r?.options[i];
   if (!map || !libs || !r || !o) return;
   const keepChoosing = r.choosing;
+  const pos = useGeo.getState().pos;
+  const on = pos ? projectOnPath(pos, o.path) : null;
   clearLine();
   casing = new libs.Polyline({ ...CASING_STYLE, path: o.path, map });
   line = new libs.Polyline({ ...LINE_STYLE, path: o.path, map });
@@ -502,6 +520,7 @@ function applyChoice(i: number): void {
             durationMillis: o.durationMillis,
             description: o.description,
             traffic: null,
+            along: on && on.off <= OFF_ROUTE_M ? on.along : null,
             computedAt: Date.now(),
           },
         }
@@ -573,6 +592,8 @@ export function startRoute(destination: string): void {
       viaEmbed: !live,
       note: null,
       traffic: null,
+      along: null,
+      driven: NOT_DRIVEN,
       options: [],
       chosen: 0,
       choosing: false,

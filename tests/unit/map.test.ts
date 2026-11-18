@@ -1,9 +1,21 @@
 // M4 pure logic: the cost rule (320/day, 9,920/month; spec §7.1), route progress (§7.4), Maps URLs (§7.3).
 import { beforeEach, describe, expect, it } from 'vitest';
 import { mapsAppSchemeUrl, mapsNavigateUrl, withRecentDestination } from '../../src/apps/map/navigate';
-import { haversine, progress, projectOnPath } from '../../src/apps/map/routeMath';
+import { aheadBearing, haversine, progress, projectNear, projectOnPath } from '../../src/apps/map/routeMath';
 import { MONTHLY_CAPS, allowedToday, canSpend, daysLeftInMonth, pacificDay, pacificMonth, useMapUsage, usedThisMonth } from '../../src/apps/map/usage';
-import { barPieces, sectionPlan, sectionsFromLegs, slicePath, slowStretches, trafficLevel, trafficMillisLeft } from '../../src/apps/map/routeTraffic';
+import {
+  NOT_DRIVEN,
+  barPieces,
+  carryDriven,
+  mergeAhead,
+  sectionPlan,
+  sectionsFromLegs,
+  slicePath,
+  slowStretches,
+  trafficLevel,
+  trafficMillisLeft,
+  tripBar,
+} from '../../src/apps/map/routeTraffic';
 
 const zero = () => ({ map: 0, route: 0, traffic: 0 });
 
@@ -152,6 +164,87 @@ describe('traffic on the route, per section (Compute Routes Pro legs)', () => {
       { from: 2 / 3, to: 1, level: 'unknown', passed: false },
     ]);
     expect(barPieces(s, 0, 3000).map((p) => `${p.level}${p.passed ? '-passed' : ''}`)).toEqual(['free', 'jam', 'unknown']);
+  });
+});
+
+describe('the bar is the whole trip, from where the route was started (user 2026-11-18)', () => {
+  const sec = (from: number, to: number, ratio: number) => ({ from, to, ratio, ms: (to - from) * 100 });
+  const label = (p: { level: string; passed: boolean }) => `${p.level}${p.passed ? '-passed' : ''}`;
+
+  it('a traffic refresh (road ahead only) keeps the colours of the stretch already driven', () => {
+    const old = [sec(0, 1000, 1), sec(1000, 2000, 3), sec(2000, 3000, 1)];
+    const fresh = [sec(1500, 2250, 1.5), sec(2250, 3000, 1)];
+    const merged = mergeAhead(old, fresh);
+    expect(merged.map((s) => [s.from, s.to, trafficLevel(s.ratio)])).toEqual([
+      [0, 1000, 'free'],
+      [1000, 1500, 'jam'],
+      [1500, 2250, 'slow'],
+      [2250, 3000, 'free'],
+    ]);
+    expect(merged[1].ms).toBe(50_000); // the jam cut at the car keeps its share of the time
+    expect(barPieces(merged, 1500, 3000).map(label)).toEqual(['free-passed', 'jam-passed', 'slow', 'free']);
+    expect(mergeAhead(undefined, fresh)).toEqual(fresh);
+    expect(mergeAhead(old, [])).toEqual(old);
+  });
+
+  it('a new route from where the car is: the driven part stays at the bottom, the dot stays where it was', () => {
+    const first = [sec(0, 1000, 1), sec(1000, 2000, 3), sec(2000, 3000, 1)];
+    // Left the 3 km route at 1.5 km; the new line from there is 2 km.
+    const driven = carryDriven(NOT_DRIVEN, first, 1500);
+    expect(driven.meters).toBe(1500);
+    expect(driven.sections.map((s) => [s.from, s.to])).toEqual([
+      [0, 1000],
+      [1000, 1500],
+    ]);
+    // Before the new line's traffic is known: the driven part only (the rest of the bar is unknown).
+    let bar = tripBar(driven, [], 0, 2000);
+    expect(bar).toMatchObject({ total: 3500, along: 1500 });
+    expect(bar.pieces.map(label)).toEqual(['free-passed', 'jam-passed']);
+    // Its traffic comes, on top of the driven part; 500 m further on the new line.
+    bar = tripBar(driven, [sec(0, 2000, 1.5)], 500, 2000);
+    expect(bar.along).toBe(2000);
+    expect(bar.pieces.map((p) => [Math.round(p.from * 3500), Math.round(p.to * 3500), label(p)])).toEqual([
+      [0, 1000, 'free-passed'],
+      [1000, 1500, 'jam-passed'],
+      [1500, 2000, 'slow-passed'],
+      [2000, 3500, 'slow'],
+    ]);
+    // A second new route adds on.
+    const again = carryDriven(driven, [sec(0, 2000, 1.5)], 500);
+    expect(again.meters).toBe(2000);
+    expect(again.sections.map((s) => [s.from, s.to])).toEqual([
+      [0, 1000],
+      [1000, 1500],
+      [1500, 2000],
+    ]);
+  });
+
+  it('a stretch no section covers is unknown, also behind the car', () => {
+    expect(barPieces([sec(0, 1000, 1), sec(1500, 3000, 1)], 2000, 3000).map(label)).toEqual(['free-passed', 'unknown-passed', 'free-passed', 'free']);
+  });
+});
+
+describe('the car stays on the stretch it is on (a route out to a U-turn and back, user 2026-11-18)', () => {
+  // 1 km north, a U-turn 20 m east, 1 km back south on the other side, then 1 km east.
+  const path = [
+    { lat: 13.7, lng: 100.5 },
+    { lat: 13.709, lng: 100.5 },
+    { lat: 13.709, lng: 100.50019 },
+    { lat: 13.7, lng: 100.50019 },
+    { lat: 13.7, lng: 100.5095 },
+  ];
+  it('the pass nearest to where the car was wins, not the nearest side of the road', () => {
+    // Going north, 222 m out, the GPS a little east: the way back is nearer.
+    const out = { lat: 13.702, lng: 100.50011 };
+    expect(projectOnPath(out, path).along).toBeGreaterThan(1500);
+    expect(projectNear(out, path, 200).along).toBeCloseTo(222, -1);
+    expect(Math.round(aheadBearing(out, path, 200)!)).toBe(0); // the map turns north, not south
+    // Coming back, the GPS a little west: the way out is nearer.
+    const back = { lat: 13.702, lng: 100.50008 };
+    expect(projectOnPath(back, path).along).toBeLessThan(500);
+    expect(projectNear(back, path, 1700).along).toBeGreaterThan(1500);
+    // No hint (first fix): the nearest point.
+    expect(projectNear(out, path, null)).toEqual(projectOnPath(out, path));
   });
 });
 

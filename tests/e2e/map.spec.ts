@@ -487,6 +487,10 @@ test('route choices: up to 3 with time in traffic, fastest first; pick one to dr
   expect(s.shown.find((l) => l.strokeColor === '#1A73E8')!.path).toHaveLength(3);
   await expect(page.getByTestId('map-recenter')).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => (await stub(page)).trafficReqs).toBe(1);
+  // "Other routes" right after zoom out (user 2026-11-18), then the whole route.
+  const order = await page.getByTestId('map-controls').locator('[data-testid^="map-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+  const z = order.indexOf('map-zoom-out');
+  expect(order.slice(z, z + 3)).toEqual(['map-zoom-out', 'map-route-alts', 'map-route-overview']);
   // "Other routes" in the toolbar opens the choices again; ✕ keeps the one being driven.
   await page.getByTestId('map-route-alts').click();
   await expect(page.getByTestId('map-route-option-1')).toHaveAttribute('aria-pressed', 'true');
@@ -565,5 +569,20 @@ test('traffic bar: the blue car dot climbs the whole route; driven part faded, j
   expect(Math.round(jamAfter.y)).toBe(Math.round(jamBefore.y));
   expect(Math.round(jamAfter.height)).toBe(Math.round(jamBefore.height));
   expect(await page.locator('[data-testid="map-traffic-bar"] [data-level="jam"][data-passed="1"]').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgb(227, 100, 92)');
+
+  // A new route from here (Avoid tolls; also leaving the route or Refresh) starts at the car: the bar stays the whole
+  // trip (user 2026-11-18): the dot doesn't drop to the bottom and the driven part keeps its colours.
+  await page.getByTestId('map-navigate').click();
+  await page.getByTestId('map-avoid-tolls').click();
+  await page.getByTestId('sheet-close').click();
+  await expect.poll(async () => (await stub(page)).routes).toBe(2);
+  // Driven half the first line (~3.9 km), the new line from here is the stub's full 7.8 km: 1/3 of the trip.
+  await expect(bar).toHaveAttribute('data-progress', '0.33');
+  await expect(bar.locator('[data-passed="1"][data-level="jam"]')).toHaveCount(1);
+  // The new line's traffic comes on top: its own jam ahead, the old one still behind.
+  await expect.poll(async () => (await stub(page)).trafficReqs).toBe(2);
+  await expect(bar.locator('[data-level="jam"]')).toHaveCount(2);
+  await expect(bar.locator('[data-passed="1"][data-level="jam"]')).toHaveCount(1);
+  await expect(bar).toHaveAttribute('data-progress', '0.33');
 });
 

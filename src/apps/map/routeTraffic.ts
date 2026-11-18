@@ -100,7 +100,7 @@ export interface BarPiece {
 /**
  * The whole route on the bar (user 2026-11-13): start at the bottom, destination at the top, the car's dot climbing
  * at `along / total`. Every stretch keeps its traffic colour; behind the car it's faded, so a jam stays where it is
- * on the bar while the dot moves towards it and past it. Before the first section (driven before the traffic was
+ * on the bar while the dot moves towards it and past it. Where no section says (driven before the traffic was
  * fetched): unknown.
  */
 export function barPieces(sections: TrafficSection[], along: number, total: number): BarPiece[] {
@@ -118,9 +118,59 @@ export function barPieces(sections: TrafficSection[], along: number, total: numb
       else out.push({ from: f / total, to: t / total, level, passed });
     }
   };
-  if (sections[0].from > 0) push(0, Math.min(total, sections[0].from), 'unknown');
-  for (const s of sections) push(s.from, Math.min(total, s.to), trafficLevel(s.ratio));
+  let end = 0;
+  for (const s of sections) {
+    if (s.from > end + 1e-6) push(end, Math.min(total, s.from), 'unknown');
+    push(Math.max(end, s.from), Math.min(total, s.to), trafficLevel(s.ratio));
+    end = Math.max(end, Math.min(total, s.to));
+  }
   return out;
+}
+
+/** The sections before `at` metres, the one across it cut there (its time in proportion). Sections are in order. */
+export function sectionsBefore(sections: TrafficSection[], at: number): TrafficSection[] {
+  const out: TrafficSection[] = [];
+  for (const s of sections) {
+    if (s.from >= at) break;
+    out.push(s.to <= at ? s : { ...s, to: at, ms: (s.ms * (at - s.from)) / (s.to - s.from || 1) });
+  }
+  return out;
+}
+
+/**
+ * A traffic refresh (every 5 min) covers the road ahead of the car only: the stretch already driven keeps the colours
+ * it had (user 2026-11-18: after a while the driven part of the bar went grey).
+ */
+export function mergeAhead(old: TrafficSection[] | undefined, fresh: TrafficSection[]): TrafficSection[] {
+  if (!fresh.length) return old ?? [];
+  return [...sectionsBefore(old ?? [], fresh[0].from), ...fresh];
+}
+
+/** The trip driven on earlier route lines (before a new route from where the car was), in metres from the trip's start. */
+export interface Driven {
+  meters: number;
+  sections: TrafficSection[];
+}
+
+export const NOT_DRIVEN: Driven = { meters: 0, sections: [] };
+
+const shift = (s: TrafficSection, by: number): TrafficSection => ({ ...s, from: s.from + by, to: s.to + by });
+
+/**
+ * A new route from where the car is (it left the route, Refresh, Avoid tolls...) starts at the car: what was driven on
+ * the old line moves into `driven`, with its colours, so the bar stays the whole trip from where it started to the
+ * destination (user 2026-11-18: the car's dot jumped back to the bottom).
+ */
+export function carryDriven(driven: Driven, sections: TrafficSection[], along: number): Driven {
+  return { meters: driven.meters + along, sections: [...driven.sections, ...sectionsBefore(sections, along).map((s) => shift(s, driven.meters))] };
+}
+
+/** The bar for the whole trip: what was driven on earlier lines, then the current line. */
+export function tripBar(driven: Driven, sections: TrafficSection[], along: number, pathMeters: number) {
+  const total = driven.meters + pathMeters;
+  const at = driven.meters + Math.max(0, Math.min(pathMeters, along));
+  const all = [...driven.sections, ...sections.map((s) => shift(s, driven.meters))];
+  return { total, along: at, pieces: barPieces(all, at, total) };
 }
 
 /** The route between two distances along it (metres), cut exactly at both ends. */

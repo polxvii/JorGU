@@ -8,6 +8,7 @@ import {
   barPieces,
   carryDriven,
   mergeAhead,
+  routeFrom,
   sectionPlan,
   sectionsFromLegs,
   slicePath,
@@ -199,7 +200,9 @@ describe('the bar is the whole trip, from where the route was started (user 2026
     // Before the new line's traffic is known: the driven part only (the rest of the bar is unknown).
     let bar = tripBar(driven, [], 0, 2000);
     expect(bar).toMatchObject({ total: 3500, along: 1500 });
-    expect(bar.pieces.map(label)).toEqual(['free-passed', 'jam-passed']);
+    expect(bar.pieces.map(label)).toEqual(['free-passed', 'jam-passed', 'unknown']);
+    // Driving on before it comes: the stretch behind the car fades too (review 2026-11-25).
+    expect(tripBar(driven, [], 300, 2000).pieces.map(label)).toEqual(['free-passed', 'jam-passed', 'unknown-passed', 'unknown']);
     // Its traffic comes, on top of the driven part; 500 m further on the new line.
     bar = tripBar(driven, [sec(0, 2000, 1.5)], 500, 2000);
     expect(bar.along).toBe(2000);
@@ -217,6 +220,16 @@ describe('the bar is the whole trip, from where the route was started (user 2026
       [1000, 1500],
       [1500, 2000],
     ]);
+  });
+
+  it("another route picked mid-trip starts at the car's place on it, its distance and time in proportion", () => {
+    const o = { path: [{ lat: 13.7, lng: 100.5 }, { lat: 13.727, lng: 100.5 }], distanceMeters: 3000, durationMillis: 300_000, description: 'x' };
+    const total = haversine(o.path[0], o.path[1]);
+    const r = routeFrom(o, total / 3);
+    expect(haversine(o.path[0], r.path[0])).toBeCloseTo(total / 3, 0);
+    expect(haversine(o.path[1], r.path[r.path.length - 1])).toBeCloseTo(0, 3);
+    expect(r).toMatchObject({ distanceMeters: 2000, durationMillis: 200_000, description: 'x' });
+    expect(routeFrom(o, 0)).toBe(o);
   });
 
   it('a stretch no section covers is unknown, also behind the car', () => {
@@ -238,13 +251,25 @@ describe('the car stays on the stretch it is on (a route out to a U-turn and bac
     const out = { lat: 13.702, lng: 100.50011 };
     expect(projectOnPath(out, path).along).toBeGreaterThan(1500);
     expect(projectNear(out, path, 200).along).toBeCloseTo(222, -1);
-    expect(Math.round(aheadBearing(out, path, 200)!)).toBe(0); // the map turns north, not south
+    expect(Math.round(aheadBearing(out, path, 60, 200)!)).toBe(0); // the map turns north, not south
     // Coming back, the GPS a little west: the way out is nearer.
     const back = { lat: 13.702, lng: 100.50008 };
     expect(projectOnPath(back, path).along).toBeLessThan(500);
     expect(projectNear(back, path, 1700).along).toBeGreaterThan(1500);
     // No hint (first fix): the nearest point.
     expect(projectNear(out, path, null)).toEqual(projectOnPath(out, path));
+  });
+
+  it("the car's course leaves out the pass going the other way (review 2026-11-25)", () => {
+    // A U-turn earlier than planned: on the way back already, the hint still on the way out (or from long ago).
+    const early = { lat: 13.701, lng: 100.50019 };
+    expect(projectNear(early, path, 200).along).toBeLessThan(500); // the hint alone keeps it on the wrong side
+    expect(projectNear(early, path, 200, 180).along).toBeGreaterThan(1500); // going south: the way back
+    expect(Math.round(aheadBearing(early, path, 60, 200, 180)!)).toBe(180);
+    // The course alone (no hint) picks the right side too; nearer to the other side doesn't matter.
+    expect(projectNear({ lat: 13.702, lng: 100.50011 }, path, null, 0).along).toBeCloseTo(222, -1);
+    // Across the road (90° off both ways): both passes fit, the hint decides as before.
+    expect(projectNear({ lat: 13.702, lng: 100.50011 }, path, 200, 90).along).toBeCloseTo(222, -1);
   });
 });
 

@@ -124,6 +124,8 @@ export function barPieces(sections: TrafficSection[], along: number, total: numb
     push(Math.max(end, s.from), Math.min(total, s.to), trafficLevel(s.ratio));
     end = Math.max(end, Math.min(total, s.to));
   }
+  // Past the last section (a new line whose traffic isn't known yet): unknown too, so it fades behind the car.
+  if (end < total - 1e-6) push(end, total, 'unknown');
   return out;
 }
 
@@ -163,6 +165,19 @@ const shift = (s: TrafficSection, by: number): TrafficSection => ({ ...s, from: 
  */
 export function carryDriven(driven: Driven, sections: TrafficSection[], along: number): Driven {
   return { meters: driven.meters + along, sections: [...driven.sections, ...sectionsBefore(sections, along).map((s) => shift(s, driven.meters))] };
+}
+
+/**
+ * Another route picked mid-trip (Other routes): Google's choice starts where the choices were asked for, behind the
+ * car. The line drawn and followed starts at the car's place on it (`cut` metres along), its distance and time in
+ * proportion (review 2026-11-25: picking another route mid-trip reset the bar).
+ */
+export function routeFrom<T extends { path: LL[]; distanceMeters: number; durationMillis: number }>(o: T, cut: number): T {
+  const total = pathLength(o.path);
+  if (cut <= 0 || total <= 0) return o;
+  const at = Math.min(cut, total);
+  const left = 1 - at / total;
+  return { ...o, path: slicePath(o.path, at, total), distanceMeters: Math.round(o.distanceMeters * left), durationMillis: Math.round(o.durationMillis * left) };
 }
 
 /** The bar for the whole trip: what was driven on earlier lines, then the current line. */

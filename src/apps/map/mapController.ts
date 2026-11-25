@@ -7,8 +7,8 @@ import type { MessageKey } from '../../i18n';
 import { DEFAULT_CENTER, MAP_ID, mapsConfigured } from './config';
 import { type Position, useGeo } from './geo';
 import { type GMap, type GMarker, type GLayer, type GPolyline, type MapsLibs, loadMaps, onMapsAuthFailure } from './mapsLoader';
-import { type Driven, NOT_DRIVEN, type TrafficSection, carryDriven, mergeAhead, sectionPlan, sectionsFromLegs, slowStretches } from './routeTraffic';
-import { OFF_ROUTE_M, RECOMPUTE_MIN_MS, type LL, aheadBearing, bearing, cameraCenter, haversine, progress, projectNear, projectOnPath, turn } from './routeMath';
+import { type Driven, NOT_DRIVEN, type TrafficSection, carryDriven, mergeAhead, routeFrom, sectionPlan, sectionsFromLegs, slowStretches } from './routeTraffic';
+import { AHEAD_M, OFF_ROUTE_M, RECOMPUTE_MIN_MS, type LL, aheadBearing, bearing, cameraCenter, haversine, progress, projectNear, projectOnPath, turn } from './routeMath';
 import { canSpend, useMapUsage } from './usage';
 
 export type MapMode = 'js' | 'embed' | 'none';
@@ -165,7 +165,7 @@ function updatePosition(pos: Position | null): void {
 function trackAlong(pos: Position): void {
   const r = useMapUi.getState().route;
   if (!r || r.viaEmbed || r.path.length < 2) return;
-  const on = projectNear(pos, r.path, r.along);
+  const on = projectNear(pos, r.path, r.along, gpsCourse(pos));
   if (on.off > OFF_ROUTE_M || on.along === r.along) return;
   useMapUi.setState((s) => (s.route === r ? { route: { ...r, along: on.along } } : s));
 }
@@ -189,12 +189,18 @@ function navigating(): boolean {
   return !!map && useMapUi.getState().mode === 'js' && !!r && !r.viaEmbed && r.status === 'ready' && r.path.length > 1 && useSettings.getState().map.follow;
 }
 
+/** The GPS course when the car is moving (above walking pace), else null. */
+function gpsCourse(pos: Position): number | null {
+  return pos.heading != null && Number.isFinite(pos.heading) && (pos.speed ?? 0) > 1.5 ? pos.heading : null;
+}
+
 /** Direction of travel: the road ahead on the route line, else the GPS course when moving, else from the last fix. */
 function travelHeading(pos: Position): number | null {
   const r = useMapUi.getState().route;
-  const onLine = r && !r.viaEmbed && r.path.length > 1 ? aheadBearing(pos, r.path, r.along) : null;
+  const course = gpsCourse(pos);
+  const onLine = r && !r.viaEmbed && r.path.length > 1 ? aheadBearing(pos, r.path, AHEAD_M, r.along, course) : null;
   if (onLine !== null) return onLine;
-  if (pos.heading != null && Number.isFinite(pos.heading) && (pos.speed ?? 0) > 1.5) return pos.heading;
+  if (course !== null) return course;
   if (lastPos && haversine(lastPos, pos) > 15) return bearing(lastPos, pos);
   return null;
 }
@@ -372,6 +378,10 @@ async function refreshTraffic(): Promise<void> {
     // No bar this time (e.g. the key doesn't allow it); the route itself is unaffected.
   } finally {
     trafficBusy = false;
+    // A new line came while this was on its way (this answer is dropped, and the new line's own fetch was skipped
+    // as busy): fetch its traffic now, not in 5 minutes (review 2026-11-25).
+    const now = useMapUi.getState().route;
+    if (now && now.computedAt !== computedAt) void refreshTraffic();
   }
 }
 
@@ -471,6 +481,9 @@ async function computeRoute(destination: string): Promise<void> {
   if (!pos) return set({ status: 'needsLocation' });
   if (!canSpend('traffic') && !canSpend('route')) return fallBack(destination, 'map.routeCapped');
   if (!libs || !map) return fallBack(destination, 'map.routeFallback');
+  // The new route starts where the car is now: the old line counts as driven up to here, not up to where the car is
+  // when the answer comes (the car keeps moving meanwhile; review 2026-11-25).
+  const asked = useMapUi.getState().route;
   set({ status: 'loading', computedAt: Date.now() });
   try {
     const options = await requestRoutes({ lat: pos.lat, lng: pos.lng }, destination);
@@ -482,7 +495,8 @@ async function computeRoute(destination: string): Promise<void> {
     const first = current.path.length === 0;
     const ask = first && options.length > 1;
     // A new route from here mid-trip starts at the car: the bar keeps what was driven on the old line.
-    const driven = first ? current.driven : carryDriven(current.driven, current.traffic?.sections ?? [], current.along ?? 0);
+    const drivenTo = asked && current.path === asked.path ? asked.along : current.along;
+    const driven = first ? current.driven : carryDriven(current.driven, current.traffic?.sections ?? [], drivenTo ?? 0);
     // While the driver chooses, no traffic request yet: it's made for the route they pick.
     set({ options, driven, computedAt: Date.now(), choosing: ask });
     applyChoice(0);
@@ -494,14 +508,22 @@ async function computeRoute(destination: string): Promise<void> {
   }
 }
 
-/** Draws route choice `i` as the route: line, pin, ETA; its traffic comes with the next Pro request. */
-function applyChoice(i: number): void {
+/**
+ * Draws route choice `i` as the route: line, pin, ETA; its traffic comes with the next Pro request. `fromCar` (the
+ * driver picked it, maybe mid-trip): what was driven on the line so far stays on the bar, and the new line starts at
+ * the car's place on it, not where the choices were asked for (review 2026-11-25: Other routes mid-trip reset the bar).
+ */
+function applyChoice(i: number, fromCar = false): void {
   const r = useMapUi.getState().route;
-  const o = r?.options[i];
-  if (!map || !libs || !r || !o) return;
+  const picked = r?.options[i];
+  if (!map || !libs || !r || !picked) return;
   const keepChoosing = r.choosing;
   const pos = useGeo.getState().pos;
-  const on = pos ? projectOnPath(pos, o.path) : null;
+  const near = pos ? projectOnPath(pos, picked.path) : null;
+  const cut = fromCar && r.path.length > 1 && near ? near : null;
+  const o = cut ? routeFrom(picked, cut.along) : picked;
+  const driven = cut ? carryDriven(r.driven, r.traffic?.sections ?? [], r.along ?? 0) : r.driven;
+  const on = cut ? { off: cut.off, along: 0 } : near;
   clearLine();
   casing = new libs.Polyline({ ...CASING_STYLE, path: o.path, map });
   line = new libs.Polyline({ ...LINE_STYLE, path: o.path, map });
@@ -521,6 +543,7 @@ function applyChoice(i: number): void {
             description: o.description,
             traffic: null,
             along: on && on.off <= OFF_ROUTE_M ? on.along : null,
+            driven,
             computedAt: Date.now(),
           },
         }
@@ -569,7 +592,7 @@ export function chooseRoute(i: number): void {
   if (!r) return;
   clearAlts();
   useMapUi.setState((s) => (s.route ? { route: { ...s.route, choosing: false } } : s));
-  if (i !== r.chosen || !r.traffic) applyChoice(i);
+  if (i !== r.chosen || !r.traffic) applyChoice(i, true);
   driveView(useGeo.getState().pos);
 }
 

@@ -27,35 +27,60 @@ export function projectOnPath(p: LL, path: LL[]): { off: number; along: number }
   if (path.length === 1) return { off: haversine(p, path[0]), along: 0 };
   let best = { off: Infinity, along: 0 };
   for (const s of segmentProjections(p, path)) if (s.off < best.off) best = s;
-  return best;
+  return { off: best.off, along: best.along };
 }
 
 /** Another pass of the route this much further than the nearest one may be where the car is (the road's other side). */
 export const SAME_ROAD_M = 40;
 
 /**
- * Where the car is along the path, staying with the stretch it was on (`hint`: metres along at the last fix). A route
- * that uses the same road twice (out to a U-turn and back, user 2026-11-18: the car's dot fell back down the traffic
- * bar) has two places near the car; the nearest one can be the other side of the road. Each run of segments near the
- * car is one pass; the pass nearest to the hint wins. No hint: the nearest point.
+ * Where the car is along the path, staying with the stretch it's on. A route that uses the same road twice (out to a
+ * U-turn and back, user 2026-11-18: the car's dot fell back down the traffic bar) has two places near the car, and the
+ * nearest can be the other side of the road. Each run of segments near the car is one pass. With the car's `course`
+ * (GPS, when moving), passes going the other way are left out, so a U-turn earlier than planned, or a `hint` from long
+ * ago (JorGu was in the background), can't keep the car on the wrong side (review 2026-11-25). Then the pass nearest
+ * to `hint` (metres along at the last fix) wins; without a hint, the nearest one.
  */
-export function projectNear(p: LL, path: LL[], hint: number | null): { off: number; along: number } {
-  if (hint === null || path.length < 3) return projectOnPath(p, path);
+export function projectNear(p: LL, path: LL[], hint: number | null, course: number | null = null): { off: number; along: number } {
+  if (path.length < 2 || (hint === null && course === null)) return projectOnPath(p, path);
   const segs = segmentProjections(p, path);
   let min = Infinity;
   for (const s of segs) min = Math.min(min, s.off);
-  let best: { off: number; along: number } | null = null;
-  let run: { off: number; along: number } | null = null;
-  const close = () => {
-    if (run && (!best || Math.abs(run.along - hint) < Math.abs(best.along - hint))) best = run;
-    run = null;
-  };
-  for (const s of segs) {
-    if (s.off > min + SAME_ROAD_M) close();
-    else if (!run || s.off < run.off) run = s;
+  // Segment k runs from path[k] to path[k + 1].
+  const fits = (k: number) => course === null || Math.abs(turn(bearing(path[k], path[k + 1]), course)) <= 90;
+  interface Pass {
+    off: number;
+    along: number;
+    fits: boolean;
   }
-  close();
-  return best ?? projectOnPath(p, path);
+  const passes: Pass[] = [];
+  let pass: Pass | null = null;
+  for (let k = 0; k < segs.length; k++) {
+    const s = segs[k];
+    if (s.off > min + SAME_ROAD_M) {
+      pass = null;
+      continue;
+    }
+    const f = fits(k);
+    if (!pass) {
+      pass = { off: s.off, along: s.along, fits: f };
+      passes.push(pass);
+    } else if ((f && !pass.fits) || (f === pass.fits && s.off < pass.off)) {
+      // Within a pass: its nearest point going the car's way, else its nearest point.
+      pass.off = s.off;
+      pass.along = s.along;
+      pass.fits = f;
+    }
+  }
+  const going = passes.filter((x) => x.fits);
+  const pool = going.length ? going : passes;
+  let best = pool[0];
+  if (!best) return projectOnPath(p, path);
+  for (const x of pool) {
+    const better = hint !== null ? Math.abs(x.along - hint) < Math.abs(best.along - hint) : x.off < best.off;
+    if (better) best = x;
+  }
+  return { off: best.off, along: best.along };
 }
 
 /** The nearest point on each segment of the path: distance from it and distance along the path. */
@@ -118,10 +143,16 @@ export function pointAlong(path: LL[], along: number): LL {
   return path[path.length - 1];
 }
 
-/** Direction of the road ahead: from the car's spot on the line to `ahead` m further. Null when off the line. */
-export function aheadBearing(p: LL, path: LL[], hint: number | null = null, ahead = 60): number | null {
+/** How far ahead on the line the road's direction is read (camera heading). */
+export const AHEAD_M = 60;
+
+/**
+ * Direction of the road ahead: from the car's spot on the line (projectNear, with its `hint` and `course`) to `ahead`
+ * m further. Null when off the line.
+ */
+export function aheadBearing(p: LL, path: LL[], ahead = AHEAD_M, hint: number | null = null, course: number | null = null): number | null {
   if (path.length < 2) return null;
-  const { off, along } = projectNear(p, path, hint);
+  const { off, along } = projectNear(p, path, hint, course);
   if (off > OFF_ROUTE_M) return null;
   const from = pointAlong(path, along);
   const to = pointAlong(path, along + ahead);

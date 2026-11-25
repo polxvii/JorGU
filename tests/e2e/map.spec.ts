@@ -498,6 +498,20 @@ test('route choices: up to 3 with time in traffic, fastest first; pick one to dr
   await expect(chooser).toHaveCount(0);
   await expect(page.getByTestId('map-route-name')).toHaveText('via Expressway');
   expect((await stub(page)).trafficReqs).toBe(1);
+
+  // Another route picked mid-trip (review 2026-11-25): the bar keeps what was driven (the dot doesn't drop to the
+  // bottom, the jam driven through stays faded) and the new line starts at the car's place on it.
+  const bar = page.getByTestId('map-traffic-bar');
+  await page.context().setGeolocation({ latitude: HERE.latitude + 0.025, longitude: HERE.longitude });
+  await expect(bar).toHaveAttribute('data-progress', '0.25');
+  await page.getByTestId('map-route-alts').click();
+  await page.getByTestId('map-route-option-0').click();
+  await expect(page.getByTestId('map-route-name')).toHaveText('via Phahonyothin Rd');
+  // 2.8 km driven + the rest of the diagonal from the car's place on it (~5.8 km): about a third.
+  await expect(bar).toHaveAttribute('data-progress', /^0\.3[0-6]$/);
+  await expect(bar.locator('[data-passed="1"][data-level="jam"]')).toHaveCount(1);
+  const drawn = (await stub(page)).shown.find((l) => l.strokeColor === '#1A73E8')!.path as { lat: number; lng: number }[];
+  expect(drawn[0].lat).toBeGreaterThan(HERE.latitude + 0.005);
 });
 
 test('speed (km/h) beside the route box, in its corner without a route (user 2026-11-13)', async ({ page }) => {

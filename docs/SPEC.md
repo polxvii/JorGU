@@ -36,7 +36,7 @@
 - **Toolbar (Dock) size** in Settings: Normal / Large / Extra large (72 / 80 / 88 px: as wide as the map / YouTube / Web strips; user 2026-11-13, was 80 / 96 / 112).
 - **Web:** pin a Recent page to the App Picker in one tap; "Add a site" bookmarks any address without opening it.
 - **Not possible:** background playback (Developer Policies III.I.9); a caption on/off button (the IFrame API documents only `cc_load_policy` / `cc_lang_pref` at load; use the player's own CC button, iOS Settings → Accessibility → Subtitles & Captioning, or YouTube's "Always show captions"); signing in to sites inside a Web pane on CarTV (tested by the user 2026-11-11: fails; the WebView blocks the embedded site's cookies, §9.6).
-- **YouTube + a video in the Web pane at once:** allowed (it's one YouTube player). Whether iOS keeps both playing is [Verify]; YouTube's mute button lets the other one have the sound.
+- **YouTube + a video in the Web pane at once:** allowed (it's one YouTube player). Both keep playing only when one is muted first (tested by the user in AsCar, confirmed 2026-11-26): on iPhone, WebKit plays one video with sound per page and pauses the other when a second one starts with sound; muted videos don't count. JorGu can't change this (both players are cross-origin frames). YouTube's mute button lets the other one have the sound. Different apps (e.g. a Teams call) can mix sound; that's iOS's audio policy between apps, not this.
 
 ### Changes during M5 (2026-11-10)
 

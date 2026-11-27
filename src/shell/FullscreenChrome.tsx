@@ -9,7 +9,7 @@ import { MuteButton, SeekButton } from '../apps/youtube/TransportButtons';
 import { next, previous, togglePlay } from '../apps/youtube/player';
 import { youtubePane } from './layoutActions';
 import type { LayoutResult } from './computeLayout';
-import { miniSpot } from './computeLayout';
+import { MINI_MIN_W, miniSpot } from './computeLayout';
 import type { MiniCorner } from '../features/settings/types';
 import { exitFullscreen, switchFullscreen } from './fullscreen';
 import { Icon, type IconName } from './Icon';
@@ -232,6 +232,71 @@ function MiniGrip({ handle, range }: { handle: Rect; range: Rect }) {
   );
 }
 
+/** Steps for a tap on the resize grip (dragging it gives any width). */
+const MINI_STEPS = [356, 480, 640, 800];
+
+/**
+ * Resizes the mini player (user 2026-11-27: any size, not only 356×200 / 480×270): drag the grip outward (away from
+ * the middle of the player) to grow it, inward to shrink it; it stays 16:9 and never under 356×200. A tap steps
+ * through 356 / 480 / 640 / 800 wide (as far as it fits). The player's box changes size; it is never CSS-scaled.
+ */
+function MiniResize({ width, maxW, outward }: { width: number; maxW: number; outward: 1 | -1 }) {
+  const t = useT();
+  // Width and direction as they were when the finger went down: the player grows under it while dragging.
+  const start = useRef<{ x: number; y: number; w: number; out: 1 | -1; moved: boolean } | null>(null);
+  const dragged = useRef(false);
+  const widthAt = (cx: number, cy: number, s: { x: number; y: number; w: number; out: 1 | -1 }) => {
+    const dx = cx - s.x;
+    // Up / down counts too, by its 16:9 width (the top of the handle moves when it grows).
+    const dy = ((s.y - cy) * 16) / 9;
+    const d = Math.abs(dx) >= Math.abs(dy) ? s.out * dx : dy;
+    return Math.round(Math.min(maxW, Math.max(MINI_MIN_W, s.w + d)));
+  };
+  return (
+    <button
+      type="button"
+      data-testid="mini-resize"
+      data-width={width}
+      aria-label={t('mini.resize')}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        start.current = { x: e.clientX, y: e.clientY, w: width, out: outward, moved: false };
+      }}
+      onPointerMove={(e) => {
+        const s = start.current;
+        if (!s) return;
+        if (!s.moved && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 12) s.moved = true;
+        if (s.moved) useUi.getState().setMiniResize(widthAt(e.clientX, e.clientY, s));
+      }}
+      onPointerUp={(e) => {
+        const s = start.current;
+        start.current = null;
+        if (!s?.moved) return;
+        dragged.current = true;
+        useSettings.getState().setMiniWidth(widthAt(e.clientX, e.clientY, s));
+        useUi.getState().setMiniResize(null);
+      }}
+      onPointerCancel={() => {
+        start.current = null;
+        useUi.getState().setMiniResize(null);
+      }}
+      onClick={() => {
+        if (dragged.current) {
+          dragged.current = false;
+          return;
+        }
+        const steps = MINI_STEPS.filter((w) => w <= maxW);
+        const nextW = steps.find((w) => w > width + 1) ?? MINI_MIN_W;
+        useSettings.getState().setMiniWidth(nextW);
+      }}
+      className="flex w-11 shrink-0 items-center justify-center rounded-t-xl bg-surface text-text"
+      style={{ touchAction: 'none', order: outward === -1 ? -1 : 99 }}
+    >
+      <Icon name="resize" size={22} />
+    </button>
+  );
+}
+
 /** Play / pause and next on the handle (user 2026-11-27: the map's full-screen tap shows the map's toolbar now). */
 function MiniPlayButtons() {
   const t = useT();
@@ -249,12 +314,13 @@ function MiniPlayButtons() {
   );
 }
 
-/** Grip, ⏯, ⏭, speed, mute (and ✕ when paused): what's left is "Show YouTube", with its words when they fit. */
-const MINI_FIXED = 44 + 44 + 44 + 64 + 44 + 5 * 4;
+/** The speed button needs this much handle; narrower, speed stays in the queue sheet and Settings. */
+const MINI_SPEED_FROM = 420;
 
-export function MiniHandle({ rect, range }: { rect: Rect; range: Rect }) {
+export function MiniHandle({ rect, range, maxW }: { rect: Rect; range: Rect; maxW: number }) {
   const t = useT();
   const playing = useUi((s) => s.youtube.playing);
+  const speed = rect.w >= MINI_SPEED_FROM;
   const setYoutube = useUi((s) => s.setYoutube);
   const restore = () => {
     const s = useSettings.getState();
@@ -276,6 +342,8 @@ export function MiniHandle({ rect, range }: { rect: Rect; range: Rect }) {
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h - 4 }}
     >
       <MiniGrip handle={rect} range={range} />
+      {/* At the end of the handle away from the nearer side edge, so dragging it outward grows the player there. */}
+      <MiniResize width={rect.w} maxW={maxW} outward={rect.x + rect.w / 2 >= range.x + (range.w + rect.w) / 2 ? -1 : 1} />
       <button
         type="button"
         data-testid="mini-restore"
@@ -284,12 +352,14 @@ export function MiniHandle({ rect, range }: { rect: Rect; range: Rect }) {
         className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-t-xl bg-surface text-[14px] font-semibold text-text"
       >
         <Icon name="restore" size={22} />
-        {rect.w - MINI_FIXED - (playing ? 0 : 52) >= 140 && <span className="truncate">{t('mini.restore')}</span>}
+        {rect.w - (5 * 44 + 6 * 4) - (speed ? 68 : 0) - (playing ? 0 : 52) >= 140 && <span className="truncate">{t('mini.restore')}</span>}
       </button>
       <MiniPlayButtons />
-      <div className="flex items-center rounded-t-xl bg-surface px-1">
-        <SpeedButton testId="mini-speed" />
-      </div>
+      {speed && (
+        <div className="flex items-center rounded-t-xl bg-surface px-1">
+          <SpeedButton testId="mini-speed" />
+        </div>
+      )}
       <div className="flex items-center rounded-t-xl bg-surface">
         <MuteButton testId="mini-mute" />
       </div>

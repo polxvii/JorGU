@@ -141,12 +141,37 @@ describe('full screen (§6.5)', () => {
     // The ends of the range are the corners; a saved spot wins over the corner.
     const br = computeLayout(input({ layout: { fullscreenPane: 1 }, youtube: yt({ x: 1, y: 1 }) }));
     expect(br.mini!.rect).toEqual({ x: 1024 - L.MINI_MARGIN - 356, y: 600 - L.MINI_MARGIN - 200, w: 356, h: 200 });
-    // Two panes: the room is the app area (not under the Dock); a sheet goes to the other half and leaves it whole.
-    const p = computeLayout(input({ layout: { panes: [{ kind: 'map' }, { kind: 'web', id: 'w1', url: '' }] }, youtube: yt({ x: 0.3, y: 0.4 }), sheetOpen: true }));
-    expect(p.mini!.range.w).toBe(p.appArea.w - 2 * L.MINI_MARGIN - 356);
+    // Two panes: the room is the app area (not under the Dock).
+    const panes = { panes: [{ kind: 'map' }, { kind: 'web', id: 'w1', url: '' }] as [AppRef, AppRef] };
+    const q = computeLayout(input({ layout: panes, youtube: yt({ x: 0.3, y: 0.4 }) }));
+    expect(q.mini!.range.w).toBe(q.appArea.w - 2 * L.MINI_MARGIN - 356);
+    // A sheet goes to the other half; the mini player keeps to the room beside it and stays whole.
+    const p = computeLayout(input({ layout: panes, youtube: yt({ x: 0.3, y: 0.4 }), sheetOpen: true }));
     expect(p.sheet!.x).toBeGreaterThan(512);
+    expect(p.mini!.range.x + p.mini!.range.w + 356 + L.MINI_MARGIN).toBeLessThanOrEqual(p.sheet!.x);
     expect(intersects(p.sheet!, p.mini!.rect)).toBe(false);
     expect(intersects(p.sheet!, p.mini!.handle)).toBe(false);
+  });
+
+  it('mini player any size (user 2026-11-27): 16:9, never under 356×200, never bigger than fits', () => {
+    const yt = (miniWidth: number, sheet = false) =>
+      input({ layout: { fullscreenPane: 1 }, youtube: { playing: true, miniSticky: false, miniSize: '356x200', miniWidth }, sheetOpen: sheet });
+    expect(computeLayout(yt(640)).mini!.rect).toEqual({ x: 1024 - L.MINI_MARGIN - 640, y: 600 - L.MINI_MARGIN - 360, w: 640, h: 360 });
+    expect(computeLayout(yt(200)).mini!.rect).toMatchObject({ w: 356, h: 200 });
+    // As big as the screen allows: 600 high leaves 600 - 24 - 48 = 528 for the player → 938 wide.
+    const big = computeLayout(yt(5000));
+    expect(big.mini!.maxW).toBe(Math.floor((528 * 16) / 9));
+    expect(big.mini!.rect.w).toBe(big.mini!.maxW);
+    expect(big.mini!.rect.y + big.mini!.rect.h).toBeLessThanOrEqual(600 - L.MINI_MARGIN);
+    // A sheet opens on the other half: the big player moves / shrinks beside it instead of squeezing it.
+    const s = computeLayout(yt(700, true));
+    expect(s.sheet!.w).toBeGreaterThanOrEqual(L.SHEET_MIN);
+    expect(intersects(s.sheet!, s.mini!.rect)).toBe(false);
+    expect(intersects(s.sheet!, s.mini!.handle)).toBe(false);
+    expect(s.mini!.rect.w).toBeGreaterThanOrEqual(356);
+    expect(s.mini!.rect.w).toBeLessThan(700);
+    // Settings → a size clears the dragged width (store), and 480×270 still falls back where it can't fit.
+    expect(computeLayout(input({ layout: { fullscreenPane: 1 }, youtube: { playing: true, miniSticky: false, miniSize: '480x270' } })).mini!.rect).toMatchObject({ w: 480, h: 270 });
   });
 
   it('Web full screen with the mini player in the middle: the floating bar never touches it', () => {
@@ -310,6 +335,7 @@ describe('§3.9 invariants across every combination', () => {
                 ['auto', null], ['tl', null], ['tr', null], ['bl', null], ['br', null],
                 ['auto', { x: 0.5, y: 0.5 }], ['auto', { x: 0.3, y: 0.8 }], ['auto', { x: 0.7, y: 0.15 }],
               ] as const)
+                for (const miniWidth of [null, 640, 5000])
                 for (const dockSize of ['normal', 'large', 'xlarge'] as const)
                   for (const sheetOpen of [false, true])
                     for (const toast of [false, true]) {
@@ -317,13 +343,13 @@ describe('§3.9 invariants across every combination', () => {
                         viewport: { width: w, height: h },
                         safeArea,
                         layout: { mode, direction: 'auto', splitRatio: 0.5, panes, focusedPane: 0, fullscreenPane, driverSide },
-                        youtube: { playing: true, miniSticky: false, miniSize: '356x200', miniCorner, miniAt },
+                        youtube: { playing: true, miniSticky: false, miniSize: '356x200', miniCorner, miniAt, miniWidth },
                         dockSize,
                         bannerCount: 0,
                         sheetOpen,
                         toast,
                       });
-                      const ctx = JSON.stringify({ w, h, panes: panes.map((p) => p.kind), driverSide, mode, fullscreenPane, miniCorner, miniAt, dockSize, sheetOpen, toast });
+                      const ctx = JSON.stringify({ w, h, panes: panes.map((p) => p.kind), driverSide, mode, fullscreenPane, miniCorner, miniAt, miniWidth, dockSize, sheetOpen, toast });
                       const player = r.youtube.player;
                       if (player) {
                         expect(player.w, ctx).toBeGreaterThanOrEqual(356);
@@ -345,8 +371,8 @@ describe('§3.9 invariants across every combination', () => {
                       if (r.floatingBar) expect((r.floatingBar.rect.h - L.FLOAT_GAP) % (CONTROL_SIZES[dockSize].big + L.FLOAT_GAP), ctx).toBe(0);
                       n++;
                     }
-    expect(n).toBeGreaterThan(20_000);
-  }, 120_000);
+    expect(n).toBeGreaterThan(60_000);
+  }, 300_000);
 });
 
 describe('top/bottom split (portrait, setting `direction`)', () => {

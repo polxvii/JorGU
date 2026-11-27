@@ -262,6 +262,8 @@ export const th: Partial<Record<MessageKey, string>> = {
   'yt.mute': 'ปิดเสียง YouTube',
   'yt.unmute': 'เปิดเสียง YouTube',
   'mini.move': 'ย้ายจอย่อ (ลากไปวางตรงไหนก็ได้ หรือแตะเพื่อไปมุมถัดไป)',
+  'mini.resize': 'ปรับขนาดจอย่อ (ลากออกเพื่อขยาย ลากเข้าเพื่อย่อ แตะเพื่อเปลี่ยนเป็นขนาดถัดไป)',
+  'settings.miniSizeHint': 'หรือลากที่จับ ⤡ บนจอย่อเพื่อปรับเป็นขนาดไหนก็ได้',
   'settings.autoContinue': 'พอคิวหมด',
   'settings.continue.list': 'ต่อรายการเดิม',
   'settings.continue.off': 'หยุด',

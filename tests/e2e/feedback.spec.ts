@@ -77,6 +77,65 @@ test('mini player: bottom corner on the driver side; the grip moves it; nothing 
   expect([12, vp.width - 12 - mini.width]).toContain(Math.round(mini.x));
 });
 
+test('mini player any size (user 2026-11-27): drag the ⤡ grip outward to grow it, a tap steps sizes; 16:9, never under 356×200', async ({ page }) => {
+  await openApp(page);
+  await startSimulatedPlayback(page);
+  await page.getByTestId('pane-fullscreen-1').click();
+  let mini = await box(page, '[data-player-rect]');
+  expect([mini.width, mini.height]).toEqual([356, 200]);
+  // Bottom right: the grip is at the left end of the handle; dragging it left grows the player up and left.
+  const g = await box(page, '[data-testid="mini-resize"]');
+  expect(g.x).toBeLessThan(mini.x + 60);
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(g.x + g.width / 2 - 150, g.y + g.height / 2, { steps: 6 });
+  await expect.poll(async () => (await box(page, '[data-player-rect]')).width).toBe(506);
+  await page.mouse.move(g.x + g.width / 2 - 244, g.y + g.height / 2, { steps: 4 });
+  await page.mouse.up();
+  mini = await box(page, '[data-player-rect]');
+  expect([mini.width, mini.height]).toEqual([600, 338]);
+  expect(mini.x + mini.width).toBe(1024 - 12);
+  expect(mini.y + mini.height).toBe(600 - 12);
+  await expectPlayerClear(page);
+  // Shrinking stops at 356×200.
+  const g2 = await box(page, '[data-testid="mini-resize"]');
+  await page.mouse.move(g2.x + g2.width / 2, g2.y + g2.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(g2.x + g2.width / 2 + 600, g2.y + g2.height / 2, { steps: 6 });
+  await page.mouse.up();
+  mini = await box(page, '[data-player-rect]');
+  expect([mini.width, mini.height]).toEqual([356, 200]);
+  // A tap steps through 356 / 480 / 640 / 800 (as far as it fits; 600 high fits 800).
+  await page.getByTestId('mini-resize').click();
+  expect((await box(page, '[data-player-rect]')).width).toBe(480);
+  await page.getByTestId('mini-resize').click();
+  await page.getByTestId('mini-resize').click();
+  expect((await box(page, '[data-player-rect]')).width).toBe(800);
+  await expectPlayerClear(page);
+  // Remembered.
+  await page.reload();
+  await page.waitForFunction(() => !!window.__jorgu);
+  await startSimulatedPlayback(page);
+  expect((await box(page, '[data-player-rect]')).width).toBe(800);
+});
+
+test('a big mini player makes room for a sheet (moves / shrinks, never under 356×200); a size in Settings replaces the dragged one', async ({ page }) => {
+  await openApp(page, { layout: { mode: 'single', focusedPane: 1 }, youtube: { miniWidth: 700 } });
+  await startSimulatedPlayback(page);
+  expect((await box(page, '[data-player-rect]')).width).toBe(700);
+  await page.getByTestId('dock-settings').click();
+  const sheet = await box(page, '[data-chrome="sheet"]');
+  const mini = await box(page, '[data-player-rect]');
+  expect(sheet.width).toBeGreaterThanOrEqual(300);
+  expect(mini.width).toBeGreaterThanOrEqual(356);
+  expect(mini.width).toBeLessThan(700);
+  await expectPlayerClear(page);
+  await page.getByTestId('setting-mini-size').locator('[data-value="356x200"]').click();
+  expect((await box(page, '[data-player-rect]')).width).toBe(356);
+  await page.getByTestId('sheet-close').click();
+  expect((await box(page, '[data-player-rect]')).width).toBe(356);
+});
+
 test('Dock size setting: Large makes the right toolbar wider and its buttons bigger', async ({ page }) => {
   await openApp(page);
   const before = await box(page, '[data-chrome="dock"]');

@@ -61,7 +61,8 @@ export interface LayoutInput {
   viewport: { width: number; height: number };
   safeArea: { top: number; right: number; bottom: number; left: number };
   layout: LayoutSettings;
-  youtube: { playing: boolean; miniSticky: boolean; miniSize: MiniPlayerSize; miniCorner?: MiniCorner; miniAt?: MiniAt | null };
+  /** `miniWidth`: dragged to this width (16:9, user 2026-11-27); else `miniSize`. */
+  youtube: { playing: boolean; miniSticky: boolean; miniSize: MiniPlayerSize; miniCorner?: MiniCorner; miniAt?: MiniAt | null; miniWidth?: number | null };
   /** Dock size setting (default 'normal' = 80 px). */
   dockSize?: DockSize;
   bannerCount: number;
@@ -95,8 +96,8 @@ export interface LayoutResult {
   floatingBar: { rect: Rect; rows: number; cols: number } | null;
   edgeStrip: Rect | null;
   controlColumn: Rect | null;
-  /** `range`: where the handle's top-left corner can go (the grip drags it anywhere in there). */
-  mini: { rect: Rect; handle: Rect; range: Rect } | null;
+  /** `range`: where the handle's top-left corner can go (the grip drags it anywhere in there); `maxW`: widest it fits. */
+  mini: { rect: Rect; handle: Rect; range: Rect; maxW: number } | null;
   sheet: Rect | null;
   toast: Rect | null;
 }
@@ -242,11 +243,17 @@ export function miniSpot(corner: MiniCorner | undefined, at: MiniAt | null | und
   return { ...c, fx: c.right ? 1 : 0, fy: c.top ? 0 : 1 };
 }
 
-/** The mini player at its spot in `area`, its handle always directly above it, both `MINI_MARGIN` inside. */
-function miniBox(area: Rect, size: MiniPlayerSize, spot: { fx: number; fy: number }) {
-  // The large size falls back to 356×200 where it doesn't fit (narrow portrait screens).
-  const big = size === '480x270' && area.w >= 480 + 2 * L.MINI_MARGIN && area.h >= 270 + L.MINI_HANDLE + 2 * L.MINI_MARGIN;
-  const [w, h] = big ? [480, 270] : [356, 200];
+export const MINI_MIN_W = 356;
+
+/**
+ * The mini player at its spot in `area`, its handle always directly above it, both `MINI_MARGIN` inside. Any width
+ * from 356 (16:9, so ≥ 356×200, §3.9) up to what fits (user 2026-11-27: any size, not only two); the 480×270 setting
+ * falls back to 356×200 where it doesn't fit (narrow portrait screens). The iframe gets that size: never CSS-scaled.
+ */
+function miniBox(area: Rect, size: MiniPlayerSize, spot: { fx: number; fy: number }, width?: number | null) {
+  const maxW = Math.max(MINI_MIN_W, Math.min(area.w - 2 * L.MINI_MARGIN, Math.floor(((area.h - 2 * L.MINI_MARGIN - L.MINI_HANDLE) * 16) / 9)));
+  const w = width ? Math.min(maxW, Math.max(MINI_MIN_W, Math.round(width))) : size === '480x270' && maxW >= 480 ? 480 : MINI_MIN_W;
+  const h = Math.round((w * 9) / 16);
   const range = {
     x: area.x + L.MINI_MARGIN,
     y: area.y + L.MINI_MARGIN,
@@ -255,7 +262,19 @@ function miniBox(area: Rect, size: MiniPlayerSize, spot: { fx: number; fy: numbe
   };
   const x = range.x + Math.round(Math.min(1, Math.max(0, spot.fx)) * range.w);
   const top = range.y + Math.round(Math.min(1, Math.max(0, spot.fy)) * range.h);
-  return { rect: { x, y: top + L.MINI_HANDLE, w, h }, handle: { x, y: top, w, h: L.MINI_HANDLE }, range };
+  return { rect: { x, y: top + L.MINI_HANDLE, w, h }, handle: { x, y: top, w, h: L.MINI_HANDLE }, range, maxW };
+}
+
+/** The part of `area` beside a sheet: `s` is a full-height strip at the left / right edge, or (portrait) a band. */
+function besideSheet(area: Rect, s: Rect, band: boolean): Rect {
+  if (band) {
+    const from = s.y <= area.y ? Math.max(area.y, bottom(s)) : area.y;
+    const to = s.y <= area.y ? bottom(area) : Math.min(bottom(area), s.y);
+    return { x: area.x, y: from, w: area.w, h: Math.max(0, to - from) };
+  }
+  const from = s.x <= area.x ? Math.max(area.x, right(s)) : area.x;
+  const to = s.x <= area.x ? right(area) : Math.min(right(area), s.x);
+  return { x: from, y: area.y, w: Math.max(0, to - from), h: area.h };
 }
 
 /**
@@ -385,6 +404,20 @@ export function computeLayout(input: LayoutInput): LayoutResult {
   };
   const showMiniWhenOff = input.youtube.playing || input.youtube.miniSticky;
   const at = miniSpot(input.youtube.miniCorner, input.youtube.miniAt, driverRight);
+  /**
+   * The mini player in `area`. While a sheet is open it keeps to the rest of the screen: the sheet goes to the other
+   * half, and the mini player moves over, or gets smaller (never under 356×200), rather than squeeze the sheet (user
+   * 2026-11-27: it can be any size and anywhere now). It goes back when the sheet closes.
+   */
+  const placeMini = (area: Rect) => {
+    const box = (a: Rect) => miniBox(a, input.youtube.miniSize, at, input.youtube.miniWidth);
+    if (!input.sheetOpen) return box(area);
+    const planned = portrait ? placeBand(content, at.top, null) : placeSheet(content, !at.right, null, input.dockSize);
+    const room = besideSheet(area, planned, portrait);
+    // Too little room beside it (small screens): it stays put and the sheet gets narrower around it, as before.
+    const fits = room.w >= MINI_MIN_W + 2 * L.MINI_MARGIN && room.h >= 200 + L.MINI_HANDLE + 2 * L.MINI_MARGIN;
+    return box(fits ? room : area);
+  };
 
   // ---------- full screen (§6.5) ----------
   if (layout.fullscreenPane !== null) {
@@ -443,7 +476,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
 
     const id = surfaceIdOf(fsApp);
     surfaces[id] = { id, rect: content, visible: true, z: Z_SURFACE };
-    const mini = showMiniWhenOff ? miniBox(content, input.youtube.miniSize, at) : null;
+    const mini = showMiniWhenOff ? placeMini(content) : null;
     if (mini) surfaces.youtube = { id: 'youtube', rect: mini.rect, visible: true, z: Z_MINI };
     // Sheets and the floating bar go to the side (or end) away from the mini player.
     const awayRight = mini && at.right === driverRight ? !driverRight : driverRight;
@@ -560,7 +593,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     const pl = ytPaneLayout(s, CS, driverRight);
     yt = { mode: 'pane', surface: s, player: pl.player, controls: pl.controls, side: pl.side, controlsScale: pl.scale, paneIndex: ytIdx };
   } else if (showMiniWhenOff) {
-    mini = miniBox(appArea, input.youtube.miniSize, at);
+    mini = placeMini(appArea);
     yt = { mode: 'mini', surface: mini.rect, player: mini.rect, paneIndex: ytIdx };
   }
   const miniArea = mini ? { ...mini.handle, h: mini.handle.h + mini.rect.h } : null;

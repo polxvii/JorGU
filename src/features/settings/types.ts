@@ -104,6 +104,8 @@ export interface Settings {
     miniCorner: MiniCorner;
     /** Dragged to this spot; null = in `miniCorner`. Picking a corner clears it. */
     miniAt: MiniAt | null;
+    /** Dragged to this width (16:9, ≥ 356; user 2026-11-27); null = `miniPlayerSize`. Picking a size clears it. */
+    miniWidth: number | null;
     playbackRate: number;
     /**
      * After the last clip in the queue: 'list' = a tap in a list queues the rest of that list, 'off' = stop.
@@ -141,7 +143,7 @@ export function defaultSettings(): Settings {
     },
     map: { mode: 'js', routeLine: true, follow: true, traffic: true, avoidTolls: false, avoidHighways: false, routeInfoAt: 'bottom', colors: 'day', carShift: { x: 0, y: 0 }, savedPlaces: [], recentDestinations: [] },
     web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280, search: 'google' },
-    youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', miniAt: null, playbackRate: 1, continueWith: 'list', hidePlayed: true, hideUpTo: 120 },
+    youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', miniAt: null, miniWidth: null, playbackRate: 1, continueWith: 'list', hidePlayed: true, hideUpTo: 120 },
     dockSize: 'normal',
     library: { feedChannelLimit: 50 },
   };

@@ -22,6 +22,7 @@ export function mergeSettings(persisted: unknown, current: Settings): Settings {
   const within = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
   const at = merged.youtube.miniAt as unknown;
   if (!(isPlainObject(at) && within(at.x, 0, 1) && within(at.y, 0, 1))) merged.youtube.miniAt = null;
+  if (!within(merged.youtube.miniWidth, 356, 4000)) merged.youtube.miniWidth = null;
   const shift = merged.map.carShift as unknown;
   if (!(isPlainObject(shift) && within(shift.x, -0.4, 0.4) && within(shift.y, -0.4, 0.4))) merged.map.carShift = { x: 0, y: 0 };
   if (!['normal', 'large', 'xlarge'].includes(merged.dockSize)) merged.dockSize = 'normal';

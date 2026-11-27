@@ -23,6 +23,7 @@ export interface SettingsActions {
   setMiniPlayerSize: (size: MiniPlayerSize) => void;
   setMiniCorner: (corner: MiniCorner) => void;
   setMiniAt: (at: MiniAt) => void;
+  setMiniWidth: (width: number) => void;
   setCarShift: (shift: CarShift) => void;
   setContinueWith: (v: ContinueWith) => void;
   setHidePlayed: (on: boolean) => void;
@@ -86,9 +87,10 @@ export const useSettings = create<SettingsState>()(
       setNightMode: (patch) => set((s) => ({ nightMode: { ...s.nightMode, ...patch } })),
       setDriverSide: (driverSide) => set((s) => ({ layout: { ...s.layout, driverSide } })),
       setDirection: (direction) => set((s) => ({ layout: { ...s.layout, direction } })),
-      setMiniPlayerSize: (miniPlayerSize) => set((s) => ({ youtube: { ...s.youtube, miniPlayerSize } })),
+      setMiniPlayerSize: (miniPlayerSize) => set((s) => ({ youtube: { ...s.youtube, miniPlayerSize, miniWidth: null } })),
       setMiniCorner: (miniCorner) => set((s) => ({ youtube: { ...s.youtube, miniCorner, miniAt: null } })),
       setMiniAt: (miniAt) => set((s) => ({ youtube: { ...s.youtube, miniAt } })),
+      setMiniWidth: (miniWidth) => set((s) => ({ youtube: { ...s.youtube, miniWidth } })),
       setCarShift: (carShift) => set((s) => ({ map: { ...s.map, carShift } })),
       setContinueWith: (continueWith) => set((s) => ({ youtube: { ...s.youtube, continueWith } })),
       setHidePlayed: (hidePlayed) => set((s) => ({ youtube: { ...s.youtube, hidePlayed } })),

@@ -20,6 +20,9 @@ export function useLayout(): LayoutResult {
   const savedAt = useSettings((s) => s.youtube.miniAt);
   const dragAt = useUi((s) => s.miniDrag);
   const miniAt = dragAt ?? savedAt;
+  const savedWidth = useSettings((s) => s.youtube.miniWidth);
+  const resizeWidth = useUi((s) => s.miniResize);
+  const miniWidth = resizeWidth ?? savedWidth;
   const dockSize = useSettings((s) => s.dockSize);
   const playing = useUi((s) => s.youtube.playing);
   const miniSticky = useUi((s) => s.youtube.miniSticky);
@@ -32,12 +35,12 @@ export function useLayout(): LayoutResult {
         viewport: { width: vp.width, height: vp.height },
         safeArea: vp.safeArea,
         layout,
-        youtube: { playing, miniSticky, miniSize, miniCorner, miniAt },
+        youtube: { playing, miniSticky, miniSize, miniCorner, miniAt, miniWidth },
         dockSize,
         bannerCount,
         sheetOpen,
         toast,
       }),
-    [vp, layout, playing, miniSticky, miniSize, miniCorner, miniAt, dockSize, bannerCount, sheetOpen, toast],
+    [vp, layout, playing, miniSticky, miniSize, miniCorner, miniAt, miniWidth, dockSize, bannerCount, sheetOpen, toast],
   );
 }

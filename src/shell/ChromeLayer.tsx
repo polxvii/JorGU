@@ -24,7 +24,7 @@ export function ChromeLayer({ layout }: { layout: LayoutResult }) {
       {layout.edgeStrip && <EdgeStrip rect={layout.edgeStrip} />}
       <FloatingControls layout={layout} />
       {layout.controlColumn && <ControlColumn rect={layout.controlColumn} />}
-      {layout.mini && <MiniHandle rect={layout.mini.handle} range={layout.mini.range} />}
+      {layout.mini && <MiniHandle rect={layout.mini.handle} range={layout.mini.range} maxW={layout.mini.maxW} />}
       {sheet && layout.sheet && sheet.kind === 'picker' && <AppPicker rect={layout.sheet} pane={sheet.pane} layout={layout} />}
       {sheet && layout.sheet && sheet.kind === 'settings' && <SettingsSheet rect={layout.sheet} />}
       {sheet && layout.sheet && sheet.kind === 'library' && <LibrarySheet rect={layout.sheet} />}

@@ -23,7 +23,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function Segmented<V extends string>({ value, options, onChange, testId }: {
-  value: V;
+  /** null: none lit (e.g. the mini player was dragged to its own size). */
+  value: V | null;
   options: { value: V; label: string }[];
   onChange: (v: V) => void;
   testId: string;
@@ -209,13 +210,14 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
       <Section title={t('settings.miniPlayer')}>
         <Segmented
           testId="setting-mini-size"
-          value={s.youtube.miniPlayerSize}
+          value={s.youtube.miniWidth ? null : s.youtube.miniPlayerSize}
           onChange={s.setMiniPlayerSize}
           options={[
             { value: '356x200', label: '356 × 200' },
             { value: '480x270', label: '480 × 270' },
           ]}
         />
+        <p className="mt-1 px-1 text-[13px] text-text-dim">{t('settings.miniSizeHint')}</p>
         <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" data-testid="setting-mini-corner">
           {(['auto', 'tl', 'tr', 'bl', 'br'] as const).map((c) => (
             <button

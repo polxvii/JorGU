@@ -24,6 +24,9 @@ describe('mergeSettings', () => {
     expect(mergeSettings({ youtube: { miniAt: { x: 2, y: 0 } } }, defaultSettings()).youtube.miniAt).toBeNull();
     expect(mergeSettings({ youtube: { miniAt: 'tl' } }, defaultSettings()).youtube.miniAt).toBeNull();
     expect(mergeSettings({}, defaultSettings()).youtube.miniAt).toBeNull();
+    expect(mergeSettings({ youtube: { miniWidth: 640 } }, defaultSettings()).youtube.miniWidth).toBe(640);
+    expect(mergeSettings({ youtube: { miniWidth: 100 } }, defaultSettings()).youtube.miniWidth).toBeNull();
+    expect(mergeSettings({ youtube: { miniWidth: '640' } }, defaultSettings()).youtube.miniWidth).toBeNull();
     expect(mergeSettings({ map: { carShift: { x: -0.3, y: 0.1 } } }, defaultSettings()).map.carShift).toEqual({ x: -0.3, y: 0.1 });
     expect(mergeSettings({ map: { carShift: { x: 0.9, y: 0 } } }, defaultSettings()).map.carShift).toEqual({ x: 0, y: 0 });
     expect(mergeSettings({ map: { carShift: null } }, defaultSettings()).map.carShift).toEqual({ x: 0, y: 0 });

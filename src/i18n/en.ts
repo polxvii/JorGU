@@ -259,6 +259,8 @@ export const en = {
   'yt.mute': 'Mute YouTube',
   'yt.unmute': 'Unmute YouTube',
   'mini.move': 'Move mini player (drag it anywhere, or tap for the next corner)',
+  'mini.resize': 'Resize mini player (drag outward to grow, inward to shrink; tap for the next size)',
+  'settings.miniSizeHint': 'Or drag the ⤡ grip on the mini player to any size',
   'settings.autoContinue': 'When the queue ends',
   'settings.continue.list': 'Rest of the list',
   'settings.continue.off': 'Stop',

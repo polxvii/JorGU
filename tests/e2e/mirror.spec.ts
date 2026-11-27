@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { box, openApp, startSimulatedPlayback } from './helpers';
+import { box, expectPlayerClear, openApp, startSimulatedPlayback } from './helpers';
 
 const W = 1024;
 
@@ -22,14 +22,16 @@ test('driver side "left" mirrors the layout (§6.4)', async ({ page }) => {
   }
 });
 
-test('mirrored full screen: mini player bottom-left (driver side), floating bar opposite it', async ({ page }) => {
+test('mirrored full screen: mini player bottom-left (driver side), the map toolbar on that side above it', async ({ page }) => {
   await openApp(page, { layout: { driverSide: 'left' } });
   await startSimulatedPlayback(page);
   await page.getByTestId('pane-fullscreen-1').click();
   const s = await box(page, '[data-surface="map"]');
   await page.mouse.click(s.x + s.width / 2, s.y + 100);
-  const bar = await box(page, '[data-testid="floating-bar"]');
+  const controls = await box(page, '[data-testid="map-controls"]');
   const mini = await box(page, '[data-player-rect]');
   expect(mini.x).toBeLessThan(W / 2);
-  expect(bar.x).toBeGreaterThan(W / 2);
+  expect(controls.x).toBeLessThan(W / 2);
+  expect(controls.y + controls.height).toBeLessThanOrEqual(mini.y);
+  await expectPlayerClear(page);
 });

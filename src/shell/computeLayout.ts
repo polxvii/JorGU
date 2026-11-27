@@ -1,6 +1,6 @@
 // Pure layout engine (spec §6). Every on-screen rectangle is decided here so the placement rules
 // (§3.9 nothing over the YouTube player, §6.3 CSS-only positioning, driver-side mirroring) live in one tested place.
-import type { AppRef, DockSize, LayoutSettings, MiniCorner, MiniPlayerSize, PaneIndex, SurfaceId } from '../features/settings/types';
+import type { AppRef, DockSize, LayoutSettings, MiniAt, MiniCorner, MiniPlayerSize, PaneIndex, SurfaceId } from '../features/settings/types';
 import { surfaceIdOf } from '../features/settings/types';
 import { type Rect, bottom, fit16x9, intersects, right } from './geometry';
 import { youtubePane } from './layoutActions';
@@ -61,7 +61,7 @@ export interface LayoutInput {
   viewport: { width: number; height: number };
   safeArea: { top: number; right: number; bottom: number; left: number };
   layout: LayoutSettings;
-  youtube: { playing: boolean; miniSticky: boolean; miniSize: MiniPlayerSize; miniCorner?: MiniCorner };
+  youtube: { playing: boolean; miniSticky: boolean; miniSize: MiniPlayerSize; miniCorner?: MiniCorner; miniAt?: MiniAt | null };
   /** Dock size setting (default 'normal' = 80 px). */
   dockSize?: DockSize;
   bannerCount: number;
@@ -91,10 +91,12 @@ export interface LayoutResult {
   surfaces: Partial<Record<SurfaceId, SurfaceBox>>;
   /** In a pane, `controls` is the control strip (side) or the rows under the player (below). */
   youtube: { mode: YtMode; surface: Rect; player: Rect | null; paneIndex: PaneIndex | null; controls?: Rect | null; side?: boolean; controlsScale?: number };
+  /** Web full screen only: the Map's own toolbar has ✕ and ⇄ in full screen (user 2026-11-27). */
   floatingBar: { rect: Rect; rows: number; cols: number } | null;
   edgeStrip: Rect | null;
   controlColumn: Rect | null;
-  mini: { rect: Rect; handle: Rect } | null;
+  /** `range`: where the handle's top-left corner can go (the grip drags it anywhere in there). */
+  mini: { rect: Rect; handle: Rect; range: Rect } | null;
   sheet: Rect | null;
   toast: Rect | null;
 }
@@ -229,15 +231,31 @@ export function miniCornerOf(corner: MiniCorner | undefined, driverRight: boolea
   return { right: corner[1] === 'r', top: corner[0] === 't' };
 }
 
-/** Mini player in a corner of `area`, its handle always directly above it. */
-function miniBox(area: Rect, size: MiniPlayerSize, at: { right: boolean; top: boolean }) {
+/**
+ * Where the mini player is: dragged to a spot (user 2026-11-27: anywhere, not only the corners), else its corner.
+ * `fx` / `fy` run 0–1 across the room it can move in; `right` / `top` say which half it's in, so sheets and the
+ * full-screen bar take the other side.
+ */
+export function miniSpot(corner: MiniCorner | undefined, at: MiniAt | null | undefined, driverRight: boolean) {
+  if (at) return { right: at.x >= 0.5, top: at.y < 0.5, fx: at.x, fy: at.y };
+  const c = miniCornerOf(corner, driverRight);
+  return { ...c, fx: c.right ? 1 : 0, fy: c.top ? 0 : 1 };
+}
+
+/** The mini player at its spot in `area`, its handle always directly above it, both `MINI_MARGIN` inside. */
+function miniBox(area: Rect, size: MiniPlayerSize, spot: { fx: number; fy: number }) {
   // The large size falls back to 356×200 where it doesn't fit (narrow portrait screens).
   const big = size === '480x270' && area.w >= 480 + 2 * L.MINI_MARGIN && area.h >= 270 + L.MINI_HANDLE + 2 * L.MINI_MARGIN;
   const [w, h] = big ? [480, 270] : [356, 200];
-  const x = at.right ? right(area) - L.MINI_MARGIN - w : area.x + L.MINI_MARGIN;
-  const y = at.top ? area.y + L.MINI_MARGIN + L.MINI_HANDLE : bottom(area) - L.MINI_MARGIN - h;
-  const rect = { x, y, w, h };
-  return { rect, handle: { x, y: y - L.MINI_HANDLE, w, h: L.MINI_HANDLE } };
+  const range = {
+    x: area.x + L.MINI_MARGIN,
+    y: area.y + L.MINI_MARGIN,
+    w: Math.max(0, area.w - 2 * L.MINI_MARGIN - w),
+    h: Math.max(0, area.h - 2 * L.MINI_MARGIN - L.MINI_HANDLE - h),
+  };
+  const x = range.x + Math.round(Math.min(1, Math.max(0, spot.fx)) * range.w);
+  const top = range.y + Math.round(Math.min(1, Math.max(0, spot.fy)) * range.h);
+  return { rect: { x, y: top + L.MINI_HANDLE, w, h }, handle: { x, y: top, w, h: L.MINI_HANDLE }, range };
 }
 
 /**
@@ -366,7 +384,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     portrait,
   };
   const showMiniWhenOff = input.youtube.playing || input.youtube.miniSticky;
-  const at = miniCornerOf(input.youtube.miniCorner, driverRight);
+  const at = miniSpot(input.youtube.miniCorner, input.youtube.miniAt, driverRight);
 
   // ---------- full screen (§6.5) ----------
   if (layout.fullscreenPane !== null) {
@@ -429,20 +447,29 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     if (mini) surfaces.youtube = { id: 'youtube', rect: mini.rect, visible: true, z: Z_MINI };
     // Sheets and the floating bar go to the side (or end) away from the mini player.
     const awayRight = mini && at.right === driverRight ? !driverRight : driverRight;
+    const m = mini ? { ...mini.handle, h: mini.handle.h + mini.rect.h } : null;
     let sheet: Rect | null = null;
     if (input.sheetOpen) {
-      const m = mini ? { ...mini.handle, h: mini.handle.h + mini.rect.h } : null;
       sheet = portrait
         ? placeBand(content, m ? at.top : true, m ? { ...m, minH: m.h } : null)
         : placeSheet(content, awayRight, m ? { ...m, minW: m.w } : null, input.dockSize);
     }
-    // Map and Web full screen: their own toolbar is a strip on the driver-side edge; the floating bar stays clear of it.
+    // Map and Web full screen: their own toolbar is a strip on the driver-side edge. The Map's has ✕ and ⇄ in full
+    // screen, so a tap shows the map's toolbar, not a bar of YouTube buttons (user 2026-11-27, car photo). Web keeps
+    // the floating bar (a site takes every tap), clear of its strip.
     const ownStrip = fsApp.kind === 'map' || fsApp.kind === 'web' ? mapStripWidth(input.dockSize) : 0;
-    const strip = awayRight === driverRight ? ownStrip : 0;
-    const barArea = strip ? { ...content, x: driverRight ? content.x : content.x + strip, w: content.w - strip } : content;
-    const bar = sheet
-      ? null
-      : floatBar(barArea, awayRight, portrait, L.FLOAT_BUTTONS + (fsApp.kind === 'web' ? 1 : 0), CS.big, !!mini && at.top);
+    const barFor = (atRight: boolean, atBottom: boolean) => {
+      const strip = atRight === driverRight ? ownStrip : 0;
+      const barArea = strip ? { ...content, x: driverRight ? content.x : content.x + strip, w: content.w - strip } : content;
+      return floatBar(barArea, atRight, portrait, L.FLOAT_BUTTONS + 1, CS.big, atBottom);
+    };
+    // Away from the mini player; it can sit anywhere now, so else the other side or end; else none (the site's strip
+    // has ✕, the mini handle ⏯ ⏭).
+    const low = !!mini && at.top;
+    const bar =
+      sheet || fsApp.kind !== 'web'
+        ? null
+        : ([barFor(awayRight, low), barFor(!awayRight, low), barFor(awayRight, !low), barFor(!awayRight, !low)].find((b) => !m || !intersects(b.rect, m)) ?? null);
     const toast = input.toast
       ? placeToast(content, [mini?.rect, mini?.handle, sheet, bar?.rect], [], sheet)
       : null;

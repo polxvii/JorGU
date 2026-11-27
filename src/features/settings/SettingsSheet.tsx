@@ -222,11 +222,11 @@ export function SettingsSheet({ rect }: { rect: Rect }) {
               key={c}
               type="button"
               role="radio"
-              aria-checked={s.youtube.miniCorner === c}
+              aria-checked={!s.youtube.miniAt && s.youtube.miniCorner === c}
               data-value={c}
               onClick={() => s.setMiniCorner(c)}
               className={`min-h-12 rounded-xl px-3 text-[15px] font-semibold ${c === 'auto' ? 'col-span-2' : ''} ${
-                s.youtube.miniCorner === c ? 'bg-accent text-on-accent' : 'bg-bg text-text'
+                !s.youtube.miniAt && s.youtube.miniCorner === c ? 'bg-accent text-on-accent' : 'bg-bg text-text'
               }`}
             >
               {t(`settings.corner.${c}`)}

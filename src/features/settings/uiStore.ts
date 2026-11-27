@@ -1,7 +1,7 @@
 // Transient UI state (not persisted).
 import { create } from 'zustand';
 import type { MessageKey } from '../../i18n/en';
-import type { PaneIndex, SurfaceId } from './types';
+import type { MiniAt, PaneIndex, SurfaceId } from './types';
 
 export type SheetState =
   | null
@@ -34,6 +34,8 @@ export interface UiState {
   floatingVisible: boolean;
   floatingNonce: number;
   drag: null | { from: PaneIndex; over: PaneIndex | null };
+  /** The mini player while its grip is being dragged (saved on release). */
+  miniDrag: MiniAt | null;
   /** M1: playback is simulated by the YouTube placeholder; M2 wires the real player. */
   youtube: { playing: boolean; miniSticky: boolean; mode: 'pane' | 'mini' | 'fullscreen' | 'hidden' };
   toasts: Toast[];
@@ -53,6 +55,7 @@ export interface UiState {
   showFloating: () => void;
   hideFloating: () => void;
   setDrag: (drag: UiState['drag']) => void;
+  setMiniDrag: (at: MiniAt | null) => void;
   setYoutube: (patch: Partial<UiState['youtube']>) => void;
   mount: (ids: SurfaceId[]) => void;
   setOnline: (online: boolean) => void;
@@ -75,6 +78,7 @@ export const useUi = create<UiState>()((set) => ({
   floatingVisible: false,
   floatingNonce: 0,
   drag: null,
+  miniDrag: null,
   youtube: { playing: false, miniSticky: false, mode: 'hidden' },
   toasts: [],
   mounted: [],
@@ -93,6 +97,7 @@ export const useUi = create<UiState>()((set) => ({
   showFloating: () => set((s) => ({ floatingVisible: true, floatingNonce: s.floatingNonce + 1 })),
   hideFloating: () => set((s) => (s.floatingVisible ? { floatingVisible: false } : s)),
   setDrag: (drag) => set({ drag }),
+  setMiniDrag: (miniDrag) => set({ miniDrag }),
   setYoutube: (patch) => set((s) => ({ youtube: { ...s.youtube, ...patch } })),
   mount: (ids) =>
     set((s) => {

@@ -1,6 +1,6 @@
 // Map toolbar and route box placement (mapChrome.ts) and the navigation camera maths (routeMath.ts).
 import { describe, expect, it } from 'vitest';
-import { MAP_GAP, ROUTE_BOX, type MapChromeInput, placeMapChrome } from '../../src/apps/map/mapChrome';
+import { MAP_GAP, ROUTE_BOX, type MapChromeInput, placeMapChrome, placePad } from '../../src/apps/map/mapChrome';
 import { aheadBearing, bearing, cameraCenter, haversine, metersPerPixel, offsetPoint, turn } from '../../src/apps/map/routeMath';
 import { MAP_STRIP_PAD } from '../../src/shell/computeLayout';
 import { type Rect, intersects } from '../../src/shell/geometry';
@@ -130,6 +130,39 @@ describe('navigation camera maths', () => {
     const c = cameraCenter(car, 90, 16, 150);
     expect(haversine(car, c)).toBeCloseTo(150 * metersPerPixel(car.lat, 16), 0);
     expect(bearing(car, c)).toBeCloseTo(90, 0);
+    expect(cameraCenter(car, 90, 16, 0)).toEqual(car);
+  });
+
+  it('camera centre with the car moved by the arrows (user 2026-11-27): left / right of the middle on screen', () => {
+    const mpp = metersPerPixel(car.lat, 16);
+    // North up, car 200 px right of the middle: the middle is 200 px west of the car.
+    const r = cameraCenter(car, 0, 16, 0, 200);
+    expect(haversine(car, r)).toBeCloseTo(200 * mpp, 0);
+    expect(bearing(car, r)).toBeCloseTo(270, 0);
+    // Heading east (east is up), car left of the middle: the middle is to the car's right = south.
+    expect(bearing(car, cameraCenter(car, 90, 16, 0, -200))).toBeCloseTo(180, 0);
+    // Below and right together: ahead and to the left of the car.
+    const both = cameraCenter(car, 0, 16, 150, 150);
+    expect(haversine(car, both)).toBeCloseTo(Math.hypot(150, 150) * mpp, 0);
+    expect(bearing(car, both)).toBeCloseTo(315, 0);
+    // Car above the middle: the middle is behind the car.
+    expect(bearing(car, cameraCenter(car, 0, 16, -100))).toBeCloseTo(180, 0);
+  });
+
+  it('arrows pad: beside the toolbar half-way up, else lower, else the far side; never over the mini player', () => {
+    const canvas = { x: 0, y: 0, w: 900, h: 600 };
+    const size = 3 * 56 + 8;
+    const mid = placePad({ canvas, h: 600, size, right: true, avoid: [] })!;
+    expect(mid).toEqual({ x: 900 - MAP_GAP - size, y: Math.round((600 - size) / 2), w: size, h: size });
+    // A mini player on the right half covers that edge: the far side.
+    const mini = { x: 500, y: 100, w: 380, h: 460 };
+    const p = placePad({ canvas, h: 600, size, right: true, avoid: [mini] })!;
+    expect(intersects(p, mini)).toBe(false);
+    expect(p.x).toBe(MAP_GAP);
+    // Toolbar on the left: the pad starts on the left.
+    expect(placePad({ canvas: { x: 72, y: 0, w: 900, h: 600 }, h: 600, size, right: false, avoid: [] })!.x).toBe(72 + MAP_GAP);
+    // Nowhere free: no pad.
+    expect(placePad({ canvas, h: 600, size, right: true, avoid: [canvas] })).toBeNull();
   });
 
   it('shortest turn across north', () => {

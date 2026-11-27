@@ -5,7 +5,7 @@ import * as W from '../../apps/web/webActions';
 import * as A from '../../shell/layoutActions';
 import { mergeSettings } from './merge';
 import type {
-  AppPick, Bookmark, ContinueWith, DockSize, DriverSide, HideUpTo, Language, MiniCorner, MiniPlayerSize, PaneIndex, Settings, SplitDirection, ThemeId, WebInstanceId, WebViewMode,
+  AppPick, Bookmark, CarShift, ContinueWith, DockSize, DriverSide, HideUpTo, Language, MiniAt, MiniCorner, MiniPlayerSize, PaneIndex, Settings, SplitDirection, ThemeId, WebInstanceId, WebViewMode,
 } from './types';
 import { defaultSettings } from './types';
 import { moveById } from './reorder';
@@ -22,6 +22,8 @@ export interface SettingsActions {
   setDirection: (direction: SplitDirection) => void;
   setMiniPlayerSize: (size: MiniPlayerSize) => void;
   setMiniCorner: (corner: MiniCorner) => void;
+  setMiniAt: (at: MiniAt) => void;
+  setCarShift: (shift: CarShift) => void;
   setContinueWith: (v: ContinueWith) => void;
   setHidePlayed: (on: boolean) => void;
   setHideUpTo: (seconds: HideUpTo) => void;
@@ -85,7 +87,9 @@ export const useSettings = create<SettingsState>()(
       setDriverSide: (driverSide) => set((s) => ({ layout: { ...s.layout, driverSide } })),
       setDirection: (direction) => set((s) => ({ layout: { ...s.layout, direction } })),
       setMiniPlayerSize: (miniPlayerSize) => set((s) => ({ youtube: { ...s.youtube, miniPlayerSize } })),
-      setMiniCorner: (miniCorner) => set((s) => ({ youtube: { ...s.youtube, miniCorner } })),
+      setMiniCorner: (miniCorner) => set((s) => ({ youtube: { ...s.youtube, miniCorner, miniAt: null } })),
+      setMiniAt: (miniAt) => set((s) => ({ youtube: { ...s.youtube, miniAt } })),
+      setCarShift: (carShift) => set((s) => ({ map: { ...s.map, carShift } })),
       setContinueWith: (continueWith) => set((s) => ({ youtube: { ...s.youtube, continueWith } })),
       setHidePlayed: (hidePlayed) => set((s) => ({ youtube: { ...s.youtube, hidePlayed } })),
       setHideUpTo: (hideUpTo) => set((s) => ({ youtube: { ...s.youtube, hideUpTo } })),

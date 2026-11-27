@@ -1,13 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
-import { box, expectNoReloads, expectPlayerClear, frameLoads, openApp, startSimulatedPlayback } from './helpers';
+import { box, expectNoReloads, expectPlayerClear, frameLoads, openApp, startSimulatedPlayback, tapStrip } from './helpers';
 
 const root = (page: Page) => page.locator('#jorgu-root');
 const browserFullscreen = (page: Page) => page.evaluate(() => document.fullscreenElement === document.documentElement);
 
-async function showFloatingBar(page: Page) {
+/** Map full screen: a tap shows the map's own toolbar, which has ✕ / ⇄ / app picker (user 2026-11-27); no floating bar. */
+async function tapMap(page: Page) {
   const s = await box(page, '[data-surface="map"]');
   await page.mouse.click(s.x + s.width / 2, s.y + s.height / 2);
-  await expect(page.getByTestId('floating-bar')).toBeVisible();
+  await expect(page.getByTestId('map-controls')).toBeVisible();
+  await expect(page.getByTestId('floating-bar')).toHaveCount(0);
 }
 
 test.describe('per-pane full screen (§6.5)', () => {
@@ -24,8 +26,8 @@ test.describe('per-pane full screen (§6.5)', () => {
     expect(map).toEqual({ x: 0, y: 0, width: 1024, height: 600 });
     await expect.poll(() => browserFullscreen(page)).toBe(true);
 
-    await showFloatingBar(page);
-    await page.getByTestId('fs-exit').click();
+    await tapMap(page);
+    await tapStrip(page, 'map', 'map-exit-fs');
     await expect(root(page)).toHaveAttribute('data-mode', 'split');
     await expect.poll(() => browserFullscreen(page)).toBe(false);
     await expectNoReloads(page, before);
@@ -62,8 +64,8 @@ test.describe('per-pane full screen (§6.5)', () => {
     await openApp(page);
     const before = await frameLoads(page);
     await page.getByTestId('pane-fullscreen-1').click();
-    await showFloatingBar(page);
-    await page.getByTestId('fs-switch').click();
+    await tapMap(page);
+    await tapStrip(page, 'map', 'map-switch-fs');
     await expect(root(page)).toHaveAttribute('data-yt', 'fullscreen');
     await expect(page.getByTestId('control-column')).toBeVisible();
     await expectPlayerClear(page);
@@ -83,9 +85,12 @@ test.describe('per-pane full screen (§6.5)', () => {
     expect(mini.width).toBe(356);
     expect(mini.height).toBe(200);
     expect(mini.x).toBeGreaterThan(512); // driver side, bottom (user request 2026-11-11)
-    await showFloatingBar(page);
+    // ⏯ and ⏭ are on the mini handle now (user 2026-11-27), beside "Show YouTube".
+    await expect(page.getByTestId('mini-toggle')).toBeVisible();
+    await expect(page.getByTestId('mini-next')).toBeVisible();
+    await tapMap(page);
     await expectPlayerClear(page);
-    await page.getByTestId('fs-picker').click();
+    await tapStrip(page, 'map', 'map-picker-fs');
     await expect(page.getByTestId('app-picker')).toBeVisible();
     await expectPlayerClear(page);
     await page.getByTestId('sheet-close').click();
@@ -98,8 +103,7 @@ test.describe('per-pane full screen (§6.5)', () => {
   test('App Picker in full screen changes the full-screen app', async ({ page }) => {
     await openApp(page);
     await page.getByTestId('pane-fullscreen-1').click();
-    await showFloatingBar(page);
-    await page.getByTestId('fs-picker').click();
+    await tapStrip(page, 'map', 'map-picker-fs');
     await page.getByTestId('pick-web').click();
     await expect(page.locator('[data-surface="web:w1"]')).toHaveAttribute('data-visible', '1');
     await expect(root(page)).toHaveAttribute('data-mode', 'fullscreen');

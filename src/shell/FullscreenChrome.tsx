@@ -9,7 +9,7 @@ import { MuteButton, SeekButton } from '../apps/youtube/TransportButtons';
 import { next, previous, togglePlay } from '../apps/youtube/player';
 import { youtubePane } from './layoutActions';
 import type { LayoutResult } from './computeLayout';
-import { miniCornerOf } from './computeLayout';
+import { miniSpot } from './computeLayout';
 import type { MiniCorner } from '../features/settings/types';
 import { exitFullscreen, switchFullscreen } from './fullscreen';
 import { Icon, type IconName } from './Icon';
@@ -171,17 +171,23 @@ export function EdgeStrip({ rect }: { rect: Rect }) {
 const CLOCKWISE: Exclude<MiniCorner, 'auto'>[] = ['tl', 'tr', 'br', 'bl'];
 
 /**
- * Moves the mini player: drag the grip toward a corner (it snaps there on release), or tap it to step clockwise.
- * Only the player's CSS position changes; nothing is drawn over it while dragging (spec 3.9).
+ * Moves the mini player: drag the grip and it follows the finger and stays where it's let go (user 2026-11-27: not
+ * only the four corners), or tap it to step to the next corner clockwise. Only the player's CSS position changes
+ * (no DOM move, no reload); nothing is drawn over it while dragging (spec 3.9).
  */
-function MiniGrip() {
+function MiniGrip({ handle, range }: { handle: Rect; range: Rect }) {
   const t = useT();
-  const start = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const start = useRef<{ x: number; y: number; dx: number; dy: number; moved: boolean } | null>(null);
   const dragged = useRef(false);
   const current = (): Exclude<MiniCorner, 'auto'> => {
     const s = useSettings.getState();
-    const at = miniCornerOf(s.youtube.miniCorner, s.layout.driverSide === 'right');
+    const at = miniSpot(s.youtube.miniCorner, s.youtube.miniAt, s.layout.driverSide === 'right');
     return `${at.top ? 't' : 'b'}${at.right ? 'r' : 'l'}` as Exclude<MiniCorner, 'auto'>;
+  };
+  /** The handle's top-left corner under the finger, as 0–1 across the room the mini player has. */
+  const spotAt = (cx: number, cy: number, s: { dx: number; dy: number }) => {
+    const f = (v: number, from: number, len: number) => (len > 0 ? Math.round(Math.min(1, Math.max(0, (v - from) / len)) * 1000) / 1000 : 0);
+    return { x: f(cx - s.dx, range.x, range.w), y: f(cy - s.dy, range.y, range.h) };
   };
   return (
     <button
@@ -190,22 +196,25 @@ function MiniGrip() {
       aria-label={t('mini.move')}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
-        start.current = { x: e.clientX, y: e.clientY, moved: false };
+        start.current = { x: e.clientX, y: e.clientY, dx: e.clientX - handle.x, dy: e.clientY - handle.y, moved: false };
       }}
       onPointerMove={(e) => {
         const s = start.current;
-        if (s && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 12) s.moved = true;
+        if (!s) return;
+        if (!s.moved && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 12) s.moved = true;
+        if (s.moved) useUi.getState().setMiniDrag(spotAt(e.clientX, e.clientY, s));
       }}
       onPointerUp={(e) => {
         const s = start.current;
         start.current = null;
         if (!s?.moved) return;
         dragged.current = true;
-        const corner = `${e.clientY < window.innerHeight / 2 ? 't' : 'b'}${e.clientX < window.innerWidth / 2 ? 'l' : 'r'}` as MiniCorner;
-        useSettings.getState().setMiniCorner(corner);
+        useSettings.getState().setMiniAt(spotAt(e.clientX, e.clientY, s));
+        useUi.getState().setMiniDrag(null);
       }}
       onPointerCancel={() => {
         start.current = null;
+        useUi.getState().setMiniDrag(null);
       }}
       onClick={() => {
         if (dragged.current) {
@@ -223,7 +232,27 @@ function MiniGrip() {
   );
 }
 
-export function MiniHandle({ rect }: { rect: Rect }) {
+/** Play / pause and next on the handle (user 2026-11-27: the map's full-screen tap shows the map's toolbar now). */
+function MiniPlayButtons() {
+  const t = useT();
+  const playing = useUi((s) => s.youtube.playing);
+  const cls = 'flex h-full w-11 items-center justify-center rounded-t-xl bg-surface text-text';
+  return (
+    <>
+      <button type="button" data-testid="mini-toggle" aria-label={t(playing ? 'yt.pause' : 'yt.play')} onClick={togglePlay} className={cls}>
+        <Icon name={playing ? 'pause' : 'play'} size={22} />
+      </button>
+      <button type="button" data-testid="mini-next" aria-label={t('yt.next')} onClick={next} className={cls}>
+        <Icon name="next" size={22} />
+      </button>
+    </>
+  );
+}
+
+/** Grip, ⏯, ⏭, speed, mute (and ✕ when paused): what's left is "Show YouTube", with its words when they fit. */
+const MINI_FIXED = 44 + 44 + 44 + 64 + 44 + 5 * 4;
+
+export function MiniHandle({ rect, range }: { rect: Rect; range: Rect }) {
   const t = useT();
   const playing = useUi((s) => s.youtube.playing);
   const setYoutube = useUi((s) => s.setYoutube);
@@ -246,16 +275,18 @@ export function MiniHandle({ rect }: { rect: Rect }) {
       className="absolute z-[12] flex items-stretch gap-1"
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h - 4 }}
     >
-      <MiniGrip />
+      <MiniGrip handle={rect} range={range} />
       <button
         type="button"
         data-testid="mini-restore"
+        aria-label={t('mini.restore')}
         onClick={restore}
-        className="flex flex-1 items-center justify-center gap-2 rounded-t-xl bg-surface text-[14px] font-semibold text-text"
+        className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-t-xl bg-surface text-[14px] font-semibold text-text"
       >
         <Icon name="restore" size={22} />
-        {t('mini.restore')}
+        {rect.w - MINI_FIXED - (playing ? 0 : 52) >= 140 && <span className="truncate">{t('mini.restore')}</span>}
       </button>
+      <MiniPlayButtons />
       <div className="flex items-center rounded-t-xl bg-surface px-1">
         <SpeedButton testId="mini-speed" />
       </div>

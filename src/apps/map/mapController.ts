@@ -177,6 +177,21 @@ function trackAlong(pos: Position): void {
 
 /** Car position below the middle of the map while navigating, as a share of the map height. */
 const NAV_CAR_BELOW = 0.25;
+/**
+ * The arrows move the car's place on the map (user 2026-11-27: on a big screen, see more map on one side), a tenth
+ * of the map per tap, up to 40 % from the middle either way. The map still follows the car there.
+ */
+export const CAR_SHIFT_STEP = 0.1;
+export const CAR_SHIFT_MAX = 0.4;
+const clampShift = (v: number) => Math.round(Math.min(CAR_SHIFT_MAX, Math.max(-CAR_SHIFT_MAX, v)) * 100) / 100;
+
+/** Where the car sits on the map: px right of and below the middle (the map turned to `heading` or north up). */
+function carOffset(nav: boolean): { right: number; below: number } {
+  const s = useSettings.getState().map.carShift;
+  const w = el?.clientWidth ?? 0;
+  const h = el?.clientHeight ?? 0;
+  return { right: clampShift(s.x) * w, below: clampShift((nav ? NAV_CAR_BELOW : 0) + s.y) * h };
+}
 let camHeading = 0;
 let camCenter: LL | null = null;
 let lastPos: LL | null = null;
@@ -248,16 +263,20 @@ function follow(pos: Position, jump: boolean): void {
   const here = { lat: pos.lat, lng: pos.lng };
   const travel = travelHeading(pos);
   if (!lastPos || haversine(lastPos, here) > 15) lastPos = here;
-  if (navigating()) {
+  const nav = navigating();
+  const off = carOffset(nav);
+  if (nav) {
     const heading = travel ?? lastTravel ?? camHeading;
-    const h = el?.clientHeight ?? 0;
-    glide(cameraCenter(here, heading, map.getZoom() ?? DRIVE_ZOOM, h * NAV_CAR_BELOW), heading, jump || canRotate === null);
-  } else if (camHeading !== 0) {
-    glide(here, 0, true);
+    glide(cameraCenter(here, heading, map.getZoom() ?? DRIVE_ZOOM, off.below, off.right), heading, jump || canRotate === null);
   } else {
-    cancelAnimationFrame(anim);
-    camCenter = here;
-    map.panTo(here);
+    const center = cameraCenter(here, 0, map.getZoom() ?? 15, off.below, off.right);
+    if (camHeading !== 0) {
+      glide(center, 0, true);
+    } else {
+      cancelAnimationFrame(anim);
+      camCenter = center;
+      map.panTo(center);
+    }
   }
   setArrow(travel);
 }
@@ -290,6 +309,16 @@ export function recenter(): void {
   if (map && pos) follow(pos, true);
   const ui = useMapUi.getState();
   if (ui.mode === 'embed' || ui.route?.viaEmbed) useMapUi.setState((s) => ({ embedNonce: s.embedNonce + 1 }));
+}
+
+/** Arrows: move the car's place on the map by (dx, dy) map widths / heights; (0, 0) puts it back. Follows the car again. */
+export function shiftCar(dx: number, dy: number): void {
+  const s = useSettings.getState();
+  const c = s.map.carShift;
+  s.setCarShift(dx === 0 && dy === 0 ? { x: 0, y: 0 } : { x: clampShift(c.x + dx), y: clampShift(c.y + dy) });
+  if (!s.map.follow) s.setMapFollow(true);
+  const pos = useGeo.getState().pos;
+  if (map && pos) follow(pos, false);
 }
 
 export function zoomBy(step: number): void {

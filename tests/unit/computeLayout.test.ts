@@ -121,9 +121,45 @@ describe('full screen (§6.5)', () => {
     expect(r.surfaces.map).toMatchObject({ visible: true, rect: { x: 0, y: 0, w: 1024, h: 600 } });
     expect(r.youtube.mode).toBe('mini');
     expect(r.mini!.rect).toEqual({ x: 1024 - L.MINI_MARGIN - 356, y: 600 - L.MINI_MARGIN - 200, w: 356, h: 200 });
-    expect(r.floatingBar!.rect.x).toBeLessThan(512);
-    // Without the mini player the bar is on the driver side.
-    expect(computeLayout(input({ layout: { fullscreenPane: 1 } })).floatingBar!.rect.x).toBeGreaterThan(512);
+    // Map full screen: no floating bar; the map's own toolbar has ✕ and ⇄ (user 2026-11-27).
+    expect(r.floatingBar).toBeNull();
+    expect(computeLayout(input({ layout: { fullscreenPane: 1 } })).floatingBar).toBeNull();
+    // Web full screen keeps it: opposite the mini player, or on the driver side without one.
+    const web: AppRef = { kind: 'web', id: 'w1', url: 'https://a.example/' };
+    const w = computeLayout(input({ layout: { panes: [{ kind: 'youtube' }, web], fullscreenPane: 1 }, youtube: { playing: true, miniSticky: false, miniSize: '356x200' } }));
+    expect(w.floatingBar!.rect.x).toBeLessThan(512);
+    expect(computeLayout(input({ layout: { panes: [{ kind: 'youtube' }, web], fullscreenPane: 1 } })).floatingBar!.rect.x).toBeGreaterThan(512);
+  });
+
+  it('mini player dragged anywhere (user 2026-11-27): stays at that spot, handle above it, all inside the screen', () => {
+    const yt = (miniAt: { x: number; y: number }) => ({ playing: true, miniSticky: false, miniSize: '356x200' as const, miniCorner: 'tl' as const, miniAt });
+    const r = computeLayout(input({ layout: { fullscreenPane: 1 }, youtube: yt({ x: 0.5, y: 0.5 }) }));
+    const range = { x: L.MINI_MARGIN, y: L.MINI_MARGIN, w: 1024 - 2 * L.MINI_MARGIN - 356, h: 600 - 2 * L.MINI_MARGIN - L.MINI_HANDLE - 200 };
+    expect(r.mini!.range).toEqual(range);
+    expect(r.mini!.handle).toEqual({ x: range.x + Math.round(range.w / 2), y: range.y + Math.round(range.h / 2), w: 356, h: L.MINI_HANDLE });
+    expect(r.mini!.rect).toEqual({ x: r.mini!.handle.x, y: r.mini!.handle.y + L.MINI_HANDLE, w: 356, h: 200 });
+    // The ends of the range are the corners; a saved spot wins over the corner.
+    const br = computeLayout(input({ layout: { fullscreenPane: 1 }, youtube: yt({ x: 1, y: 1 }) }));
+    expect(br.mini!.rect).toEqual({ x: 1024 - L.MINI_MARGIN - 356, y: 600 - L.MINI_MARGIN - 200, w: 356, h: 200 });
+    // Two panes: the room is the app area (not under the Dock); a sheet goes to the other half and leaves it whole.
+    const p = computeLayout(input({ layout: { panes: [{ kind: 'map' }, { kind: 'web', id: 'w1', url: '' }] }, youtube: yt({ x: 0.3, y: 0.4 }), sheetOpen: true }));
+    expect(p.mini!.range.w).toBe(p.appArea.w - 2 * L.MINI_MARGIN - 356);
+    expect(p.sheet!.x).toBeGreaterThan(512);
+    expect(intersects(p.sheet!, p.mini!.rect)).toBe(false);
+    expect(intersects(p.sheet!, p.mini!.handle)).toBe(false);
+  });
+
+  it('Web full screen with the mini player in the middle: the floating bar never touches it', () => {
+    const web: AppRef = { kind: 'web', id: 'w1', url: 'https://a.example/' };
+    for (const viewport of [{ width: 1024, height: 600 }, { width: 800, height: 480 }, { width: 932, height: 430 }, { width: 430, height: 932 }])
+      for (const miniSize of ['356x200', '480x270'] as const)
+        for (const x of [0, 0.25, 0.5, 0.75, 1])
+          for (const y of [0, 0.5, 1]) {
+            const r = computeLayout(input({ viewport, layout: { panes: [{ kind: 'youtube' }, web], fullscreenPane: 1 }, youtube: { playing: true, miniSticky: false, miniSize, miniAt: { x, y } } }));
+            const m = { ...r.mini!.handle, h: r.mini!.handle.h + r.mini!.rect.h };
+            if (r.floatingBar) expect(intersects(r.floatingBar.rect, m), JSON.stringify({ viewport, miniSize, x, y })).toBe(false);
+            if (r.edgeStrip) expect(intersects(r.edgeStrip, m)).toBe(false);
+          }
   });
 
   it('mini player corners: chosen corner, handle above it; sheet goes to the other side', () => {
@@ -158,8 +194,6 @@ describe('full screen (§6.5)', () => {
       const r = computeLayout(input({ viewport, layout: { panes: [{ kind: 'youtube' }, web], fullscreenPane: 1 } }));
       const bar = r.floatingBar!;
       expect(bar.rows * bar.cols, JSON.stringify(viewport)).toBeGreaterThanOrEqual(L.FLOAT_BUTTONS + 1);
-      const map = computeLayout(input({ viewport, layout: { fullscreenPane: 1 } })).floatingBar!;
-      expect(map.rows * map.cols).toBeGreaterThanOrEqual(L.FLOAT_BUTTONS);
     }
   });
 
@@ -265,14 +299,17 @@ describe('§3.9 invariants across every combination', () => {
     expect(checked).toBeGreaterThan(100_000);
   }, 120_000);
 
-  it('same rules for every mini player corner and Dock size', () => {
+  it('same rules for every mini player corner or dragged spot, and Dock size', () => {
     let n = 0;
     for (const [w, h, safeArea] of viewports)
       for (const panes of paneSets)
         for (const driverSide of ['right', 'left'] as const)
           for (const mode of ['split', 'single'] as const)
             for (const fullscreenPane of [null, 0, 1] as const)
-              for (const miniCorner of ['auto', 'tl', 'tr', 'bl', 'br'] as const)
+              for (const [miniCorner, miniAt] of [
+                ['auto', null], ['tl', null], ['tr', null], ['bl', null], ['br', null],
+                ['auto', { x: 0.5, y: 0.5 }], ['auto', { x: 0.3, y: 0.8 }], ['auto', { x: 0.7, y: 0.15 }],
+              ] as const)
                 for (const dockSize of ['normal', 'large', 'xlarge'] as const)
                   for (const sheetOpen of [false, true])
                     for (const toast of [false, true]) {
@@ -280,13 +317,13 @@ describe('§3.9 invariants across every combination', () => {
                         viewport: { width: w, height: h },
                         safeArea,
                         layout: { mode, direction: 'auto', splitRatio: 0.5, panes, focusedPane: 0, fullscreenPane, driverSide },
-                        youtube: { playing: true, miniSticky: false, miniSize: '356x200', miniCorner },
+                        youtube: { playing: true, miniSticky: false, miniSize: '356x200', miniCorner, miniAt },
                         dockSize,
                         bannerCount: 0,
                         sheetOpen,
                         toast,
                       });
-                      const ctx = JSON.stringify({ w, h, panes: panes.map((p) => p.kind), driverSide, mode, fullscreenPane, miniCorner, dockSize, sheetOpen, toast });
+                      const ctx = JSON.stringify({ w, h, panes: panes.map((p) => p.kind), driverSide, mode, fullscreenPane, miniCorner, miniAt, dockSize, sheetOpen, toast });
                       const player = r.youtube.player;
                       if (player) {
                         expect(player.w, ctx).toBeGreaterThanOrEqual(356);

@@ -38,8 +38,8 @@ test('mini player: bottom corner on the driver side; the grip moves it; nothing 
   expect(mini.x).toBeLessThan(vp.width / 2);
   expect(mini.y + mini.height).toBeGreaterThan(vp.height / 2);
   await expectPlayerClear(page);
-  // Drag the grip to the top right.
-  const g = await box(page, '[data-testid="mini-move"]');
+  // Drag the grip to the top right: as far as it goes, so the corner.
+  let g = await box(page, '[data-testid="mini-move"]');
   await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
   await page.mouse.down();
   await page.mouse.move(vp.width - 40, 40, { steps: 8 });
@@ -48,12 +48,33 @@ test('mini player: bottom corner on the driver side; the grip moves it; nothing 
   expect(mini.x).toBeGreaterThan(vp.width / 2);
   expect(mini.y).toBeLessThan(vp.height / 2);
   await expectPlayerClear(page);
+  // Anywhere, not only the corners (user 2026-11-27): it follows the finger and stays where it's let go.
+  g = await box(page, '[data-testid="mini-move"]');
+  const from = { x: g.x + g.width / 2, y: g.y + g.height / 2 };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x - 300, from.y + 120, { steps: 4 });
+  const during = await box(page, '[data-player-rect]');
+  expect(Math.abs(during.x - (mini.x - 300))).toBeLessThan(2);
+  await page.mouse.move(from.x - 330, from.y + 150, { steps: 4 });
+  await page.mouse.up();
+  const dropped = await box(page, '[data-player-rect]');
+  expect(Math.abs(dropped.x - (mini.x - 330))).toBeLessThan(2);
+  expect(Math.abs(dropped.y - (mini.y + 150))).toBeLessThan(2);
+  await expectPlayerClear(page);
+  // Settings shows no corner picked now.
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('jorgu:settings')!).state.youtube.miniAt)).not.toBeNull();
   // Remembered.
   await page.reload();
   await page.waitForFunction(() => !!window.__jorgu);
   await startSimulatedPlayback(page);
   mini = await box(page, '[data-player-rect]');
-  expect(mini.y).toBeLessThan(vp.height / 2);
+  expect(Math.abs(mini.x - dropped.x)).toBeLessThan(2);
+  expect(Math.abs(mini.y - dropped.y)).toBeLessThan(2);
+  // A tap on the grip goes back to the corners.
+  await page.getByTestId('mini-move').click();
+  mini = await box(page, '[data-player-rect]');
+  expect([12, vp.width - 12 - mini.width]).toContain(Math.round(mini.x));
 });
 
 test('Dock size setting: Large makes the right toolbar wider and its buttons bigger', async ({ page }) => {

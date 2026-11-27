@@ -99,3 +99,17 @@ export function placeMapChrome(i: MapChromeInput): MapChrome {
   }
   return { right, strip, buttons, shown, more, speed: slots > used, canvas, routeBox };
 }
+
+/**
+ * The arrows that move the car's place (user 2026-11-27): a 3 × 3 cross of `size` px, beside the toolbar half-way
+ * up (or lower, or higher), else on the far side; never over `avoid` (mini player, route box, speed, traffic bar).
+ */
+export function placePad(i: { canvas: Rect; h: number; size: number; right: boolean; avoid: Rect[] }): Rect | null {
+  const { canvas: c, size: s } = i;
+  const near = (inset: number) => (i.right ? c.x + c.w - inset - s : c.x + inset);
+  const far = i.right ? c.x + MAP_GAP : c.x + c.w - MAP_GAP - s;
+  const ys = [Math.round((i.h - s) / 2), i.h - MAP_GAP - s, MAP_GAP];
+  const xs = [near(MAP_GAP), near(MAP_GAP + 32), far];
+  const fits = (r: Rect) => r.x >= c.x && r.x + r.w <= c.x + c.w && r.y >= 0 && r.y + r.h <= i.h && !i.avoid.some((a) => intersects(a, r));
+  return xs.flatMap((x) => ys.map((y) => ({ x, y, w: s, h: s }))).find(fits) ?? null;
+}

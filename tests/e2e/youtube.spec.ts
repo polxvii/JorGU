@@ -1,6 +1,6 @@
 // Real YouTube IFrame player (network required). Spec §8.5, §3.9, M2 acceptance criteria.
 import { expect, test, type Page } from '@playwright/test';
-import { box, expectPlayerClear, openApp, revealHeaders } from './helpers';
+import { box, expectPlayerClear, openApp, revealHeaders, tapStrip } from './helpers';
 
 // Google's own IFrame API sample video, plus a second embeddable video for queue tests.
 const VIDEO_A = 'M7lc1UVf-VE';
@@ -86,9 +86,7 @@ test('playback continues through swap, layout toggle, divider drag, full screen,
   await expectPlayerClear(page);
 
   s = await yt(page);
-  const map = await box(page, '[data-surface="map"]');
-  await page.mouse.click(map.x + map.width / 2, map.y + 100);
-  await page.getByTestId('fs-switch').click();
+  await tapStrip(page, 'map', 'map-switch-fs');
   await expect(page.locator('#jorgu-root')).toHaveAttribute('data-yt', 'fullscreen');
   await expectStillPlaying(page, s);
   await expectPlayerClear(page);

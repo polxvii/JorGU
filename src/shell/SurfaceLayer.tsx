@@ -95,7 +95,6 @@ export function SurfaceLayer({ layout }: { layout: LayoutResult }) {
             onPointerDownCapture={() => {
               if (pane !== null) setFocusedPane(pane);
               useUi.getState().showHeaders();
-              if (layout.mode === 'fullscreen' && id !== 'youtube' && !id.startsWith('web:')) useUi.getState().showFloating();
             }}
           >
             <SurfaceContent id={id} layout={layout} />

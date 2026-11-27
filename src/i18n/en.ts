@@ -258,7 +258,7 @@ export const en = {
   'yt.tenSeconds': '10s',
   'yt.mute': 'Mute YouTube',
   'yt.unmute': 'Unmute YouTube',
-  'mini.move': 'Move mini player (drag to a corner, or tap)',
+  'mini.move': 'Move mini player (drag it anywhere, or tap for the next corner)',
   'settings.autoContinue': 'When the queue ends',
   'settings.continue.list': 'Rest of the list',
   'settings.continue.off': 'Stop',
@@ -277,7 +277,7 @@ export const en = {
   'settings.corner.tr': 'Top right',
   'settings.corner.bl': 'Bottom left',
   'settings.corner.br': 'Bottom right',
-  'settings.cornerHint': 'You can also drag the grip on the mini player to a corner',
+  'settings.cornerHint': 'You can also drag the grip on the mini player anywhere on the screen',
   'settings.dockSize': 'Toolbar size',
   'settings.dockNormal': 'Normal',
   'settings.dockLarge': 'Large',
@@ -349,6 +349,12 @@ export const en = {
   'settings.mapColorsHint': 'Applies the next time JorGu opens (reload the page). Changing it on the spot would need a new map load.',
   'map.trafficAhead': 'Traffic along the route: the start at the bottom, the destination at the top, the blue dot is you',
   'map.more': 'More',
+  'map.moveCar': 'Move my place on the map',
+  'map.car.up': 'Move my place up',
+  'map.car.down': 'Move my place down',
+  'map.car.left': 'Move my place left',
+  'map.car.right': 'Move my place right',
+  'map.car.center': 'Put my place back',
 } as const;
 
 export type MessageKey = keyof typeof en;

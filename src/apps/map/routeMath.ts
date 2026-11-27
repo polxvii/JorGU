@@ -163,8 +163,12 @@ export function aheadBearing(p: LL, path: LL[], ahead = AHEAD_M, hint: number | 
 export const metersPerPixel = (lat: number, zoom: number) => (156543.03392 * Math.cos(rad(lat))) / 2 ** zoom;
 
 /** Map centre that shows the car `belowCenterPx` below the middle of a map rotated to `heading`. */
-export function cameraCenter(car: LL, heading: number, zoom: number, belowCenterPx: number): LL {
-  return offsetPoint(car, heading, belowCenterPx * metersPerPixel(car.lat, zoom));
+export function cameraCenter(car: LL, heading: number, zoom: number, belowCenterPx: number, rightOfCenterPx = 0): LL {
+  // On screen the map's middle is up-and-left of the car by (below, right) px; up on screen is `heading`.
+  const px = Math.hypot(belowCenterPx, rightOfCenterPx);
+  if (px === 0) return car;
+  const dir = heading + (Math.atan2(-rightOfCenterPx, belowCenterPx) * 180) / Math.PI;
+  return offsetPoint(car, dir, px * metersPerPixel(car.lat, zoom));
 }
 
 /** Shortest turn from a to b, in degrees (-180…180). */

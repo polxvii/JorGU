@@ -1,6 +1,6 @@
 // M4 Map app (spec §7). Google Maps is a stub (helpers.ts): these tests check what JorGu asks Google for, never real maps.
 import { expect, test, type Page } from '@playwright/test';
-import { box, expectPlayerClear, openApp, startSimulatedPlayback } from './helpers';
+import { box, expectPlayerClear, openApp, startSimulatedPlayback, tapStrip } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 test.describe.configure({ timeout: 60_000 });
@@ -143,10 +143,15 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   expect(Math.round(canvasBox.x + canvasBox.width)).toBe(Math.round(strip.x));
   // Route buttons are in the map's toolbar (user 2026-11-12), not on the route box.
   const controls = page.getByTestId('map-controls');
-  for (const id of ['map-route-overview', 'map-route-navigate', 'map-route-end']) await expect(controls.getByTestId(id)).toBeVisible();
-  // Order (user 2026-11-13): traffic right after my location, Google Maps last.
+  for (const id of ['map-route-overview', 'map-route-end']) await expect(controls.getByTestId(id)).toBeVisible();
+  // Order (user 2026-11-13): traffic right after my location, Google Maps last; the arrows (user 2026-11-27) before it.
+  // In a 600 px pane the last ones go under More.
   const order = await controls.locator('[data-testid^="map-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
-  expect(order).toEqual(['map-navigate', 'map-recenter', 'map-traffic', 'map-zoom-in', 'map-zoom-out', 'map-route-overview', 'map-route-end', 'map-route-navigate']);
+  expect(order).toEqual(['map-navigate', 'map-recenter', 'map-traffic', 'map-zoom-in', 'map-zoom-out', 'map-route-overview', 'map-route-end', 'map-more']);
+  await page.getByTestId('map-more').click();
+  const more = await page.getByTestId('map-more-menu').locator('[data-testid^="map-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+  expect(more).toEqual(['map-move-car', 'map-route-navigate']);
+  await page.getByTestId('map-more').click();
   // Whole route: north up, fitted; ⌖ turns back to the road ahead.
   await page.getByTestId('map-route-overview').click();
   expect(await stub(page)).toMatchObject({ fitBounds: 1, heading: 0 });
@@ -181,7 +186,8 @@ test('Show route: drawn on the live map with the moving dot and traffic; JorGu n
   expect(new URL((await page.getByTestId('map-sheet-navigate').getAttribute('href'))!).searchParams.get('destination')).toBe('Central World');
   await page.getByTestId('sheet-close').click();
   await expect(page.getByTestId('map-sheet')).toHaveCount(0);
-  // Voice guidance: only the card's Navigate button hands the trip to Google Maps.
+  // Voice guidance: only the card's Navigate button hands the trip to Google Maps (under More in this pane).
+  await page.getByTestId('map-more').click();
   const nav = page.getByTestId('map-route-navigate');
   const href = new URL((await nav.getAttribute('href'))!);
   expect(href.origin + href.pathname).toBe('https://www.google.com/maps/dir/');
@@ -346,7 +352,7 @@ test('Google refuses the key (gm_authFailure): falls back to mode B with a note'
 });
 
 for (const vp of [{ width: 1024, height: 600 }, { width: 430, height: 860 }]) {
-  test(`map full screen ${vp.width}x${vp.height}: the floating bar never covers the map's buttons or the route box`, async ({ page }) => {
+  test(`map full screen ${vp.width}x${vp.height}: a tap shows the map's own toolbar (with ✕), never over the route box`, async ({ page }) => {
     await withLocation(page);
     await page.setViewportSize(vp);
     await openApp(page);
@@ -361,21 +367,20 @@ for (const vp of [{ width: 1024, height: 600 }, { width: 430, height: 860 }]) {
     const s = await box(page, '[data-surface="map"]');
     // A taller map puts the camera further ahead, so the car stays 25 % below the middle.
     if (s.height !== paneH) await expect.poll(async () => JSON.stringify((await stub(page)).center)).not.toBe(JSON.stringify(before));
+    // User 2026-11-27 (car photo): the tap brought a bar of YouTube buttons over the map's toolbar. Now no floating
+    // bar: the map's toolbar has ✕ (exit full screen), ⇄ and the app picker.
     await page.mouse.click(s.x + s.width / 2, s.y + s.height / 2);
-    await expect(page.getByTestId('floating-bar')).toBeVisible();
-    const bar = await box(page, '[data-testid="floating-bar"]');
+    await expect(page.getByTestId('floating-bar')).toHaveCount(0);
     const apart = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
       a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
-    expect(apart(await box(page, '[data-testid="map-controls"]'), bar)).toBe(true);
+    await expect(page.getByTestId('map-controls').getByTestId('map-exit-fs')).toBeVisible();
     for (const routeAt of ['bottom', 'top']) {
       await expect(page.getByTestId('map-route')).toHaveAttribute('data-at', routeAt);
-      expect(apart(await box(page, '[data-testid="map-route"]'), bar)).toBe(true);
-      if (routeAt === 'bottom') {
-        await page.getByTestId('map-route').click();
-        await page.mouse.click(s.x + s.width / 2, s.y + s.height / 2);
-        await expect(page.getByTestId('floating-bar')).toBeVisible();
-      }
+      expect(apart(await box(page, '[data-testid="map-route"]'), await box(page, '[data-testid="map-controls"]'))).toBe(true);
+      if (routeAt === 'bottom') await page.getByTestId('map-route').click();
     }
+    await tapStrip(page, 'map', 'map-exit-fs');
+    await expect(page.locator('#jorgu-root')).toHaveAttribute('data-mode', 'split');
   });
 }
 
@@ -423,10 +428,53 @@ test('map controls move away from the mini player; nothing covers it', async ({ 
   expect(controls.y + controls.height <= mini.y || controls.x + controls.width <= mini.x).toBe(true);
   const s = await box(page, '[data-surface="map"]');
   await page.mouse.click(s.x + s.width / 3, s.y + s.height / 2);
-  await expect(page.getByTestId('floating-bar')).toBeVisible();
-  const bar = await box(page, '[data-testid="floating-bar"]');
-  expect(controls.x >= bar.x + bar.width || bar.x >= controls.x + controls.width || controls.y >= bar.y + bar.height || bar.y >= controls.y + controls.height).toBe(true);
+  await expect(page.getByTestId('floating-bar')).toHaveCount(0);
   await expectPlayerClear(page);
+  // Dragged off that edge (user 2026-11-27), the toolbar gets the whole height back.
+  const g = await box(page, '[data-testid="mini-move"]');
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(s.x + 200, s.y + s.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expectPlayerClear(page);
+  const after = await box(page, '[data-testid="map-controls"]');
+  expect(after.height).toBeGreaterThan(controls.height);
+  const m2 = await box(page, '[data-player-rect]');
+  expect(after.x >= m2.x + m2.width || m2.x >= after.x + after.width || after.y >= m2.y + m2.height || m2.y >= after.y + after.height).toBe(true);
+});
+
+test('arrows move the place of the car on the map (user 2026-11-27); the middle button puts it back', async ({ page }) => {
+  await withLocation(page);
+  await openApp(page);
+  await expect.poll(async () => (await stub(page)).markers).toBe(1);
+  await expect.poll(async () => (await stub(page)).center?.lng).toBeCloseTo(HERE.longitude, 6);
+  await tapStrip(page, 'map', 'map-move-car');
+  await expect(page.getByTestId('map-pad')).toBeVisible();
+  await expect(page.getByTestId('map-pad-center')).toBeDisabled();
+  // ← puts the car left of the middle: the map's middle is east of the car.
+  await page.getByTestId('map-pad-left').click();
+  await page.getByTestId('map-pad-left').click();
+  await expect(page.getByTestId('map-pad')).toHaveAttribute('data-shift', '-0.2,0');
+  await expect.poll(async () => (await stub(page)).center!.lng).toBeGreaterThan(HERE.longitude + 0.0001);
+  // ↑ puts it above the middle: the middle is south of the car.
+  await page.getByTestId('map-pad-up').click();
+  await expect.poll(async () => (await stub(page)).center!.lat).toBeLessThan(HERE.latitude - 0.0001);
+  // Remembered with the settings; the map still follows the car there.
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('jorgu:settings')!).state.map.carShift)).toEqual({ x: -0.2, y: -0.1 });
+  // Up to 40 % each way.
+  for (let i = 0; i < 2; i++) await page.getByTestId('map-pad-left').click();
+  await expect(page.getByTestId('map-pad-left')).toBeDisabled();
+  await expect(page.getByTestId('map-pad')).toHaveAttribute('data-shift', '-0.4,-0.1');
+  // Nothing over the mini player.
+  await startSimulatedPlayback(page);
+  await expectPlayerClear(page);
+  await page.getByTestId('map-pad-center').click();
+  await expect(page.getByTestId('map-pad')).toHaveAttribute('data-shift', '0,0');
+  await expect.poll(async () => (await stub(page)).center?.lng).toBeCloseTo(HERE.longitude, 6);
+  await expect.poll(async () => (await stub(page)).center?.lat).toBeCloseTo(HERE.latitude, 6);
+  // The toolbar button closes it again.
+  await tapStrip(page, 'map', 'map-move-car');
+  await expect(page.getByTestId('map-pad')).toHaveCount(0);
 });
 
 test('saved places: change their order with up / down', async ({ page }) => {

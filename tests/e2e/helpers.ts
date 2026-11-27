@@ -254,6 +254,14 @@ export async function expectPlayerClear(page: Page): Promise<OverlapReport> {
   return rep;
 }
 
+/** Taps a button of a toolbar strip (`map`, `web`), through More when it's in there. */
+export async function tapStrip(page: Page, prefix: string, testId: string): Promise<void> {
+  const inStrip = page.getByTestId(`${prefix}-controls`).getByTestId(testId);
+  if (await inStrip.count()) return inStrip.click();
+  await page.getByTestId(`${prefix}-more`).click();
+  await page.getByTestId(`${prefix}-more-menu`).getByTestId(testId).click();
+}
+
 /** Layout-only tests: mark YouTube as playing without loading a real video (test hook). */
 export async function startSimulatedPlayback(page: Page): Promise<void> {
   await page.evaluate(() => window.__jorgu!.setPlaying(true));

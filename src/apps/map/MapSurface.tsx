@@ -11,10 +11,11 @@ import type { Rect } from '../../shell/geometry';
 import { useControlSize } from '../../shell/useControlSize';
 import { DEFAULT_CENTER, MAPS_KEY } from './config';
 import { kmh, useGeo } from './geo';
-import { attachMap, chooseRoute, endRoute, openChooser, recenter, refollow, setTraffic, showRouteOverview, useMapUi, zoomBy } from './mapController';
+import { CAR_SHIFT_MAX, attachMap, chooseRoute, endRoute, openChooser, recenter, refollow, setTraffic, shiftCar, showRouteOverview, useMapUi, zoomBy } from './mapController';
+import { exitFullscreen, switchFullscreen } from '../../shell/fullscreen';
 import { mapsNavigateUrl } from './navigate';
 import { navigateInPlace } from '../web/webHistory';
-import { MAP_GAP, placeMapChrome } from './mapChrome';
+import { MAP_GAP, placeMapChrome, placePad } from './mapChrome';
 import { pathLength, remaining } from './routeMath';
 import { type TrafficLevel, trafficMillisLeft, tripBar } from './routeTraffic';
 import { intersects } from '../../shell/geometry';
@@ -227,7 +228,7 @@ function union(a: Rect, b: Rect): Rect {
   return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
 }
 
-function NotSetUp() {
+function NotSetUp({ fullscreen }: { fullscreen: boolean }) {
   const t = useT();
   const openSheet = useUi((s) => s.openSheet);
   return (
@@ -238,6 +239,67 @@ function NotSetUp() {
       <button type="button" data-testid="map-where-to" onClick={() => openSheet({ kind: 'map' })} className="min-h-14 rounded-xl bg-accent px-5 text-[16px] font-semibold text-on-accent">
         {t('map.whereTo')}
       </button>
+      {/* No toolbar here, so the way out of full screen is a button of its own. */}
+      {fullscreen && (
+        <button type="button" data-testid="map-exit-fs" onClick={() => exitFullscreen('button')} className="min-h-14 rounded-xl bg-surface px-5 text-[16px] font-semibold text-text">
+          {t('fs.exit')}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Pad auto-closes after this long without a tap. */
+const PAD_HIDE_MS = 8000;
+const PAD_GAP = 4;
+
+/**
+ * Arrows that move the car's place on the map (user 2026-11-27), like Google Maps' arrows: ← puts the car further
+ * left, so more map shows on the right. The middle button puts it back.
+ */
+function CarPad({ rect, onUse }: { rect: Rect; onUse: () => void }) {
+  const t = useT();
+  const shift = useSettings((s) => s.map.carShift);
+  const arrow = (key: string, icon: 'up' | 'down' | 'back' | 'forward', dx: number, dy: number, end: boolean) => (
+    <StripButton
+      key={key}
+      testId={`map-pad-${key}`}
+      icon={icon}
+      label={t(`map.car.${key}` as 'map.car.up')}
+      disabled={end}
+      onClick={() => {
+        shiftCar(dx, dy);
+        onUse();
+      }}
+    />
+  );
+  const step = 0.1;
+  const cell = (n: number) => <span key={`gap${n}`} />;
+  return (
+    <div
+      data-testid="map-pad"
+      data-shift={`${shift.x},${shift.y}`}
+      className="absolute grid grid-cols-3 grid-rows-3"
+      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, gap: PAD_GAP }}
+    >
+      {cell(1)}
+      {arrow('up', 'up', 0, -step, shift.y <= -CAR_SHIFT_MAX)}
+      {cell(2)}
+      {arrow('left', 'back', -step, 0, shift.x <= -CAR_SHIFT_MAX)}
+      <StripButton
+        testId="map-pad-center"
+        icon="center"
+        label={t('map.car.center')}
+        disabled={shift.x === 0 && shift.y === 0}
+        onClick={() => {
+          shiftCar(0, 0);
+          onUse();
+        }}
+      />
+      {arrow('right', 'forward', step, 0, shift.x >= CAR_SHIFT_MAX)}
+      {cell(3)}
+      {arrow('down', 'down', 0, step, shift.y >= CAR_SHIFT_MAX)}
+      {cell(4)}
     </div>
   );
 }
@@ -262,6 +324,16 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   const openSheet = useUi((s) => s.openSheet);
   const pos = useGeo((s) => s.pos);
   const geoError = useGeo((s) => s.error);
+  // band 0: the map is full screen (no pane header).
+  const fullscreen = band === 0;
+  const fsPane = useSettings((s) => s.layout.fullscreenPane);
+  const [pad, setPad] = useState(false);
+  const [padNonce, setPadNonce] = useState(0);
+  useEffect(() => {
+    if (!pad) return;
+    const id = window.setTimeout(() => setPad(false), PAD_HIDE_MS);
+    return () => window.clearTimeout(id);
+  }, [pad, padNonce]);
   const containerRef = useCallback((node: HTMLDivElement | null) => {
     if (node) attachMap(node);
   }, []);
@@ -269,8 +341,10 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
   const live = mode === 'js' && !embedRoute;
   // Toolbar, most needed first: what doesn't fit the strip goes under More (user 2026-11-12). Order (user
   // 2026-11-13): search, my location, traffic, zoom, the route's buttons, and Google Maps last (rarely used).
+  // Full screen (user 2026-11-27): a tap shows this toolbar, so the way out (✕) and ⇄ / the app picker are in it.
   const items: StripItem[] = [
     { key: 'search', node: <MapButton testId="map-navigate" icon="search" label={t('map.whereTo')} onClick={() => openSheet({ kind: 'map' })} /> },
+    ...(fullscreen ? [{ key: 'exitFs', node: <MapButton testId="map-exit-fs" icon="close" active label={t('fs.exit')} onClick={() => exitFullscreen('button')} /> }] : []),
     { key: 'recenter', node: <MapButton testId="map-recenter" icon="target" label={t('map.recenter')} active={follow && !!pos} onClick={recenter} /> },
   ];
   if (live) {
@@ -297,8 +371,33 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
       });
     }
     if (line) items.push({ key: 'overview', node: <MapButton testId="map-route-overview" icon="map" label={t('map.routeOverview')} onClick={showRouteOverview} /> });
+    items.push({ key: 'end', node: <MapButton testId="map-route-end" icon="close" label={t('map.endRoute')} onClick={endRoute} /> });
+  }
+  if (live) {
+    items.push({
+      key: 'pad',
+      node: (
+        <MapButton
+          testId="map-move-car"
+          icon="move"
+          label={t('map.moveCar')}
+          active={pad}
+          onClick={() => {
+            setPad((p) => !p);
+            setPadNonce((n) => n + 1);
+          }}
+        />
+      ),
+    });
+  }
+  if (fullscreen && fsPane !== null) {
     items.push(
-      { key: 'end', node: <MapButton testId="map-route-end" icon="close" label={t('map.endRoute')} onClick={endRoute} /> },
+      { key: 'switchFs', node: <MapButton testId="map-switch-fs" icon="swap" label={t('fs.switch')} onClick={() => switchFullscreen()} /> },
+      { key: 'pickerFs', node: <MapButton testId="map-picker-fs" icon="apps" label={t('fs.picker')} onClick={() => openSheet({ kind: 'picker', pane: fsPane })} /> },
+    );
+  }
+  if (route) {
+    items.push(
       {
         key: 'google',
         // Voice guidance: hands the trip to the Google Maps app, only when tapped.
@@ -368,6 +467,16 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
     const stacked = { ...atCorner, y: c.y > size.h / 2 ? c.y - MAP_GAP - c.h : c.y + c.h + MAP_GAP };
     return fits(stacked) ? stacked : null;
   })();
+  const padRect =
+    pad && live
+      ? placePad({
+          canvas: ui.canvas,
+          h: size.h,
+          size: 3 * cs.map + 2 * PAD_GAP,
+          right: ui.right,
+          avoid: [...avoid, ...fs, ...[box, speedBox, bar].filter((r): r is Rect => !!r)],
+        })
+      : null;
   const canvas = mode === 'none' ? { x: 0, y: 0, w: size.w, h: size.h } : ui.canvas;
   const side = ui.right ? 'right' : 'left';
   // What sits in the header band (route box, speed beside it): the pane header keeps beside it (PaneChrome).
@@ -393,7 +502,7 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
         visibility: live ? 'inherit' : 'hidden' }}
       />
       {(mode === 'embed' || (mode === 'js' && embedRoute)) && <EmbedFrame rect={canvas} />}
-      {mode === 'none' && <NotSetUp />}
+      {mode === 'none' && <NotSetUp fullscreen={fullscreen} />}
       {mode !== 'none' && (
         <>
           <SideStrip
@@ -416,6 +525,7 @@ export function MapSurface({ size, avoid, band }: { size: { w: number; h: number
           {box && <RouteBox rect={box} />}
           {box && <RouteChooser box={box} height={size.h} top={Math.max(MAP_GAP, band + 8)} />}
           {bar && <TrafficBar rect={bar} />}
+          {padRect && <CarPad rect={padRect} onUse={() => setPadNonce((n) => n + 1)} />}
           {(notice || geoError) && (
             <div
               role="status"

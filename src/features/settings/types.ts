@@ -23,6 +23,10 @@ export type Language = 'en' | 'th';
 export type MiniPlayerSize = '356x200' | '480x270';
 /** Mini player corner: 'auto' = bottom corner on the driver side (user request 2026-11-11); t/b = top/bottom, l/r = left/right. */
 export type MiniCorner = 'auto' | 'tl' | 'tr' | 'bl' | 'br';
+/** Where the mini player was dragged (user 2026-11-27: anywhere, not only corners): 0–1 across the room it can move in. */
+export type MiniAt = { x: number; y: number };
+/** The car's place on the map, moved with the arrows (user 2026-11-27): share of the map's width / height from its default. */
+export type CarShift = { x: number; y: number };
 /** Dock (right toolbar) size: button 64 / 80 / 96 px. */
 export type DockSize = 'normal' | 'large' | 'xlarge';
 
@@ -82,6 +86,8 @@ export interface Settings {
     routeInfoAt: 'top' | 'bottom';
     /** Map colours (user 2026-11-13: the day map may read better). Fixed for each map load. */
     colors: 'day' | 'auto' | 'night';
+    /** Car moved right (+x) / down (+y) of its usual place on the map, as a share of the map size (±0.4). */
+    carShift: CarShift;
     savedPlaces: SavedPlace[];
     recentDestinations: string[];
   };
@@ -96,6 +102,8 @@ export interface Settings {
   youtube: {
     miniPlayerSize: MiniPlayerSize;
     miniCorner: MiniCorner;
+    /** Dragged to this spot; null = in `miniCorner`. Picking a corner clears it. */
+    miniAt: MiniAt | null;
     playbackRate: number;
     /**
      * After the last clip in the queue: 'list' = a tap in a list queues the rest of that list, 'off' = stop.
@@ -131,9 +139,9 @@ export function defaultSettings(): Settings {
       fullscreenPane: null,
       driverSide: 'right',
     },
-    map: { mode: 'js', routeLine: true, follow: true, traffic: true, avoidTolls: false, avoidHighways: false, routeInfoAt: 'bottom', colors: 'day', savedPlaces: [], recentDestinations: [] },
+    map: { mode: 'js', routeLine: true, follow: true, traffic: true, avoidTolls: false, avoidHighways: false, routeInfoAt: 'bottom', colors: 'day', carShift: { x: 0, y: 0 }, savedPlaces: [], recentDestinations: [] },
     web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280, search: 'google' },
-    youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', playbackRate: 1, continueWith: 'list', hidePlayed: true, hideUpTo: 120 },
+    youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', miniAt: null, playbackRate: 1, continueWith: 'list', hidePlayed: true, hideUpTo: 120 },
     dockSize: 'normal',
     library: { feedChannelLimit: 50 },
   };

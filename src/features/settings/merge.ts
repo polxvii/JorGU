@@ -19,6 +19,11 @@ export function mergeSettings(persisted: unknown, current: Settings): Settings {
   merged.layout = sanitizeLayout(merged.layout, current.layout);
   if (merged.language !== 'en' && merged.language !== 'th') merged.language = 'en';
   if (!['auto', 'tl', 'tr', 'bl', 'br'].includes(merged.youtube.miniCorner)) merged.youtube.miniCorner = 'auto';
+  const within = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
+  const at = merged.youtube.miniAt as unknown;
+  if (!(isPlainObject(at) && within(at.x, 0, 1) && within(at.y, 0, 1))) merged.youtube.miniAt = null;
+  const shift = merged.map.carShift as unknown;
+  if (!(isPlainObject(shift) && within(shift.x, -0.4, 0.4) && within(shift.y, -0.4, 0.4))) merged.map.carShift = { x: 0, y: 0 };
   if (!['normal', 'large', 'xlarge'].includes(merged.dockSize)) merged.dockSize = 'normal';
   // Before 2026-11-15: autoContinue on/off (off stays off). 'mix' (2026-11-15 to 2026-11-16) becomes 'list'.
   const yt = merged.youtube as Settings['youtube'] & { autoContinue?: unknown };

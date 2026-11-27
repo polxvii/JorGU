@@ -28,6 +28,8 @@ function chromeRects(r: LayoutResult): [string, Rect][] {
   if (r.edgeStrip) out.push(['edgeStrip', r.edgeStrip]);
   if (r.controlColumn) out.push(['controlColumn', r.controlColumn]);
   if (r.mini) out.push(['miniHandle', r.mini.handle]);
+  // The floating Web window is a surface, but it must never cover the player either.
+  if (r.webMini) out.push(['webMiniHandle', r.webMini.handle], ['webMini', r.webMini.rect]);
   if (r.toast) out.push(['toast', r.toast]);
   for (const p of r.panes) {
     out.push([`header${p.index}`, p.header], [`fs${p.index}`, p.fsButton]);
@@ -172,6 +174,38 @@ describe('full screen (§6.5)', () => {
     expect(s.mini!.rect.w).toBeLessThan(700);
     // Settings → a size clears the dragged width (store), and 480×270 still falls back where it can't fit.
     expect(computeLayout(input({ layout: { fullscreenPane: 1 }, youtube: { playing: true, miniSticky: false, miniSize: '480x270' } })).mini!.rect).toMatchObject({ w: 480, h: 270 });
+  });
+
+  it('floating Web window (user 2026-11-27): when its page is off screen, over Map / Web only, clear of the mini player', () => {
+    const web: AppRef = { kind: 'web', id: 'w1', url: 'https://a.example/' };
+    const wm = (at: { x: number; y: number } | null = null) => ({ id: 'w1' as const, at, w: 480, h: 320 });
+    // Map full screen, the page in the other pane: bottom corner on the passenger side, 480×320, a surface of its own.
+    const r = computeLayout(input({ layout: { panes: [web, { kind: 'map' }], fullscreenPane: 1 }, webMini: wm() }));
+    expect(r.webMini!.rect).toEqual({ x: L.MINI_MARGIN, y: 600 - L.MINI_MARGIN - 320, w: 480, h: 320 });
+    expect(r.webMini!.handle).toEqual({ x: L.MINI_MARGIN, y: 600 - L.MINI_MARGIN - 320 - L.MINI_HANDLE, w: 480, h: L.MINI_HANDLE });
+    expect(r.surfaces['web:w1']).toMatchObject({ visible: true, rect: r.webMini!.rect });
+    // Not floating, or the page is on screen (two panes; its own full screen): no window.
+    expect(computeLayout(input({ layout: { panes: [web, { kind: 'map' }], fullscreenPane: 1 } })).webMini).toBeNull();
+    expect(computeLayout(input({ layout: { panes: [web, { kind: 'map' }] }, webMini: wm() })).webMini).toBeNull();
+    expect(computeLayout(input({ layout: { panes: [web, { kind: 'map' }], fullscreenPane: 0 }, webMini: wm() })).webMini).toBeNull();
+    // One pane showing the Map: the window sits in the app area (not under the Dock).
+    const one = computeLayout(input({ layout: { panes: [web, { kind: 'map' }], mode: 'single', focusedPane: 1 }, webMini: wm({ x: 1, y: 0 }) }));
+    expect(one.webMini!.rect.x + one.webMini!.rect.w).toBe(one.appArea.x + one.appArea.w - L.MINI_MARGIN);
+    // Never over YouTube: none while YouTube is the app shown, in a pane or full screen.
+    expect(computeLayout(input({ layout: { panes: [{ kind: 'youtube' }, web], mode: 'single', focusedPane: 0 }, webMini: { ...wm(), id: 'w1' } })).webMini).toBeNull();
+    expect(computeLayout(input({ layout: { panes: [web, { kind: 'youtube' }], fullscreenPane: 1 }, webMini: wm() })).webMini).toBeNull();
+    // With the mini player playing in the same corner, the window takes the mirrored spot.
+    const both = computeLayout(
+      input({ layout: { panes: [web, { kind: 'map' }], fullscreenPane: 1 }, youtube: { playing: true, miniSticky: false, miniSize: '356x200' }, webMini: wm({ x: 1, y: 1 }) }),
+    );
+    const block = (m: { rect: Rect; handle: Rect }) => ({ ...m.handle, h: m.handle.h + m.rect.h });
+    expect(intersects(block(both.webMini!), block(both.mini!))).toBe(false);
+    expect(both.webMini!.rect.x).toBe(L.MINI_MARGIN);
+    // Any size from 320×240 up to what fits.
+    const tiny = computeLayout(input({ layout: { panes: [web, { kind: 'map' }], fullscreenPane: 1 }, webMini: { ...wm(), w: 100, h: 50 } }));
+    expect(tiny.webMini!.rect).toMatchObject({ w: 320, h: 240 });
+    const huge = computeLayout(input({ layout: { panes: [web, { kind: 'map' }], fullscreenPane: 1 }, webMini: { ...wm(), w: 5000, h: 5000 } }));
+    expect(huge.webMini!.rect).toMatchObject({ w: 1024 - 2 * L.MINI_MARGIN, h: 600 - 2 * L.MINI_MARGIN - L.MINI_HANDLE });
   });
 
   it('Web full screen with the mini player in the middle: the floating bar never touches it', () => {
@@ -344,6 +378,7 @@ describe('§3.9 invariants across every combination', () => {
                         safeArea,
                         layout: { mode, direction: 'auto', splitRatio: 0.5, panes, focusedPane: 0, fullscreenPane, driverSide },
                         youtube: { playing: true, miniSticky: false, miniSize: '356x200', miniCorner, miniAt, miniWidth },
+                        webMini: { id: 'w1', at: miniAt ? { x: 1 - miniAt.x, y: miniAt.y } : null, w: miniWidth ?? 480, h: 320 },
                         dockSize,
                         bannerCount: 0,
                         sheetOpen,

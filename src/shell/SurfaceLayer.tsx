@@ -30,11 +30,15 @@ function surfaceStyle(rect: Rect, visible: boolean, z: number): CSSProperties {
   };
 }
 
-/** What a surface's own toolbar must stay clear of (relative to the surface): the mini player and the full-screen bar. */
-function avoidFor(r: Rect, layout: LayoutResult): Rect[] {
-  const m = layout.mini;
+/**
+ * What a surface's own toolbar must stay clear of (relative to the surface): the mini player, the floating Web window
+ * (unless it is this surface) and the full-screen bar.
+ */
+function avoidFor(r: Rect, layout: LayoutResult, self?: SurfaceId): Rect[] {
   const avoid: Rect[] = [];
-  if (m) avoid.push({ x: m.handle.x - r.x, y: m.handle.y - r.y, w: m.rect.w, h: m.handle.h + m.rect.h });
+  for (const m of [layout.mini, layout.webMini?.id === self ? null : layout.webMini]) {
+    if (m) avoid.push({ x: m.handle.x - r.x, y: m.handle.y - r.y, w: m.rect.w, h: m.handle.h + m.rect.h });
+  }
   // The full-screen floating bar comes back on every tap: a surface's own buttons never sit under it.
   const fb = layout.floatingBar?.rect;
   if (fb) avoid.push({ x: fb.x - r.x, y: fb.y - r.y, w: fb.w, h: fb.h });
@@ -51,10 +55,20 @@ const SurfaceContent = memo(function SurfaceContent({ id, layout }: { id: Surfac
     return <YouTubeSurface surface={y.surface} player={y.player} mode={y.mode} controls={y.controls ?? null} side={!!y.side} scale={y.controlsScale ?? 1} />;
   }
   const web = lastWeb.get(id);
-  // Full screen gives the site the whole surface; in a pane the header band sits above it.
+  // Full screen gives the site the whole surface; in a pane the header band sits above it; floating, the page only.
   if (!web) return null;
   const r = layout.surfaces[id]?.rect ?? layout.content;
-  return <WebSurface app={web} surfaceId={id} band={layout.mode === 'fullscreen' ? 0 : L.WEB_BAND} size={{ w: r.w, h: r.h }} avoid={avoidFor(r, layout)} />;
+  const mini = layout.webMini?.id === id;
+  return (
+    <WebSurface
+      app={web}
+      surfaceId={id}
+      band={layout.mode === 'fullscreen' || mini ? 0 : L.WEB_BAND}
+      size={{ w: r.w, h: r.h }}
+      avoid={avoidFor(r, layout, id)}
+      mini={mini}
+    />
+  );
 });
 
 export function SurfaceLayer({ layout }: { layout: LayoutResult }) {
@@ -93,7 +107,9 @@ export function SurfaceLayer({ layout }: { layout: LayoutResult }) {
             data-visible={visible ? '1' : '0'}
             style={surfaceStyle(rect, visible, box?.z ?? 1)}
             onPointerDownCapture={() => {
-              if (pane !== null) setFocusedPane(pane);
+              // A floating window isn't its pane: a touch on it must not switch the one-pane view over to it.
+              const floating = layout.webMini?.id === id || (id === 'youtube' && layout.youtube.mode === 'mini');
+              if (pane !== null && !floating) setFocusedPane(pane);
               useUi.getState().showHeaders();
             }}
           >

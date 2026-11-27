@@ -25,6 +25,11 @@ export type MiniPlayerSize = '356x200' | '480x270';
 export type MiniCorner = 'auto' | 'tl' | 'tr' | 'bl' | 'br';
 /** Where the mini player was dragged (user 2026-11-27: anywhere, not only corners): 0–1 across the room it can move in. */
 export type MiniAt = { x: number; y: number };
+/**
+ * A Web page floating in a small window when it isn't in a pane (user 2026-11-27, like YouTube's mini player). Only
+ * when the user asks (the float button in the Web toolbar): JorGu can't tell whether a site is playing anything.
+ */
+export type WebMini = { floating: WebInstanceId | null; at: MiniAt | null; w: number; h: number };
 /** The car's place on the map, moved with the arrows (user 2026-11-27): share of the map's width / height from its default. */
 export type CarShift = { x: number; y: number };
 /** Dock (right toolbar) size: button 64 / 80 / 96 px. */
@@ -98,6 +103,8 @@ export interface Settings {
     /** Searches from the address box (user 2026-11-13). */
     search: 'google' | 'bing';
     desktopWidth: 1024 | 1280 | 1440;
+    /** The floating window (user 2026-11-27). */
+    mini: WebMini;
   };
   youtube: {
     miniPlayerSize: MiniPlayerSize;
@@ -142,7 +149,7 @@ export function defaultSettings(): Settings {
       driverSide: 'right',
     },
     map: { mode: 'js', routeLine: true, follow: true, traffic: true, avoidTolls: false, avoidHighways: false, routeInfoAt: 'bottom', colors: 'day', carShift: { x: 0, y: 0 }, savedPlaces: [], recentDestinations: [] },
-    web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280, search: 'google' },
+    web: { bookmarks: [], recent: [], viewModes: {}, desktopWidth: 1280, search: 'google', mini: { floating: null, at: null, w: 480, h: 320 } },
     youtube: { miniPlayerSize: '356x200', miniCorner: 'auto', miniAt: null, miniWidth: null, playbackRate: 1, continueWith: 'list', hidePlayed: true, hideUpTo: 120 },
     dockSize: 'normal',
     library: { feedChannelLimit: 50 },

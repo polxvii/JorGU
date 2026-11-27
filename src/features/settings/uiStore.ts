@@ -38,6 +38,9 @@ export interface UiState {
   miniDrag: MiniAt | null;
   /** Its width while the resize grip is being dragged (saved on release). */
   miniResize: number | null;
+  /** The floating Web window while it's being moved / resized (saved on release). */
+  webMiniDrag: MiniAt | null;
+  webMiniResize: { w: number; h: number } | null;
   /** M1: playback is simulated by the YouTube placeholder; M2 wires the real player. */
   youtube: { playing: boolean; miniSticky: boolean; mode: 'pane' | 'mini' | 'fullscreen' | 'hidden' };
   toasts: Toast[];
@@ -59,6 +62,8 @@ export interface UiState {
   setDrag: (drag: UiState['drag']) => void;
   setMiniDrag: (at: MiniAt | null) => void;
   setMiniResize: (width: number | null) => void;
+  setWebMiniDrag: (at: MiniAt | null) => void;
+  setWebMiniResize: (size: { w: number; h: number } | null) => void;
   setYoutube: (patch: Partial<UiState['youtube']>) => void;
   mount: (ids: SurfaceId[]) => void;
   setOnline: (online: boolean) => void;
@@ -83,6 +88,8 @@ export const useUi = create<UiState>()((set) => ({
   drag: null,
   miniDrag: null,
   miniResize: null,
+  webMiniDrag: null,
+  webMiniResize: null,
   youtube: { playing: false, miniSticky: false, mode: 'hidden' },
   toasts: [],
   mounted: [],
@@ -103,6 +110,8 @@ export const useUi = create<UiState>()((set) => ({
   setDrag: (drag) => set({ drag }),
   setMiniDrag: (miniDrag) => set({ miniDrag }),
   setMiniResize: (miniResize) => set({ miniResize }),
+  setWebMiniDrag: (webMiniDrag) => set({ webMiniDrag }),
+  setWebMiniResize: (webMiniResize) => set({ webMiniResize }),
   setYoutube: (patch) => set((s) => ({ youtube: { ...s.youtube, ...patch } })),
   mount: (ids) =>
     set((s) => {

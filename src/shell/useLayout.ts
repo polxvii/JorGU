@@ -23,6 +23,13 @@ export function useLayout(): LayoutResult {
   const savedWidth = useSettings((s) => s.youtube.miniWidth);
   const resizeWidth = useUi((s) => s.miniResize);
   const miniWidth = resizeWidth ?? savedWidth;
+  const wm = useSettings((s) => s.web.mini);
+  const wmDrag = useUi((s) => s.webMiniDrag);
+  const wmSize = useUi((s) => s.webMiniResize);
+  const webMini = useMemo(
+    () => (wm.floating ? { id: wm.floating, at: wmDrag ?? wm.at, w: wmSize?.w ?? wm.w, h: wmSize?.h ?? wm.h } : null),
+    [wm, wmDrag, wmSize],
+  );
   const dockSize = useSettings((s) => s.dockSize);
   const playing = useUi((s) => s.youtube.playing);
   const miniSticky = useUi((s) => s.youtube.miniSticky);
@@ -36,11 +43,12 @@ export function useLayout(): LayoutResult {
         safeArea: vp.safeArea,
         layout,
         youtube: { playing, miniSticky, miniSize, miniCorner, miniAt, miniWidth },
+        webMini,
         dockSize,
         bannerCount,
         sheetOpen,
         toast,
       }),
-    [vp, layout, playing, miniSticky, miniSize, miniCorner, miniAt, miniWidth, dockSize, bannerCount, sheetOpen, toast],
+    [vp, layout, playing, miniSticky, miniSize, miniCorner, miniAt, miniWidth, webMini, dockSize, bannerCount, sheetOpen, toast],
   );
 }

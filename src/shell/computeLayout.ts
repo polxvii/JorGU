@@ -1,6 +1,6 @@
 // Pure layout engine (spec §6). Every on-screen rectangle is decided here so the placement rules
 // (§3.9 nothing over the YouTube player, §6.3 CSS-only positioning, driver-side mirroring) live in one tested place.
-import type { AppRef, DockSize, LayoutSettings, MiniAt, MiniCorner, MiniPlayerSize, PaneIndex, SurfaceId } from '../features/settings/types';
+import type { AppRef, DockSize, LayoutSettings, MiniAt, MiniCorner, MiniPlayerSize, PaneIndex, SurfaceId, WebInstanceId } from '../features/settings/types';
 import { surfaceIdOf } from '../features/settings/types';
 import { type Rect, bottom, fit16x9, intersects, right } from './geometry';
 import { youtubePane } from './layoutActions';
@@ -69,6 +69,8 @@ export interface LayoutInput {
   sheetOpen: boolean;
   /** A toast is showing (it must be placed clear of the player). */
   toast?: boolean;
+  /** A Web page set to float when it isn't in a pane (user 2026-11-27): its spot and size. */
+  webMini?: { id: WebInstanceId; at: MiniAt | null; w: number; h: number } | null;
 }
 
 export interface LayoutResult {
@@ -98,6 +100,8 @@ export interface LayoutResult {
   controlColumn: Rect | null;
   /** `range`: where the handle's top-left corner can go (the grip drags it anywhere in there); `maxW`: widest it fits. */
   mini: { rect: Rect; handle: Rect; range: Rect; maxW: number } | null;
+  /** The floating Web window (its page), with a handle above it like the mini player's; never over YouTube. */
+  webMini: { id: SurfaceId; web: WebInstanceId; rect: Rect; handle: Rect; range: Rect; maxW: number; maxH: number } | null;
   sheet: Rect | null;
   toast: Rect | null;
 }
@@ -265,6 +269,35 @@ function miniBox(area: Rect, size: MiniPlayerSize, spot: { fx: number; fy: numbe
   return { rect: { x, y: top + L.MINI_HANDLE, w, h }, handle: { x, y: top, w, h: L.MINI_HANDLE }, range, maxW };
 }
 
+export const WEB_MINI_MIN = { w: 320, h: 240 };
+
+/** The floating Web window at its spot in `area`, any size from 320×240 to what fits, its handle above it. */
+function webMiniBox(area: Rect, w0: number, h0: number, spot: MiniAt) {
+  const maxW = Math.max(WEB_MINI_MIN.w, area.w - 2 * L.MINI_MARGIN);
+  const maxH = Math.max(WEB_MINI_MIN.h, area.h - 2 * L.MINI_MARGIN - L.MINI_HANDLE);
+  const w = Math.min(maxW, Math.max(WEB_MINI_MIN.w, Math.round(w0)));
+  const h = Math.min(maxH, Math.max(WEB_MINI_MIN.h, Math.round(h0)));
+  const range = {
+    x: area.x + L.MINI_MARGIN,
+    y: area.y + L.MINI_MARGIN,
+    w: Math.max(0, area.w - 2 * L.MINI_MARGIN - w),
+    h: Math.max(0, area.h - 2 * L.MINI_MARGIN - L.MINI_HANDLE - h),
+  };
+  const x = range.x + Math.round(Math.min(1, Math.max(0, spot.x)) * range.w);
+  const top = range.y + Math.round(Math.min(1, Math.max(0, spot.y)) * range.h);
+  return { rect: { x, y: top + L.MINI_HANDLE, w, h }, handle: { x, y: top, w, h: L.MINI_HANDLE }, range, maxW, maxH };
+}
+
+/** `e` (an edge strip) cut to its longer part above or below `b`. */
+function cutAround(e: Rect, b: Rect | null): Rect {
+  if (!b || !intersects(e, b)) return e;
+  const above = { ...e, h: Math.max(0, b.y - 4 - e.y) };
+  const below = { ...e, y: bottom(b) + 4, h: Math.max(0, bottom(e) - bottom(b) - 4) };
+  return above.h >= below.h ? above : below;
+}
+
+const blockOf = (m: { rect: Rect; handle: Rect } | null): Rect | null => (m ? { ...m.handle, h: m.handle.h + m.rect.h } : null);
+
 /** The part of `area` beside a sheet: `s` is a full-height strip at the left / right edge, or (portrait) a band. */
 function besideSheet(area: Rect, s: Rect, band: boolean): Rect {
   if (band) {
@@ -418,6 +451,24 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     const fits = room.w >= MINI_MIN_W + 2 * L.MINI_MARGIN && room.h >= 200 + L.MINI_HANDLE + 2 * L.MINI_MARGIN;
     return box(fits ? room : area);
   };
+  /**
+   * The floating Web window (user 2026-11-27) when its page is in a pane that isn't shown. Over Map or another Web page
+   * only, never over YouTube; clear of the mini player: its spot, else mirrored across / up-down, else smaller; else
+   * not shown. Sheets may cover it (it isn't YouTube). Default spot: bottom corner on the passenger side.
+   */
+  const wmIn = input.webMini ? layout.panes.findIndex((a) => a.kind === 'web' && a.id === input.webMini!.id) : -1;
+  const placeWebMini = (area: Rect, avoid: Rect | null): LayoutResult['webMini'] => {
+    const wm = input.webMini;
+    if (!wm || wmIn === -1) return null;
+    const s = wm.at ?? { x: driverRight ? 0 : 1, y: 1 };
+    const spots = [s, { x: 1 - s.x, y: s.y }, { x: s.x, y: 1 - s.y }, { x: 1 - s.x, y: 1 - s.y }];
+    for (const [w, h] of [[wm.w, wm.h], [WEB_MINI_MIN.w, WEB_MINI_MIN.h]])
+      for (const spot of spots) {
+        const b = webMiniBox(area, w, h, spot);
+        if (!avoid || !intersects(blockOf(b)!, avoid)) return { id: surfaceIdOf({ kind: 'web', id: wm.id, url: '' }), web: wm.id, ...b };
+      }
+    return null;
+  };
 
   // ---------- full screen (§6.5) ----------
   if (layout.fullscreenPane !== null) {
@@ -469,6 +520,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
         edgeStrip: null,
         controlColumn: column,
         mini: null,
+        webMini: null,
         sheet,
         toast,
       };
@@ -481,6 +533,9 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     // Sheets and the floating bar go to the side (or end) away from the mini player.
     const awayRight = mini && at.right === driverRight ? !driverRight : driverRight;
     const m = mini ? { ...mini.handle, h: mini.handle.h + mini.rect.h } : null;
+    const webMini = wmIn !== -1 && wmIn !== layout.fullscreenPane ? placeWebMini(content, m) : null;
+    if (webMini) surfaces[webMini.id] = { id: webMini.id, rect: webMini.rect, visible: true, z: Z_MINI };
+    const wb = blockOf(webMini);
     let sheet: Rect | null = null;
     if (input.sheetOpen) {
       sheet = portrait
@@ -502,7 +557,9 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     const bar =
       sheet || fsApp.kind !== 'web'
         ? null
-        : ([barFor(awayRight, low), barFor(!awayRight, low), barFor(awayRight, !low), barFor(!awayRight, !low)].find((b) => !m || !intersects(b.rect, m)) ?? null);
+        : ([barFor(awayRight, low), barFor(!awayRight, low), barFor(awayRight, !low), barFor(!awayRight, !low)].find(
+            (b) => (!m || !intersects(b.rect, m)) && (!wb || !intersects(b.rect, wb)),
+          ) ?? null);
     const toast = input.toast
       ? placeToast(content, [mini?.rect, mini?.handle, sheet, bar?.rect], [], sheet)
       : null;
@@ -517,6 +574,8 @@ export function computeLayout(input: LayoutInput): LayoutResult {
         edge = { ...edge, h: Math.max(0, mini.handle.y - 4 - edge.y) };
       }
     }
+    // Nor over the floating Web window (its page takes the taps there).
+    edge = cutAround(edge, wb);
     return {
       ...base,
       dock: null,
@@ -534,6 +593,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
       edgeStrip: fsApp.kind === 'web' ? edge : null,
       controlColumn: null,
       mini,
+      webMini,
       sheet,
       toast,
     };
@@ -597,6 +657,9 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     yt = { mode: 'mini', surface: mini.rect, player: mini.rect, paneIndex: ytIdx };
   }
   const miniArea = mini ? { ...mini.handle, h: mini.handle.h + mini.rect.h } : null;
+  // The floating Web window: its page's pane isn't shown (one pane), and YouTube isn't the one shown.
+  const webMini = yt.mode !== 'pane' && wmIn !== -1 && !rects[wmIn as PaneIndex] ? placeWebMini(appArea, miniArea) : null;
+  const webArea = blockOf(webMini);
 
   // Sheet, never over the player. Landscape: driver side, or passenger side when YouTube is the driver-side pane.
   // Portrait: a band from the bottom, or from the top when YouTube is the bottom pane or the mini player shows.
@@ -686,14 +749,16 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     });
   }
   if (mini) surfaces.youtube = { id: 'youtube', rect: mini.rect, visible: true, z: Z_MINI };
+  if (webMini) surfaces[webMini.id] = { id: webMini.id, rect: webMini.rect, visible: true, z: Z_MINI };
 
   // Stacked panes on a short screen: the mini player can cross the lower pane's header. Chrome draws above every
   // surface, so trim that chrome beside the mini player, or hide it while the mini player shows.
-  if (miniArea) {
+  for (const area of [miniArea, webArea]) {
+    if (!area) continue;
     for (const p of panes) {
       const hidden = { x: p.rect.x, y: p.rect.y, w: 0, h: 0 };
-      p.header = clearOf(p.header, miniArea, 200, hidden);
-      p.fsButton = clearOf(p.fsButton, miniArea, L.FS_BUTTON, hidden);
+      p.header = clearOf(p.header, area, 200, hidden);
+      p.fsButton = clearOf(p.fsButton, area, L.FS_BUTTON, hidden);
     }
   }
 
@@ -721,6 +786,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     edgeStrip: null,
     controlColumn: null,
     mini,
+    webMini,
     sheet,
     toast,
   };

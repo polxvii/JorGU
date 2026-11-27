@@ -141,6 +141,8 @@ export function WebSheet({ rect, pane }: { rect: Rect; pane: PaneIndex }) {
   const removeBookmark = useSettings((s) => s.removeBookmark);
   const reload = useWebUi((s) => s.reload);
   const close = useUi((s) => s.closeSheet);
+  const floating = useSettings((s) => s.web.mini.floating);
+  const setWebMini = useSettings((s) => s.setWebMini);
   if (app.kind !== 'web') return null;
   const url = app.url;
   const bookmark = url ? bookmarks.find((b) => b.url === url) : undefined;
@@ -188,6 +190,16 @@ export function WebSheet({ rect, pane }: { rect: Rect; pane: PaneIndex }) {
               label={bookmark ? 'web.bookmarked' : 'web.addBookmark'}
               active={!!bookmark}
               onClick={() => (bookmark ? removeBookmark(bookmark.id) : addBookmark(url))}
+            />
+            {/* Float (user 2026-11-27): when this page isn't on screen it shows in a small window like YouTube's mini
+                player. Only on request: JorGu can't see whether a site is playing anything. In this menu, not the
+                strip, so the strip's view and zoom buttons keep their places. */}
+            <Action
+              testId="web-float"
+              icon="pip"
+              label="web.floatShort"
+              active={floating === app.id}
+              onClick={() => setWebMini({ floating: floating === app.id ? null : app.id })}
             />
           </div>
         )}

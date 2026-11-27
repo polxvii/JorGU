@@ -23,6 +23,16 @@ export function mergeSettings(persisted: unknown, current: Settings): Settings {
   const at = merged.youtube.miniAt as unknown;
   if (!(isPlainObject(at) && within(at.x, 0, 1) && within(at.y, 0, 1))) merged.youtube.miniAt = null;
   if (!within(merged.youtube.miniWidth, 356, 4000)) merged.youtube.miniWidth = null;
+  const wm = merged.web.mini as unknown;
+  if (!isPlainObject(wm)) merged.web.mini = { ...current.web.mini };
+  else {
+    const m = merged.web.mini;
+    if (m.floating !== 'w1' && m.floating !== 'w2') m.floating = null;
+    const a = m.at as unknown;
+    if (!(isPlainObject(a) && within(a.x, 0, 1) && within(a.y, 0, 1))) m.at = null;
+    if (!within(m.w, 320, 4000)) m.w = current.web.mini.w;
+    if (!within(m.h, 240, 4000)) m.h = current.web.mini.h;
+  }
   const shift = merged.map.carShift as unknown;
   if (!(isPlainObject(shift) && within(shift.x, -0.4, 0.4) && within(shift.y, -0.4, 0.4))) merged.map.carShift = { x: 0, y: 0 };
   if (!['normal', 'large', 'xlarge'].includes(merged.dockSize)) merged.dockSize = 'normal';

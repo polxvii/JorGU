@@ -27,6 +27,11 @@ describe('mergeSettings', () => {
     expect(mergeSettings({ youtube: { miniWidth: 640 } }, defaultSettings()).youtube.miniWidth).toBe(640);
     expect(mergeSettings({ youtube: { miniWidth: 100 } }, defaultSettings()).youtube.miniWidth).toBeNull();
     expect(mergeSettings({ youtube: { miniWidth: '640' } }, defaultSettings()).youtube.miniWidth).toBeNull();
+    // The floating Web window (user 2026-11-27).
+    expect(mergeSettings({}, defaultSettings()).web.mini).toEqual({ floating: null, at: null, w: 480, h: 320 });
+    expect(mergeSettings({ web: { mini: { floating: 'w2', at: { x: 0.5, y: 0 }, w: 600, h: 400 } } }, defaultSettings()).web.mini).toEqual({ floating: 'w2', at: { x: 0.5, y: 0 }, w: 600, h: 400 });
+    expect(mergeSettings({ web: { mini: { floating: 'w3', at: 'x', w: 10, h: 'big' } } }, defaultSettings()).web.mini).toEqual({ floating: null, at: null, w: 480, h: 320 });
+    expect(mergeSettings({ web: { mini: 7 } }, defaultSettings()).web.mini).toEqual({ floating: null, at: null, w: 480, h: 320 });
     expect(mergeSettings({ map: { carShift: { x: -0.3, y: 0.1 } } }, defaultSettings()).map.carShift).toEqual({ x: -0.3, y: 0.1 });
     expect(mergeSettings({ map: { carShift: { x: 0.9, y: 0 } } }, defaultSettings()).map.carShift).toEqual({ x: 0, y: 0 });
     expect(mergeSettings({ map: { carShift: null } }, defaultSettings()).map.carShift).toEqual({ x: 0, y: 0 });

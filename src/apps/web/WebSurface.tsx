@@ -28,16 +28,20 @@ type WebRef = Extract<AppRef, { kind: 'web' }>;
 const SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation';
 const ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture';
 
-/** `size` and `avoid` (mini player, full-screen bar; relative to the surface) place the page's toolbar strip. */
+/**
+ * `size` and `avoid` (mini player, full-screen bar; relative to the surface) place the page's toolbar strip. `mini`:
+ * the page floats in a small window (user 2026-11-27): no strip, the page fills it (its handle is chrome above it).
+ */
 interface Place {
   size: { w: number; h: number };
   avoid: Rect[];
+  mini?: boolean;
 }
 
-export function WebSurface({ app, surfaceId, band, size, avoid }: { app: WebRef; surfaceId: SurfaceId; band: number } & Place) {
+export function WebSurface({ app, surfaceId, band, size, avoid, mini }: { app: WebRef; surfaceId: SurfaceId; band: number } & Place) {
   if (!app.url) return <StartPage id={app.id} band={band} />;
   // A new URL is a new page: remount (and reload) only then.
-  return <WebPage key={app.url} app={app} surfaceId={surfaceId} band={band} size={size} avoid={avoid} />;
+  return <WebPage key={app.url} app={app} surfaceId={surfaceId} band={band} size={size} avoid={avoid} mini={mini} />;
 }
 
 function StartPage({ id, band }: { id: WebInstanceId; band: number }) {
@@ -53,7 +57,7 @@ function StartPage({ id, band }: { id: WebInstanceId; band: number }) {
   );
 }
 
-function WebPage({ app, surfaceId, band, size, avoid }: { app: WebRef; surfaceId: SurfaceId; band: number } & Place) {
+function WebPage({ app, surfaceId, band, size, avoid, mini }: { app: WebRef; surfaceId: SurfaceId; band: number } & Place) {
   const embed = toHttps(app.url);
   const typedHttp = embed !== app.url;
   const [check, setCheck] = useState<FrameCheckResult | null>(null);
@@ -71,7 +75,7 @@ function WebPage({ app, surfaceId, band, size, avoid }: { app: WebRef; surfaceId
   if (check.status === 'unknown' && typedHttp && !tryHttps) {
     return <Notice band={band} id={app.id} kind="insecure" url={app.url} onTryHttps={() => setTryHttps(true)} />;
   }
-  return <ScaledFrame id={app.id} url={app.url} src={embed} surfaceId={surfaceId} band={band} status={check.status} place={{ size, avoid }} />;
+  return <ScaledFrame id={app.id} url={app.url} src={embed} surfaceId={surfaceId} band={band} status={check.status} place={{ size, avoid, mini }} />;
 }
 
 function Notice({ id, url, band, kind, onTryHttps }: {
@@ -256,11 +260,11 @@ function ScaledFrame({ id, url, src, surfaceId, band, status, place }: {
   });
   return (
     <>
-      <SideStrip prefix={`web-${id}`} ui={ui} items={items} height={place.size.h} moreLabel={t('web.more')} />
+      {!place.mini && <SideStrip prefix={`web-${id}`} ui={ui} items={items} height={place.size.h} moreLabel={t('web.more')} />}
       <div
         ref={wrap}
         className="absolute bottom-0 overflow-hidden bg-bg"
-        style={{ top: band, left: ui.canvas.x, width: ui.canvas.w }}
+        style={{ top: band, left: place.mini ? 0 : ui.canvas.x, width: place.mini ? place.size.w : ui.canvas.w }}
         data-testid={`web-page-${id}`}
         data-check={status}
       >

@@ -10,7 +10,7 @@ import { Banners } from './Banners';
 import type { LayoutResult } from './computeLayout';
 import { Divider } from './Divider';
 import { Dock } from './Dock';
-import { ControlColumn, EdgeStrip, FloatingControls, MiniHandle } from './FullscreenChrome';
+import { ControlColumn, EdgeStrip, FloatingControls, MiniHandle, WebMiniHandle } from './FullscreenChrome';
 import { PaneChrome } from './PaneChrome';
 
 export function ChromeLayer({ layout }: { layout: LayoutResult }) {
@@ -25,6 +25,7 @@ export function ChromeLayer({ layout }: { layout: LayoutResult }) {
       <FloatingControls layout={layout} />
       {layout.controlColumn && <ControlColumn rect={layout.controlColumn} />}
       {layout.mini && <MiniHandle rect={layout.mini.handle} range={layout.mini.range} maxW={layout.mini.maxW} />}
+      {layout.webMini && <WebMiniHandle box={layout.webMini} />}
       {sheet && layout.sheet && sheet.kind === 'picker' && <AppPicker rect={layout.sheet} pane={sheet.pane} layout={layout} />}
       {sheet && layout.sheet && sheet.kind === 'settings' && <SettingsSheet rect={layout.sheet} />}
       {sheet && layout.sheet && sheet.kind === 'library' && <LibrarySheet rect={layout.sheet} />}

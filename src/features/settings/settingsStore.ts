@@ -5,7 +5,7 @@ import * as W from '../../apps/web/webActions';
 import * as A from '../../shell/layoutActions';
 import { mergeSettings } from './merge';
 import type {
-  AppPick, Bookmark, CarShift, ContinueWith, DockSize, DriverSide, HideUpTo, Language, MiniAt, MiniCorner, MiniPlayerSize, PaneIndex, Settings, SplitDirection, ThemeId, WebInstanceId, WebViewMode,
+  AppPick, Bookmark, CarShift, WebMini, ContinueWith, DockSize, DriverSide, HideUpTo, Language, MiniAt, MiniCorner, MiniPlayerSize, PaneIndex, Settings, SplitDirection, ThemeId, WebInstanceId, WebViewMode,
 } from './types';
 import { defaultSettings } from './types';
 import { moveById } from './reorder';
@@ -24,6 +24,7 @@ export interface SettingsActions {
   setMiniCorner: (corner: MiniCorner) => void;
   setMiniAt: (at: MiniAt) => void;
   setMiniWidth: (width: number) => void;
+  setWebMini: (patch: Partial<WebMini>) => void;
   setCarShift: (shift: CarShift) => void;
   setContinueWith: (v: ContinueWith) => void;
   setHidePlayed: (on: boolean) => void;
@@ -91,6 +92,7 @@ export const useSettings = create<SettingsState>()(
       setMiniCorner: (miniCorner) => set((s) => ({ youtube: { ...s.youtube, miniCorner, miniAt: null } })),
       setMiniAt: (miniAt) => set((s) => ({ youtube: { ...s.youtube, miniAt } })),
       setMiniWidth: (miniWidth) => set((s) => ({ youtube: { ...s.youtube, miniWidth } })),
+      setWebMini: (patch) => set((s) => ({ web: { ...s.web, mini: { ...s.web.mini, ...patch } } })),
       setCarShift: (carShift) => set((s) => ({ map: { ...s.map, carShift } })),
       setContinueWith: (continueWith) => set((s) => ({ youtube: { ...s.youtube, continueWith } })),
       setHidePlayed: (hidePlayed) => set((s) => ({ youtube: { ...s.youtube, hidePlayed } })),

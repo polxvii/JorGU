@@ -9,8 +9,9 @@ import { MuteButton, SeekButton } from '../apps/youtube/TransportButtons';
 import { next, previous, togglePlay } from '../apps/youtube/player';
 import { youtubePane } from './layoutActions';
 import type { LayoutResult } from './computeLayout';
-import { MINI_MIN_W, miniSpot } from './computeLayout';
-import type { MiniCorner } from '../features/settings/types';
+import { MINI_MIN_W, WEB_MINI_MIN, miniSpot } from './computeLayout';
+import { hostLabel } from '../apps/web/normalizeUrl';
+import type { MiniAt, MiniCorner } from '../features/settings/types';
 import { exitFullscreen, switchFullscreen } from './fullscreen';
 import { Icon, type IconName } from './Icon';
 import { useControlSize } from './useControlSize';
@@ -171,64 +172,105 @@ export function EdgeStrip({ rect }: { rect: Rect }) {
 const CLOCKWISE: Exclude<MiniCorner, 'auto'>[] = ['tl', 'tr', 'br', 'bl'];
 
 /**
- * Moves the mini player: drag the grip and it follows the finger and stays where it's let go (user 2026-11-27: not
- * only the four corners), or tap it to step to the next corner clockwise. Only the player's CSS position changes
- * (no DOM move, no reload); nothing is drawn over it while dragging (spec 3.9).
+ * A grip on a mini window's handle: drag it (`onDrag` / `onEnd` get the finger's travel since it went down, once it
+ * has moved 12 px) or tap it (`onTap`). Pointer capture keeps the drag going while the window moves under the finger.
  */
-function MiniGrip({ handle, range }: { handle: Rect; range: Rect }) {
-  const t = useT();
-  const start = useRef<{ x: number; y: number; dx: number; dy: number; moved: boolean } | null>(null);
+function DragGrip({ testId, label, icon, onStart, onDrag, onEnd, onCancel, onTap, order, data }: {
+  testId: string;
+  label: string;
+  icon: IconName;
+  onStart: () => void;
+  onDrag: (dx: number, dy: number) => void;
+  onEnd: (dx: number, dy: number) => void;
+  onCancel: () => void;
+  onTap: () => void;
+  order?: number;
+  data?: Record<string, string | number>;
+}) {
+  const start = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const dragged = useRef(false);
-  const current = (): Exclude<MiniCorner, 'auto'> => {
-    const s = useSettings.getState();
-    const at = miniSpot(s.youtube.miniCorner, s.youtube.miniAt, s.layout.driverSide === 'right');
-    return `${at.top ? 't' : 'b'}${at.right ? 'r' : 'l'}` as Exclude<MiniCorner, 'auto'>;
-  };
-  /** The handle's top-left corner under the finger, as 0–1 across the room the mini player has. */
-  const spotAt = (cx: number, cy: number, s: { dx: number; dy: number }) => {
-    const f = (v: number, from: number, len: number) => (len > 0 ? Math.round(Math.min(1, Math.max(0, (v - from) / len)) * 1000) / 1000 : 0);
-    return { x: f(cx - s.dx, range.x, range.w), y: f(cy - s.dy, range.y, range.h) };
-  };
   return (
     <button
       type="button"
-      data-testid="mini-move"
-      aria-label={t('mini.move')}
+      data-testid={testId}
+      aria-label={label}
+      {...Object.fromEntries(Object.entries(data ?? {}).map(([k, v]) => [`data-${k}`, v]))}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
-        start.current = { x: e.clientX, y: e.clientY, dx: e.clientX - handle.x, dy: e.clientY - handle.y, moved: false };
+        start.current = { x: e.clientX, y: e.clientY, moved: false };
+        onStart();
       }}
       onPointerMove={(e) => {
         const s = start.current;
         if (!s) return;
         if (!s.moved && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 12) s.moved = true;
-        if (s.moved) useUi.getState().setMiniDrag(spotAt(e.clientX, e.clientY, s));
+        if (s.moved) onDrag(e.clientX - s.x, e.clientY - s.y);
       }}
       onPointerUp={(e) => {
         const s = start.current;
         start.current = null;
         if (!s?.moved) return;
         dragged.current = true;
-        useSettings.getState().setMiniAt(spotAt(e.clientX, e.clientY, s));
-        useUi.getState().setMiniDrag(null);
+        onEnd(e.clientX - s.x, e.clientY - s.y);
       }}
       onPointerCancel={() => {
         start.current = null;
-        useUi.getState().setMiniDrag(null);
+        onCancel();
       }}
       onClick={() => {
         if (dragged.current) {
           dragged.current = false;
           return;
         }
+        onTap();
+      }}
+      className="flex w-11 shrink-0 items-center justify-center rounded-t-xl bg-surface text-text"
+      style={{ touchAction: 'none', order }}
+    >
+      <Icon name={icon} size={22} />
+    </button>
+  );
+}
+
+/** Where a handle at `handle.x/y` + travel lands, as 0–1 across `range` (the room its top-left corner has). */
+function spotOf(handle: Rect, range: Rect, dx: number, dy: number): MiniAt {
+  const f = (v: number, from: number, len: number) => (len > 0 ? Math.round(Math.min(1, Math.max(0, (v - from) / len)) * 1000) / 1000 : 0);
+  return { x: f(handle.x + dx, range.x, range.w), y: f(handle.y + dy, range.y, range.h) };
+}
+
+/** Grows outward: the grip sits at the end of the handle away from the nearer side edge (−1 = left end). */
+const outwardOf = (rect: Rect, range: Rect): 1 | -1 => (rect.x + rect.w / 2 >= range.x + (range.w + rect.w) / 2 ? -1 : 1);
+
+/**
+ * Moves the mini player: drag the grip and it follows the finger and stays where it's let go (user 2026-11-27: not
+ * only the four corners), or tap it to step to the next corner clockwise. Only the player's CSS position changes
+ * (no DOM move, no reload); nothing is drawn over it while dragging (spec 3.9).
+ */
+function MiniGrip({ handle, range }: { handle: Rect; range: Rect }) {
+  const t = useT();
+  const from = useRef(handle);
+  const current = (): Exclude<MiniCorner, 'auto'> => {
+    const s = useSettings.getState();
+    const at = miniSpot(s.youtube.miniCorner, s.youtube.miniAt, s.layout.driverSide === 'right');
+    return `${at.top ? 't' : 'b'}${at.right ? 'r' : 'l'}` as Exclude<MiniCorner, 'auto'>;
+  };
+  return (
+    <DragGrip
+      testId="mini-move"
+      label={t('mini.move')}
+      icon="grip"
+      onStart={() => (from.current = handle)}
+      onDrag={(dx, dy) => useUi.getState().setMiniDrag(spotOf(from.current, range, dx, dy))}
+      onEnd={(dx, dy) => {
+        useSettings.getState().setMiniAt(spotOf(from.current, range, dx, dy));
+        useUi.getState().setMiniDrag(null);
+      }}
+      onCancel={() => useUi.getState().setMiniDrag(null)}
+      onTap={() => {
         const i = CLOCKWISE.indexOf(current());
         useSettings.getState().setMiniCorner(CLOCKWISE[(i + 1) % CLOCKWISE.length]);
       }}
-      className="flex w-11 items-center justify-center rounded-t-xl bg-surface text-text"
-      style={{ touchAction: 'none' }}
-    >
-      <Icon name="grip" size={22} />
-    </button>
+    />
   );
 }
 
@@ -243,57 +285,143 @@ const MINI_STEPS = [356, 480, 640, 800];
 function MiniResize({ width, maxW, outward }: { width: number; maxW: number; outward: 1 | -1 }) {
   const t = useT();
   // Width and direction as they were when the finger went down: the player grows under it while dragging.
-  const start = useRef<{ x: number; y: number; w: number; out: 1 | -1; moved: boolean } | null>(null);
-  const dragged = useRef(false);
-  const widthAt = (cx: number, cy: number, s: { x: number; y: number; w: number; out: 1 | -1 }) => {
-    const dx = cx - s.x;
+  const from = useRef({ w: width, out: outward });
+  const widthAt = (dx: number, dy: number) => {
     // Up / down counts too, by its 16:9 width (the top of the handle moves when it grows).
-    const dy = ((s.y - cy) * 16) / 9;
-    const d = Math.abs(dx) >= Math.abs(dy) ? s.out * dx : dy;
-    return Math.round(Math.min(maxW, Math.max(MINI_MIN_W, s.w + d)));
+    const up = (-dy * 16) / 9;
+    const d = Math.abs(dx) >= Math.abs(up) ? from.current.out * dx : up;
+    return Math.round(Math.min(maxW, Math.max(MINI_MIN_W, from.current.w + d)));
   };
   return (
-    <button
-      type="button"
-      data-testid="mini-resize"
-      data-width={width}
-      aria-label={t('mini.resize')}
-      onPointerDown={(e) => {
-        e.currentTarget.setPointerCapture(e.pointerId);
-        start.current = { x: e.clientX, y: e.clientY, w: width, out: outward, moved: false };
-      }}
-      onPointerMove={(e) => {
-        const s = start.current;
-        if (!s) return;
-        if (!s.moved && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 12) s.moved = true;
-        if (s.moved) useUi.getState().setMiniResize(widthAt(e.clientX, e.clientY, s));
-      }}
-      onPointerUp={(e) => {
-        const s = start.current;
-        start.current = null;
-        if (!s?.moved) return;
-        dragged.current = true;
-        useSettings.getState().setMiniWidth(widthAt(e.clientX, e.clientY, s));
+    <DragGrip
+      testId="mini-resize"
+      label={t('mini.resize')}
+      icon="resize"
+      order={outward === -1 ? -1 : 99}
+      data={{ width }}
+      onStart={() => (from.current = { w: width, out: outward })}
+      onDrag={(dx, dy) => useUi.getState().setMiniResize(widthAt(dx, dy))}
+      onEnd={(dx, dy) => {
+        useSettings.getState().setMiniWidth(widthAt(dx, dy));
         useUi.getState().setMiniResize(null);
       }}
-      onPointerCancel={() => {
-        start.current = null;
-        useUi.getState().setMiniResize(null);
-      }}
-      onClick={() => {
-        if (dragged.current) {
-          dragged.current = false;
-          return;
-        }
+      onCancel={() => useUi.getState().setMiniResize(null)}
+      onTap={() => {
         const steps = MINI_STEPS.filter((w) => w <= maxW);
-        const nextW = steps.find((w) => w > width + 1) ?? MINI_MIN_W;
-        useSettings.getState().setMiniWidth(nextW);
+        useSettings.getState().setMiniWidth(steps.find((w) => w > width + 1) ?? MINI_MIN_W);
       }}
-      className="flex w-11 shrink-0 items-center justify-center rounded-t-xl bg-surface text-text"
-      style={{ touchAction: 'none', order: outward === -1 ? -1 : 99 }}
+    />
+  );
+}
+
+/** Sizes for a tap on the floating Web window's resize grip. */
+const WEB_STEPS: [number, number][] = [
+  [320, 240],
+  [480, 320],
+  [640, 420],
+  [800, 520],
+];
+
+type WebMiniBox = NonNullable<LayoutResult['webMini']>;
+
+/**
+ * The floating Web window's handle (user 2026-11-27): move grip, resize grip (any width and height from 320×240), the
+ * site's name (tap: back into its pane), ✕ (stop floating). Above the page, never over it; the page keeps its taps.
+ */
+export function WebMiniHandle({ box }: { box: WebMiniBox }) {
+  const t = useT();
+  const url = useSettings((s) => {
+    const a = s.layout.panes.find((p) => p.kind === 'web' && p.id === box.web);
+    return a?.kind === 'web' ? a.url : '';
+  });
+  const set = useSettings((s) => s.setWebMini);
+  const { rect, handle, range } = box;
+  const from = useRef({ handle, w: rect.w, h: rect.h, out: outwardOf(rect, range), down: handle.y > range.y + range.h / 2 });
+  const sizeAt = (dx: number, dy: number) => {
+    const f = from.current;
+    return {
+      w: Math.round(Math.min(box.maxW, Math.max(WEB_MINI_MIN.w, f.w + f.out * dx))),
+      // In the lower half it grows upward (dragging up), in the upper half downward.
+      h: Math.round(Math.min(box.maxH, Math.max(WEB_MINI_MIN.h, f.h + (f.down ? -dy : dy)))),
+    };
+  };
+  const restore = () => {
+    const s = useSettings.getState();
+    const pane = s.layout.panes.findIndex((p) => p.kind === 'web' && p.id === box.web);
+    if (pane !== 0 && pane !== 1) return;
+    if (s.layout.fullscreenPane !== null) {
+      if (s.layout.fullscreenPane !== pane) s.switchFullscreen();
+    } else s.setFocusedPane(pane);
+  };
+  const outward = outwardOf(rect, range);
+  // Where it was and how big when the finger went down: it moves / grows under the finger while dragging.
+  const begin = () => (from.current = { handle, w: rect.w, h: rect.h, out: outward, down: handle.y > range.y + range.h / 2 });
+  return (
+    <div
+      data-chrome="web-mini-handle"
+      data-testid="web-mini-handle"
+      className="absolute z-[12] flex items-stretch gap-1"
+      style={{ left: handle.x, top: handle.y, width: handle.w, height: handle.h - 4 }}
     >
-      <Icon name="resize" size={22} />
-    </button>
+      <DragGrip
+        testId="web-mini-move"
+        label={t('webMini.move')}
+        icon="grip"
+        onStart={begin}
+        onDrag={(dx, dy) => useUi.getState().setWebMiniDrag(spotOf(from.current.handle, range, dx, dy))}
+        onEnd={(dx, dy) => {
+          set({ at: spotOf(from.current.handle, range, dx, dy) });
+          useUi.getState().setWebMiniDrag(null);
+        }}
+        onCancel={() => useUi.getState().setWebMiniDrag(null)}
+        onTap={() => {
+          // Next corner clockwise from the quarter it's in.
+          const right = handle.x - range.x >= range.w / 2;
+          const top = handle.y - range.y < range.h / 2;
+          const i = CLOCKWISE.indexOf(`${top ? 't' : 'b'}${right ? 'r' : 'l'}` as Exclude<MiniCorner, 'auto'>);
+          const c = CLOCKWISE[(i + 1) % CLOCKWISE.length];
+          set({ at: { x: c[1] === 'r' ? 1 : 0, y: c[0] === 't' ? 0 : 1 } });
+        }}
+      />
+      <DragGrip
+        testId="web-mini-resize"
+        label={t('webMini.resize')}
+        icon="resize"
+        order={outward === -1 ? -1 : 99}
+        data={{ width: rect.w, height: rect.h }}
+        onStart={begin}
+        onDrag={(dx, dy) => useUi.getState().setWebMiniResize(sizeAt(dx, dy))}
+        onEnd={(dx, dy) => {
+          set(sizeAt(dx, dy));
+          useUi.getState().setWebMiniResize(null);
+        }}
+        onCancel={() => useUi.getState().setWebMiniResize(null)}
+        onTap={() => {
+          const steps = WEB_STEPS.filter(([w, h]) => w <= box.maxW && h <= box.maxH);
+          const [w, h] = steps.find(([w]) => w > rect.w + 1) ?? WEB_STEPS[0];
+          set({ w, h });
+        }}
+      />
+      <button
+        type="button"
+        data-testid="web-mini-restore"
+        aria-label={t('webMini.restore')}
+        onClick={restore}
+        className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-t-xl bg-surface px-2 text-[14px] font-semibold text-text"
+      >
+        <Icon name="restore" size={22} />
+        <span className="truncate">{url ? hostLabel(url) : t('apps.web')}</span>
+      </button>
+      <button
+        type="button"
+        data-testid="web-mini-close"
+        aria-label={t('webMini.close')}
+        onClick={() => set({ floating: null })}
+        className="flex w-12 shrink-0 items-center justify-center rounded-t-xl bg-surface text-text"
+      >
+        <Icon name="close" size={22} />
+      </button>
+    </div>
   );
 }
 

@@ -1,7 +1,7 @@
 // M5 Web app (spec §9): start page, frame check card, Auto/Mobile/Desktop without reload, bookmarks → App Picker,
 // http handling, full screen. Sites and /api/frame-check are mocked (the Worker side is tested in tests/worker).
 import { expect, test, type Page } from '@playwright/test';
-import { TEST_SITE_HTML, expectNoReloads, frameLoads, mockWeb, openApp, waitForFrames } from './helpers';
+import { TEST_SITE_HTML, box, expectNoReloads, expectPlayerClear, frameLoads, mockWeb, openApp, startSimulatedPlayback, tapStrip, waitForFrames } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 test.describe.configure({ timeout: 60_000 });
@@ -307,3 +307,61 @@ test('saved pages: change their order with up / down', async ({ page }) => {
   expect(await order()).toEqual(['Charlie', 'Alpha', 'Bravo']);
 });
 
+test('float a page (user 2026-11-27): off screen it shows in a small window, clear of the mini player; move, resize, back, stop; never reloads', async ({ page }) => {
+  await mockWeb(page);
+  await openApp(page, webPanes(SITE));
+  await waitForFrames(page, ['web:w1']);
+  const token = await frame(page).locator('#token').textContent();
+  const before = await frameLoads(page);
+  await openWebMenu(page);
+  await page.getByTestId('web-float').click();
+  await expect(page.getByTestId('web-float')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('sheet-close').click();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('jorgu:settings')!).state.web.mini.floating)).toBe('w1');
+  // On screen in its pane: no window yet.
+  await expect(page.getByTestId('web-mini-handle')).toHaveCount(0);
+  // Map full screen: the page floats, bottom corner on the passenger side, 480×320, no toolbar of its own.
+  await page.getByTestId('pane-fullscreen-1').click();
+  let win = await box(page, '[data-surface="web:w1"]');
+  expect([win.x, win.width, win.height]).toEqual([12, 480, 320]);
+  await expect(page.getByTestId('web-mini-handle')).toBeVisible();
+  await expect(page.getByTestId('web-w1-strip')).toHaveCount(0);
+  expect(await frame(page).locator('#token').textContent()).toBe(token);
+  const apart = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+    a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+  expect(apart(await box(page, '[data-testid="map-controls"]'), win)).toBe(true);
+  // A tap on ⤡: the next size.
+  await page.getByTestId('web-mini-resize').click();
+  win = await box(page, '[data-surface="web:w1"]');
+  expect([win.width, win.height]).toEqual([640, 420]);
+  // Drag the grip: it follows the finger.
+  const g = await box(page, '[data-testid="web-mini-move"]');
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(g.x + g.width / 2 + 150, g.y + g.height / 2 - 60, { steps: 6 });
+  await page.mouse.up();
+  const moved = await box(page, '[data-surface="web:w1"]');
+  expect(Math.abs(moved.x - (win.x + 150))).toBeLessThan(2);
+  expect(Math.abs(moved.y - (win.y - 60))).toBeLessThan(2);
+  // YouTube playing too: its mini player and the window never touch; nothing covers the player.
+  await startSimulatedPlayback(page);
+  await expectPlayerClear(page);
+  const yt = await box(page, '[data-player-rect]');
+  const w2 = await box(page, '[data-surface="web:w1"]');
+  const h2 = await box(page, '[data-testid="web-mini-handle"]');
+  expect(apart(yt, w2) && apart(yt, h2)).toBe(true);
+  // Back into its pane: the page goes full screen (the map was).
+  await page.getByTestId('web-mini-restore').click();
+  await expect(page.locator('#jorgu-root')).toHaveAttribute('data-mode', 'fullscreen');
+  expect((await box(page, '[data-surface="web:w1"]')).width).toBe(1024);
+  await expect(page.getByTestId('web-mini-handle')).toHaveCount(0);
+  // ⇄ to the map again: floating again; ✕ stops it.
+  await page.evaluate(() => window.__jorgu!.setPlaying(false));
+  await tapStrip(page, 'web-w1', 'web-exit-fs-w1');
+  await page.getByTestId('pane-fullscreen-1').click();
+  await expect(page.getByTestId('web-mini-handle')).toBeVisible();
+  await page.getByTestId('web-mini-close').click();
+  await expect(page.getByTestId('web-mini-handle')).toHaveCount(0);
+  await expect(page.locator('[data-surface="web:w1"]')).toHaveAttribute('data-visible', '0');
+  await expectNoReloads(page, before);
+});

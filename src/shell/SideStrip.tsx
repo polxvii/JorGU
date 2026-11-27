@@ -57,7 +57,8 @@ export function SideStrip({ prefix, ui, items, height, moreLabel, extra }: {
   const hidden = items.slice(ui.shown);
   const step = cs.map + MAP_GAP;
   const menuH = hidden.length * step - MAP_GAP;
-  const menuTop = Math.max(MAP_GAP, Math.min(height - MAP_GAP - menuH, ui.buttons.y + ui.shown * step + cs.map - menuH));
+  // Level with More, kept below the strip's first button (clear of the pane header) while it fits; scrolls if taller.
+  const menuTop = Math.max(Math.min(ui.buttons.y, Math.max(MAP_GAP, height - MAP_GAP - menuH)), Math.min(height - MAP_GAP - menuH, ui.buttons.y + ui.shown * step + cs.map - menuH));
   const side = ui.right ? 'right' : 'left';
   return (
     <>
@@ -70,11 +71,13 @@ export function SideStrip({ prefix, ui, items, height, moreLabel, extra }: {
         {ui.speed && extra}
       </div>
       {ui.more && moreOpen && (
-        // Opens beside the strip; any choice closes it.
+        // Opens beside the strip, over the page / map: the Web page's frame comes after the strip in the DOM (it can't
+        // be moved without reloading it), so without a z-index the page covered the menu (user 2026-11-27). Any choice
+        // closes it.
         <div
           data-testid={`${prefix}-more-menu`}
-          className="absolute flex flex-col"
-          style={{ top: menuTop, [side]: ui.strip.w + MAP_GAP, gap: MAP_GAP }}
+          className="absolute z-10 flex flex-col overflow-y-auto"
+          style={{ top: menuTop, maxHeight: height - menuTop - MAP_GAP, [side]: ui.strip.w + MAP_GAP, gap: MAP_GAP }}
           onClick={() => setMoreOpen(false)}
         >
           {hidden.map((i) => (

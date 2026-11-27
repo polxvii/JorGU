@@ -109,3 +109,15 @@ button {
   transform: rotate(-45deg) translate(3px, -3px);
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
 }
+
+/*
+ * A site's own full screen (a video's ⛶ inside a Web page) makes its frame full screen. Our zoom (Mobile / Desktop /
+ * %) is a CSS scale on that frame: drop it then, or the video is drawn small, too big or skewed (user 2026-11-27).
+ * The Fullscreen spec's UA sheet does this; older WebKit doesn't. Two rules: an unknown pseudo-class would void both.
+ */
+iframe:fullscreen {
+  transform: none !important;
+}
+iframe:-webkit-full-screen {
+  transform: none !important;
+}

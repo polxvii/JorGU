@@ -109,11 +109,13 @@ export function useFullscreenController(): void {
         exitFullscreen('esc');
       }
     };
-    let wasBrowserFs = !!browserFullscreenElement();
+    // Only our own browser full screen (the app root) ending counts. A site's video in a Web page going full screen
+    // and back must not end JorGu's full screen (user 2026-11-27): that used to look like the browser leaving it.
+    let ours = browserFullscreenElement() === document.documentElement;
     const onFsChange = () => {
-      const now = !!browserFullscreenElement();
-      if (wasBrowserFs && !now) exitFullscreen('browser');
-      wasBrowserFs = now;
+      const el = browserFullscreenElement();
+      if (ours && !el) exitFullscreen('browser');
+      ours = el === document.documentElement || (ours && !!el);
     };
     const onFirstTouch = () => {
       const ui = useUi.getState();

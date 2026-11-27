@@ -365,3 +365,43 @@ test('float a page (user 2026-11-27): off screen it shows in a small window, cle
   await expect(page.locator('[data-surface="web:w1"]')).toHaveAttribute('data-visible', '0');
   await expectNoReloads(page, before);
 });
+
+test('short Web pane: the More menu opens over the page and its buttons work (user 2026-11-27: it went behind the page)', async ({ page }) => {
+  await mockWeb(page);
+  await page.setViewportSize({ width: 1024, height: 480 });
+  await openApp(page, webPanes(SITE));
+  await waitForFrames(page, ['web:w1']);
+  await expect(page.getByTestId('web-w1-more')).toBeVisible();
+  await page.getByTestId('web-w1-more').click();
+  const item = page.getByTestId('web-w1-more-menu').getByTestId('web-zoom-in-w1');
+  await expect(item).toBeVisible();
+  // What a finger at the button's middle actually hits.
+  const b = await box(page, '[data-testid="web-w1-more-menu"] [data-testid="web-zoom-in-w1"]');
+  const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('[data-testid]')?.getAttribute('data-testid'), [b.x + b.width / 2, b.y + b.height / 2]);
+  expect(hit).toBe('web-zoom-in-w1');
+  await item.click({ timeout: 5000 });
+  await expect(page.getByTestId('web-frame-w1')).toHaveAttribute('data-scale', '1.100');
+});
+
+test("a site's own full screen (a video's button): fills the screen without our zoom; leaving it keeps JorGu as it was", async ({ page }) => {
+  await mockWeb(page);
+  // JorGu's full screen restored from storage: the in-app layer only (no browser full screen of its own).
+  await openApp(page, { layout: { mode: 'split', panes: [{ kind: 'web', id: 'w1', url: SITE }, { kind: 'map' }], fullscreenPane: 0 } });
+  await waitForFrames(page, ['web:w1']);
+  await page.getByTestId('web-zoom-in-w1').click();
+  await expect(page.getByTestId('web-frame-w1')).toHaveAttribute('data-scale', '1.100');
+  const body = frame(page).locator('body');
+  await body.evaluate((b) => b.addEventListener('click', () => void document.documentElement.requestFullscreen()));
+  await body.click({ position: { x: 20, y: 20 } });
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement?.getAttribute('data-testid') ?? null)).toBe('web-frame-w1');
+  const r = await page.evaluate(() => {
+    const e = document.fullscreenElement!;
+    const b = e.getBoundingClientRect();
+    return [Math.round(b.width), Math.round(b.height), getComputedStyle(e).transform];
+  });
+  expect(r).toEqual([1024, 600, 'none']);
+  await body.evaluate(() => document.exitFullscreen());
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
+  await expect(page.locator('#jorgu-root')).toHaveAttribute('data-mode', 'fullscreen');
+  await expect(page.getByTestId('web-frame-w1')).toHaveAttribute('data-scale', '1.100');
+});
